@@ -1,0 +1,20 @@
+graph W {
+  graph [rankdir=LR, bgcolor=white, fontname="Helvetica", nodesep=0.35, ranksep=1.3, pad=0.3];
+  node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11];
+  edge  [fontname="Helvetica", fontsize=10, penwidth=1.6];
+  pico [label="Raspberry Pi Pico W\non Cytron Robo Pico\n\nGP0/GP1  console UART (reserved)\nGP16  liveness LED (reserved)\nGP20 START   GP21 STOP (on-board)\nGP23/24/25/29  WiFi radio (reserved)", fillcolor="#dbeafe", height=3.2, width=3.2];
+  bat  [label="Power bank / battery\n3.6-6 V -> VIN terminal", fillcolor="#fde68a"];
+  ml [label="Left DC motor",  fillcolor="#e5e7eb"]; mr [label="Right DC motor", fillcolor="#e5e7eb"];
+  el [label="Left wheel encoder\n(LM393 slot, D0)", fillcolor="#dcfce7"]; er [label="Right wheel encoder\n(LM393 slot, D0)", fillcolor="#dcfce7"];
+  irl [label="IR left (A0)", fillcolor="#fef3c7"]; irr [label="IR right (A0)", fillcolor="#fef3c7"]; irb [label="IR barcode (A0)", fillcolor="#fef3c7"];
+  imu [label="GY-511 LSM303DLHC\n(X forward, Z up)", fillcolor="#ede9fe"];
+  us  [label="HC-SR04 ultrasonic\n(on servo horn)", fillcolor="#fee2e2"];
+  sv  [label="Pan servo\n90 deg = ahead", fillcolor="#fee2e2"];
+  bat -- pico [label="VIN / GND", color="#b45309"];
+  pico -- ml [label="M1A GP8 / M1B GP9"]; pico -- mr [label="M2A GP10 / M2B GP11"];
+  pico -- el [label="GP2  (+3V3, GND)", color="#15803d"]; pico -- er [label="GP3  (+3V3, GND)", color="#15803d"];
+  pico -- irl [label="GP26 / ADC0", color="#a16207"]; pico -- irr [label="GP27 / ADC1", color="#a16207"]; pico -- irb [label="GP28 / ADC2", color="#a16207"];
+  pico -- imu [label="SDA GP4, SCL GP5 (I2C0)", color="#6d28d9"];
+  pico -- us [label="TRIG GP6, ECHO GP7\n(+3V3, GND)", color="#b91c1c"];
+  pico -- sv [label="Servo port GP12", color="#b91c1c"];
+}

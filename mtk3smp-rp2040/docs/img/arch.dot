@@ -1,0 +1,33 @@
+digraph A {
+  graph [rankdir=TB, fontname="Helvetica", nodesep=0.3, ranksep=0.45, pad=0.2, newrank=true];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=9, color="#475569"];
+  subgraph cluster_c { label="Communication layer (Buddy 1)"; style="rounded,filled"; fillcolor="#eff6ff"; fontname="Helvetica";
+    tel [label="telemetry task (pri 10)\ncommand executor (20 ms),\nJSON telemetry, heartbeat, events", fillcolor="#bfdbfe"];
+    con [label="console_in\nUSB ring (tm_usb_rx_byte hook)\n+ UART0 FIFO poll", fillcolor="#bfdbfe"];
+    br  [label="mqtt_bridge\nSPSC TX/RX rings", fillcolor="#bfdbfe"];
+    mq  [label="mqtt_lwip + lwIP MQTT client\nin cyw43 service task (pri 4)\nreconnect", fillcolor="#bfdbfe"]; }
+  subgraph cluster_k { label="Control layer"; style="rounded,filled"; fillcolor="#f0fdf4"; fontname="Helvetica";
+    veh [label="vehicle task (pri 6)\nmission state machine", fillcolor="#86efac"];
+    mot [label="motion task (pri 5, 50 Hz)\nPID x2, moves, odometry  [B2]", fillcolor="#bbf7d0"];
+    lf  [label="line_follow  [B3]", fillcolor="#bbf7d0"];
+    op  [label="avoidance  [B5]", fillcolor="#bbf7d0"]; }
+  subgraph cluster_s { label="Sensor layer"; style="rounded,filled"; fillcolor="#fefce8"; fontname="Helvetica";
+    ir  [label="ir_sensor\n1 kHz alarm ISR  [B3]", fillcolor="#fde68a"];
+    bc  [label="barcode task (pri 7)\nCode 39  [B3]", fillcolor="#fde68a"];
+    enc [label="encoder\nGPIO ISR  [B2]", fillcolor="#fde68a"];
+    imu [label="imu task (pri 8)\ntilt, hump, events  [B4]", fillcolor="#fde68a"];
+    obs [label="obstacle: sonar task (pri 9)\n+ coarse/fine scan  [B5]", fillcolor="#fde68a"]; }
+  hal [label="HAL: hal.c (Pico C SDK) + hal_irq.c (uT-Kernel tk_def_int)", fillcolor="#e5e7eb", width=6];
+  pc [label="Laptop dashboard (Python)\nlive plots, tuning boxes, CSV logs", shape=box, style="rounded,filled,dashed", fillcolor="#f5f3ff"];
+  pc -> mq [dir=both, label="MQTT (WiFi)", style=dashed, color="#7c3aed"];
+  pc -> con [label="USB serial", style=dashed, color="#7c3aed"];
+  con -> tel [label="command lines"];
+  tel -> br [dir=both]; br -> mq [dir=both, label="rings"];
+  tel -> veh [label="vehicle_command()\nline gains"];
+  tel -> mot [label="pid= / ff=", style=dotted];
+  veh -> mot [label="set_velocity / move / turn"]; veh -> lf; veh -> op;
+  bc -> veh [label="message buffer"]; ir -> bc [label="edge ring"]; ir -> veh [label="snapshot"];
+  enc -> mot; mot -> imu [label="odometry"]; imu -> veh [label="impacts"]; obs -> veh [label="front mm / profile"];
+  {ir enc imu obs} -> hal [style=dashed]; mot -> hal [style=dashed];
+}
