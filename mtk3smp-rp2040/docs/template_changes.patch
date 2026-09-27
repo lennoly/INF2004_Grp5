@@ -1,0 +1,239 @@
+diff --git a/.gitignore b/.gitignore
+index 0c7c082..457bee9 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -21,3 +21,4 @@ config/tcp_test_config.h
+ # Python
+ __pycache__/
+ *.pyc
++config/mqtt_config.h
+diff --git a/build_make/mtkernel_3/app_program/subdir.mk b/build_make/mtkernel_3/app_program/subdir.mk
+index a8fe4cd..d9af0e1 100644
+--- a/build_make/mtkernel_3/app_program/subdir.mk
++++ b/build_make/mtkernel_3/app_program/subdir.mk
+@@ -1,16 +1,94 @@
+-################################################################################
+-# micro T-Kernel 3.0 BSP  makefile
+-################################################################################
+-
+-TEMP_SRCS = $(wildcard ../app_program/*.c)
+-TEMP_OBJS = $(TEMP_SRCS:.c=.o)
+-TEMP_DEPS = $(TEMP_SRCS:.c=.d)
+-
+-OBJS += $(subst ../, ./mtkernel_3/, $(TEMP_OBJS))
+-C_DEPS += $(subst ../, ./mtkernel_3/, $(TEMP_DEPS))
+-
+-mtkernel_3/app_program/%.o: ../app_program/%.c
+-	@echo 'Building file: $<'
+-	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+-	@echo 'Finished building: $<'
+-	@echo ' '
++################################################################################
++# micro T-Kernel 3.0 BSP  makefile  -  PicoCar application
++#
++# Changes from the template:
++#   * Pico C SDK header paths for app_program/hal.c (header-only use).
++#   * APP_MODE=<MISSION|TEST_MOTOR|TEST_MOTION|TEST_IR|TEST_BARCODE|
++#               TEST_IMU|TEST_ULTRASONIC|TEST_TELEMETRY>
++#   * WIFI_MQTT=1 enables lwIP TCP + lwIP's MQTT client (needs WIFI_DNS=1).
++#   * Strict C99 and extra warnings for application files only (BARR-C).
++#   * Stale-object guard: changing APP_MODE / WIFI_MQTT rebuilds what depends
++#     on them (the template's own guard does not know these knobs).
++################################################################################
++
++APP_MODE  ?= MISSION
++WIFI_MQTT ?= 0
++PICO_SDK_PATH ?= ../../sdk/pico-sdk
++
++ifeq ($(WIFI_MQTT),1)
++ifneq ($(WIFI_DNS),1)
++$(error WIFI_MQTT=1 requires WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1)
++endif
++ifeq ($(wildcard ../config/mqtt_config.h),)
++$(error WIFI_MQTT=1 needs config/mqtt_config.h; copy config/mqtt_config.example.h)
++endif
++CFLAGS += -DTM_WIFI_MQTT=1
++# lwIP's own MQTT client; the template's lwIP pattern rule compiles it.
++OBJS   += ./mtkernel_3/lwip/apps/mqtt/mqtt.o
++C_DEPS += ./mtkernel_3/lwip/apps/mqtt/mqtt.d
++endif
++
++APP_SDK_SRC := $(PICO_SDK_PATH)/src
++APP_SDK_INC := -I"../lib/libtm/sysdepend/pico_rp2040/usb" \
++    -I"$(APP_SDK_SRC)/common/pico_base_headers/include" \
++    -I"$(APP_SDK_SRC)/common/hardware_claim/include" \
++    -I"$(APP_SDK_SRC)/common/pico_binary_info/include" \
++    -I"$(APP_SDK_SRC)/rp2040/pico_platform/include" \
++    -I"$(APP_SDK_SRC)/rp2040/hardware_regs/include" \
++    -I"$(APP_SDK_SRC)/rp2040/hardware_structs/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/pico_platform_compiler/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/pico_platform_sections/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/pico_platform_panic/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/pico_platform_common/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_base/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_gpio/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_pwm/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_adc/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_resets/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_irq/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_sync/include" \
++    -I"$(APP_SDK_SRC)/rp2_common/hardware_sync_spin_lock/include"
++
++ifeq ($(wildcard $(APP_SDK_SRC)/rp2_common/hardware_pwm/include/hardware/pwm.h),)
++$(error Pico SDK not found at $(PICO_SDK_PATH); the PicoCar HAL needs its headers)
++endif
++
++# BARR-C:2018: application files are strict C99 (Rule 1.1.a); extra
++# warnings catch signed/unsigned mixing (5.3.c), float equality (5.4.b.iv),
++# silent float->double promotion and shadowed names.  Unused parameters
++# are warned about too (they are marked with (void) where a kernel or
++# callback signature fixes them).  APP_STD overrides the template's
++# -std=gnu11 for these files only.
++# Documented deviation: hal.c is the single driver module that includes the
++# Pico SDK hardware headers, which themselves require C11 (static_assert,
++# anonymous unions), so that one file is compiled as C11.
++APP_STD := -std=c99 -Wpedantic
++mtkernel_3/app_program/hal.o: APP_STD := -std=gnu11
++APP_CFLAGS := -Wall -Wextra \
++    -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow \
++    -DAPP_MODE=APP_MODE_$(APP_MODE) \
++    -DPICO_RP2040=1 -DPICO_32BIT=1 -DPICO_ON_DEVICE=1 -DPICO_BUILD=1 \
++    -DPICO_NO_HARDWARE=0 -DNDEBUG
++
++TEMP_SRCS = $(wildcard ../app_program/*.c)
++TEMP_OBJS = $(TEMP_SRCS:.c=.o)
++TEMP_DEPS = $(TEMP_SRCS:.c=.d)
++
++OBJS += $(subst ../, ./mtkernel_3/, $(TEMP_OBJS))
++C_DEPS += $(subst ../, ./mtkernel_3/, $(TEMP_DEPS))
++
++APP_PROFILE_ID   := app-$(APP_MODE)-mqtt$(WIFI_MQTT)
++APP_PROFILE_FILE := .app_profile
++ifneq ($(strip $(shell cat $(APP_PROFILE_FILE) 2>/dev/null)),$(APP_PROFILE_ID))
++$(info App profile is now $(APP_PROFILE_ID); rebuilding app/lwIP objects.)
++$(shell rm -f mtkernel_3/app_program/*.o mtkernel_3/app_program/*.d; \
++    find mtkernel_3/lwip mtkernel_3/lib/libnet mtkernel_3/lib/libwifi \
++    -name '*.o' 2>/dev/null | xargs -r rm -f; \
++    rm -f $(EXE_FILE).elf; echo $(APP_PROFILE_ID) > $(APP_PROFILE_FILE))
++endif
++
++mtkernel_3/app_program/%.o: ../app_program/%.c
++	@echo 'Building file: $<'
++	$(GCC) $(CFLAGS) $(APP_STD) $(APP_CFLAGS) -D$(TARGET) $(INCPATH) $(APP_SDK_INC) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
++	@echo 'Finished building: $<'
++	@echo ' '
+diff --git a/config/config_device.h b/config/config_device.h
+index cd42217..cebb140 100644
+--- a/config/config_device.h
++++ b/config/config_device.h
+@@ -26,7 +26,7 @@
+  */
+ 
+ #define DEVCNF_USE_SER		1		// Serial communication device 
+-#define DEVCNF_USE_ADC		1		// A/D conversion device
+-#define DEVCNF_USE_IIC		1		// I2C communication device
++#define DEVCNF_USE_ADC		0		// A/D conversion device
++#define DEVCNF_USE_IIC		0		// I2C communication device
+ 
+ #endif	/* __DEV_CONFIG_H__ */
+\ No newline at end of file
+diff --git a/lib/libnet/lwip/include/lwipopts.h b/lib/libnet/lwip/include/lwipopts.h
+index d2a3474..9f32ddc 100644
+--- a/lib/libnet/lwip/include/lwipopts.h
++++ b/lib/libnet/lwip/include/lwipopts.h
+@@ -22,7 +22,11 @@
+ #define LWIP_ICMP                       (TM_WIFI_STATIC || TM_WIFI_DHCP)
+ #define LWIP_RAW                        (TM_WIFI_STATIC || TM_WIFI_DHCP)
+ #define LWIP_UDP                        TM_WIFI_DHCP
+-#define LWIP_TCP                        TM_WIFI_TCP
++/* PicoCar: TCP is also needed by the MQTT client (make WIFI_MQTT=1). */
++#ifndef TM_WIFI_MQTT
++#define TM_WIFI_MQTT                    0
++#endif
++#define LWIP_TCP                        (TM_WIFI_TCP || TM_WIFI_MQTT)
+ /* The altcp shim is only needed by application protocols written against it
+  * Nothing in this tree uses it; turn it on here if you add something that
+  * does. */
+@@ -41,20 +45,24 @@
+ #define LWIP_NETIF_EXT_STATUS_CALLBACK  0
+ 
+ #define MEM_ALIGNMENT                   4
+-#if TM_WIFI_TCP
++#if TM_WIFI_TCP || TM_WIFI_MQTT
+ #define MEM_SIZE                        (12 * 1024)
+ #else
+ #define MEM_SIZE                        (8 * 1024)
+ #endif
+ #define MEMP_NUM_PBUF                   16
+-#define MEMP_NUM_SYS_TIMEOUT            8
++/* PicoCar: +1 for the keep-alive timer of lwIP's MQTT client. */
++#define MEMP_NUM_SYS_TIMEOUT            (8 + TM_WIFI_MQTT)
++/* PicoCar: one whole telemetry message (up to 512 bytes of JSON plus its
++ * topic and header) must fit the MQTT client's output buffer. */
++#define MQTT_OUTPUT_RINGBUF_SIZE        1024
+ #define PBUF_POOL_SIZE                  8
+ #define PBUF_POOL_BUFSIZE               1600
+ 
+ /* Phase 7 opens exactly one outbound connection and never listens.  The
+  * send window stays small on purpose: the gate is stop-and-wait, so a large
+  * window would only cost RAM the kernel qualification also needs. */
+-#if TM_WIFI_TCP
++#if TM_WIFI_TCP || TM_WIFI_MQTT
+ /* Each finished connection lingers in TIME_WAIT for 2MSL while still holding
+  * a pool entry, and the cumulative image now opens two connections in
+  * sequence (Phase 7, then Phase 8).  Two entries would force lwIP to
+diff --git a/lib/libtm/sysdepend/pico_rp2040/usb/usb_tinyusb_glue.c b/lib/libtm/sysdepend/pico_rp2040/usb/usb_tinyusb_glue.c
+index 5cc69ad..40b41d8 100644
+--- a/lib/libtm/sysdepend/pico_rp2040/usb/usb_tinyusb_glue.c
++++ b/lib/libtm/sysdepend/pico_rp2040/usb/usb_tinyusb_glue.c
+@@ -63,9 +63,18 @@ void tm_tusb_write_flush(void)
+     (void)tud_cdc_write_flush();
+ }
+ 
++/* PicoCar: received bytes are offered to the application instead of being
++ * thrown away, so the serial console can accept commands.  The weak default
++ * keeps the template's original behaviour (discard).  Called only from the
++ * USB service task, which owns TinyUSB (template safety rule 9). */
++__attribute__((weak)) void tm_usb_rx_byte(uint8_t byte)
++{
++    (void)byte;
++}
++
+ void tm_tusb_discard_input(void)
+ {
+-    while (tud_cdc_available()) (void)tud_cdc_read_char();
++    while (tud_cdc_available()) tm_usb_rx_byte((uint8_t)tud_cdc_read_char());
+ }
+ 
+ /*
+diff --git a/lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.c b/lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.c
+index 58da15f..25583d2 100644
+--- a/lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.c
++++ b/lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.c
+@@ -36,6 +36,16 @@
+ #endif
+ 
+ #define CYW43_POLL_MS        2
++
++#if TM_WIFI_NETIF
++/* PicoCar: application hook run in the lwIP (NO_SYS) context on every poll.
++ * The weak default does nothing; app_program/mqtt_lwip.c overrides it with
++ * the MQTT client.  Keeps all lwIP calls in this one task, as NO_SYS needs. */
++__attribute__((weak)) void cyw43_utk_app_poll(struct netif *netif)
++{
++    (void)netif;
++}
++#endif
+ /* Bounded so a reader can never wedge if the writer is starved; an exhausted
+  * budget returns the last copy and is visible through status_retries. */
+ #define CYW43_STATUS_READ_ATTEMPTS 16
+@@ -518,6 +528,9 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
+ #if TM_WIFI_DNS
+         update_dns_status();
+ #endif
++#if TM_WIFI_NETIF
++        cyw43_utk_app_poll(&cyw43_state.netif[CYW43_ITF_STA]);
++#endif
+ #if TM_WIFI_UDP
+         if(radio_status.dns_complete && radio_status.dns_result == ERR_OK) {
+             lwip_utk_udp_poll(&cyw43_state.netif[CYW43_ITF_STA]);

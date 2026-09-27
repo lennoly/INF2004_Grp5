@@ -1,0 +1,58 @@
+# BARR-C:2018 layout for the PicoCar application (clang-format 18).
+# Rules: 1.2 (80 cols), 1.3 (braces), 3.1 (spaces, incl. j: one space after
+# the name in function definitions), 3.1.e (pointer '*' spaced in
+# declarations), 3.2 (alignment), 3.4 (4-space indent), 3.5 (no tabs),
+# Appendix C (return type on its own line in definitions).
+# 'break' alignment with 'case' (8.3.a) is not expressible here and is
+# applied by tools/barr_layout.py.
+Language: Cpp
+BasedOnStyle: LLVM
+ColumnLimit: 80
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+BreakBeforeBraces: Allman
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AlwaysBreakAfterReturnType: TopLevelDefinitions
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterFunctionDefinitionName: true
+  AfterFunctionDeclarationName: false
+PointerAlignment: Middle
+SpaceAfterCStyleCast: true
+IndentCaseLabels: true
+IndentCaseBlocks: false
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: true
+AlignTrailingComments: true
+AlignAfterOpenBracket: Align
+BreakBeforeBinaryOperators: NonAssignment
+BinPackParameters: true
+BinPackArguments: true
+SortIncludes: Never
+IncludeBlocks: Preserve
+ReflowComments: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+IndentPPDirectives: None
+SpacesBeforeTrailingComments: 2
+AlignEscapedNewlines: Left
+PenaltyReturnTypeOnItsOwnLine: 1000
+AllowAllParametersOfDeclarationOnNextLine: false
