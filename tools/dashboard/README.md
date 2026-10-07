@@ -41,7 +41,7 @@ The tuning boxes fill in from the car. Edit and press **Apply**:
 | `pid=kp,ki,kd` | wheel-speed PID | `SPEED_KP/KI/KD` 0.08, 0.6, 0 |
 | `ff=kf,offset` | feed-forward %/(mm/s), friction offset % | `SPEED_KF` 0.10, `SPEED_OFFSET_PCT` 18 |
 | `line=kp,ki,kd` | line-following PID | `LINE_KP/KI/KD` 160, 0, 12 |
-| `speed=mm/s` | cruise speed (60..400) | `SPEED_CRUISE_MM_S` 180 |
+| `speed=mm/s` | cruise speed (60..300) | `SPEED_CRUISE_MM_S` 180 |
 | `rate=ms` | telemetry period, 0 = off | 200 (MQTT), 1000 (USB) |
 
 Other commands: `start`, `stop`, `calibrate`, `gains`, `help`.

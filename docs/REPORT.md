@@ -80,8 +80,8 @@ Studying the template revealed constraints that drove several design decisions:
 | Build | Flash (text) | RAM (data+bss) |
 |---|---|---|
 | Mission, UART console | ≈ 67 KB | ≈ 15 KB |
-| Mission, USB console + WiFi + MQTT | 358 KB | 58 KB |
-| Application code only (linked, WiFi build) | 23.8 KB | 7.8 KB (+ 17.4 KB task stacks) |
+| Mission, USB console + WiFi + MQTT | 359 KB | 58 KB |
+| Application code only (linked, WiFi build) | 24.2 KB | 7.8 KB (+ 17.4 KB task stacks) |
 
 The RP2040 has 264 KB of SRAM and 2 MB of flash, so all builds fit comfortably.
 
@@ -168,7 +168,7 @@ The same text commands are accepted on the MQTT `cmd` topic **and** typed on the
 | Command | Effect | Applied by |
 |---|---|---|
 | `start`, `stop`, `calibrate` | run control, as the GP20/GP21 buttons | vehicle task (message buffer) |
-| `speed=<mm/s>` | cruise speed, 60–400 | vehicle task |
+| `speed=<mm/s>` | cruise speed, 60–300 (barcode sampling limit, NFR2) | vehicle task |
 | `pid=<kp>,<ki>,<kd>` | wheel-speed PID, both wheels | `motion_set_speed_gains()` |
 | `ff=<kf>,<offset>` | feed-forward (%/(mm/s)) and static-friction offset (%) | `motion_set_feedforward()` |
 | `line=<kp>,<ki>,<kd>` | line-following PID, applied without resetting the running controller | vehicle task, which owns the follower |
@@ -255,7 +255,7 @@ Record on the real car:
 
 ## 4.3 Buddy 3 — Barcode Decoding and IR Line Following
 
-**Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command or the STOP button while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts.
+**Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command, or START held for 2 s while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts.
 
 **Line position and following** (`line_follow.c`). The error is L − R, in the range [−1, 1]. A PID controller turns it into a differential wheel speed, and the base speed drops by up to 50 % on large errors for stability at varying speeds.
 
@@ -342,7 +342,7 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 
 - The HC-SR04 echo width is timestamped by GPIO interrupts (no busy-waiting), with distance = µs × 0.1715 mm.
 - The datasheet's 60 ms minimum cycle is enforced, and each scan point takes the median of 3 readings.
-- A background task monitors the front distance at ≈14 Hz.
+- A background task monitors the front distance at ≈14 Hz. Two readings in a row under 300 mm are needed to stop the car, so one spurious echo is ignored.
 - **Stage 1 (coarse):** readings at 30°, 60°, 90°, 120° and 150°.
 - **Stage 2 (fine):** if anything is under 300 mm, the sensor rescans ±20° around the detected region in 5° steps.
 
@@ -366,7 +366,9 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 4. Advance by the sensor-to-axle offset, turn to the original heading, and sweep until centred.
 5. Hand control back to line following.
 
-Every step is abortable, and failures fall back to LINE_SEARCH.
+Every step is abortable, including the scan (STOP is checked before each servo step), and failures fall back to LINE_SEARCH. After an IMU impact the car first reverses 120 mm, because the HC-SR04 gets no echo closer than 20 mm and the scan would otherwise report a clear path.
+
+**Servo direction.** The code assumes 0° points to the car's right. `SERVO_INVERT` in `car_config.h` corrects a mirrored mount; `TEST_ULTRASONIC` prints which side the closest echo is on, so a box offset to the right must read RIGHT.
 
 **Verification.**
 
@@ -381,12 +383,12 @@ Hardware: record the profile against the true values for 3 obstacle positions (`
 
 ![Mission state machine](img/states.png){width=100%}
 
-The vehicle task owns mission state and is the only caller of motion commands during a run, which avoids conflicting commands. Subsystems communicate only through their public APIs. Manoeuvres are sequences of blocking moves, but every wait polls the STOP button and MQTT `stop`, so the car can always be halted.
+The vehicle task owns mission state and is the only caller of motion commands during a run, which avoids conflicting commands. Subsystems communicate only through their public APIs. Manoeuvres are sequences of blocking moves, but every wait, and every step of an obstacle scan, polls the STOP button and MQTT `stop`, so the car can always be halted.
 
 Controls:
 
-- **GP20 (START)** starts a run.
-- **GP21 (STOP)** stops the car; pressed while idle, it runs calibration.
+- **GP20 (START)** acts on release, so the car never moves under the user's hand: a short press starts a run; held for 2 s while idle, it runs calibration.
+- **GP21 (STOP)** stops the car and never moves it. Presses are latched by an interrupt, so a short press during a scan is not missed.
 - MQTT commands can do the same remotely.
 
 # 6. Verification and Evidence
@@ -429,7 +431,7 @@ The BARR-C conformance pass and the independent review of it found seven more; t
 - **Sensor faults.** Missing echoes, I2C timeouts (2 ms per transfer, counted in the heartbeat as `i2cerr`) and low-contrast calibration are all detected and reported. They never hang a task.
 - **Motion safety.** Every move has a stall timeout and every manoeuvre can be aborted.
 - **Line recovery.** A lost line gets an expanding sweep search before the car gives up with a reason.
-- **Collision.** An IMU impact triggers a stop, a scan and avoidance.
+- **Collision.** An IMU impact triggers a stop, a 120 mm reverse, a scan and avoidance.
 - **Communication.** Reconnection uses back-off, the last-will marks the car offline, a heartbeat sequence number reveals lost messages, and telemetry is simply dropped (and counted) when offline, so control is never delayed by the network.
 - **Real-time.** Control runs at higher priority than communication, and interrupt handlers are short.
 

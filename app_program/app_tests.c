@@ -79,6 +79,10 @@ static void report_move(char const * p_what, float32_t before_odo,
                         float32_t before_heading);
 #endif
 
+#if APP_MODE == APP_MODE_TEST_ULTRASONIC
+static char const * side_name(int32_t angle_deg);
+#endif
+
 /*!
  * @brief Initialise only what the selected test needs and start its task.
  *
@@ -471,7 +475,10 @@ run_test (void)
 
 #if APP_MODE == APP_MODE_TEST_ULTRASONIC
 /*!
- * @brief Buddy 5 test: full coarse-to-fine scan, profile and plan.
+ * @brief Buddy 5 test: full coarse-to-fine scan, profile and plan, plus a
+ *        servo direction check (assumption A9): a box ahead but offset to
+ *        the car's right must be found on the RIGHT (closest angle below
+ *        90 degrees); otherwise set SERVO_INVERT in car_config.h.
  */
 static void
 run_test (void)
@@ -483,7 +490,7 @@ run_test (void)
        (the literals are ASCII); distances, angles and clearances are at
        most a few thousand, so they fit INT. */
     (void) tm_printf((UB const *) "# front=%d mm\n", (INT) obstacle_front_mm());
-    (void) obstacle_scan(&profile);
+    (void) obstacle_scan(&profile, NULL);
     plan = avoidance_plan(&profile, 0u);
     (void) tm_printf(
         (UB const *) "# found=%d closest=%d@%d edges L=%d R=%d width=%d "
@@ -493,6 +500,42 @@ run_test (void)
         print_int(profile.right_edge_mm), print_int(profile.width_mm),
         (INT) profile.clear_left_mm, (INT) profile.clear_right_mm,
         avoidance_action_name(plan.action), print_int(plan.offset_mm));
+
+    if (profile.b_found)
+    {
+        (void) tm_printf((UB const *) "# closest echo on the %s (box offset "
+                                      "right must say RIGHT, else set "
+                                      "SERVO_INVERT 1)\n",
+                         side_name(profile.closest_angle));
+    }
+}
+
+/*!
+ * @brief Side of the car a servo angle points to.
+ *
+ * @param[in] angle_deg Servo angle, 0 (right) .. 180 (left).
+ *
+ * @return "RIGHT", "LEFT" or "AHEAD".
+ */
+static char const *
+side_name (int32_t angle_deg)
+{
+    char const * p_side = "AHEAD";
+
+    if (angle_deg < SERVO_CENTRE_DEG)
+    {
+        p_side = "RIGHT";
+    }
+    else if (angle_deg > SERVO_CENTRE_DEG)
+    {
+        p_side = "LEFT";
+    }
+    else
+    {
+        /* Straight ahead. */
+    }
+
+    return (p_side);
 }
 #endif
 

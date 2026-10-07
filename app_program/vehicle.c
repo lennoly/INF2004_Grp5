@@ -4,14 +4,16 @@
  *
  * IDLE --start--> LINE_FOLLOW --barcode+junction--> NAV_TURN --> LINE_FOLLOW
  *                   |  |  +--line lost--> LINE_SEARCH --found--> LINE_FOLLOW
- *                   |  +--front < OBST_DETECT_MM or impact--> OBSTACLE
+ *                   |  +--2 front pings < OBST_DETECT_MM or impact--> OBSTACLE
  *                   |       OBSTACLE: scan, plan, bypass, reacquire line
  * any --stop / blocked / line not found--> STOPPED --start--> LINE_FOLLOW
- * IDLE/STOPPED --calibrate--> CALIBRATE (360 degree spin: IR + compass)
+ * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (360 degree spin)
  *
  * Manoeuvres are sequences of blocking motion moves executed in this task;
- * every wait polls the STOP button and queued commands, so any manoeuvre
- * can be aborted.  The same diagram is drawn in docs/img/states.png (Rule
+ * every wait, and every step of an obstacle scan, polls the STOP button and
+ * queued commands, so any manoeuvre can be aborted.  STOP presses are also
+ * latched by an interrupt, so a short press is never missed, and STOP never
+ * moves the car.  The same diagram is drawn in docs/img/states.png (Rule
  * 2.2.f) and explained in the report (docs/REPORT.md).
  */
 
@@ -22,6 +24,7 @@
 #include "car_config.h"
 #include "car_math.h"
 #include "hal.h"
+#include "hal_irq.h"
 #include "motion.h"
 #include "ir_sensor.h"
 #include "barcode.h"
@@ -53,8 +56,9 @@
 #define FRONT_IGNORE_MM    (150.0f)
 #define STRAIGHT_EXTRA_MM  (20.0f)
 #define SPEED_MIN_CMD      (60)
-#define SPEED_MAX_CMD      (400)
+#define SPEED_MAX_CMD      (300) /* NFR2: >= 10 IR samples per 3 mm bar */
 #define STOP_SETTLE_MS     (200u)
+#define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
 #define REACQ_SWEEPS       (5u)
 #define REACQ_BASE_MS      (350u)
 #define SIDE_LEFT          (1.0f)
@@ -83,6 +87,10 @@ typedef enum
 static volatile vehicle_status_t g_st;
 static volatile ID               gh_mbuf = 0;
 
+/* Set by the STOP button interrupt, cleared by the vehicle task: volatile
+   (Rule 1.8.c). */
+static volatile bool gb_stop_latched = false;
+
 /* Vehicle-task private state. */
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
@@ -91,11 +99,14 @@ static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
 static uint32_t      g_seen_impacts       = 0u;
 static uint32_t      g_run_start_ms       = 0u;
+static uint32_t      g_start_down_ms      = 0u;
 static bool          gb_abort             = false;
 static bool          gb_start             = false;
 static bool          gb_calib             = false;
 static bool          gb_btn_start_prev    = false;
 static bool          gb_btn_stop_prev     = false;
+static bool          gb_start_armed       = false;
+static bool          gb_after_impact      = false;
 
 /* Names indexed by vehicle_state_t. */
 static char const * const g_state_names[] = {
@@ -105,9 +116,11 @@ static char const * const g_state_names[] = {
 static uint32_t        now_ms(void);
 static void            set_state(vehicle_state_t state, char const * p_reason);
 static int32_t         clamp_speed(int32_t speed_mm_s);
+static void            poll_start_button(bool b_start, bool b_idle);
 static void            poll_buttons(void);
 static void            poll_messages(void);
 static void            poll_inputs(void);
+static bool            stop_requested(void);
 static bool            run_move(void);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
@@ -118,6 +131,7 @@ static void            execute_nav(barcode_decode_nav_t cmd);
 static bool            pass_obstacle(float32_t side, float32_t offset);
 static bool            seek_line(float32_t max_mm);
 static bool            bypass(avoidance_plan_t const * p_plan);
+static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
 static bool            nav_due(float32_t odo_mm);
@@ -129,24 +143,32 @@ static void            calibrate(void);
 static void            handle_requests(void);
 static void            run_state(void);
 static void            vehicle_task(INT stacd, void * p_exinf);
+static void stop_button_isr(uint32_t pin, uint32_t events, uint32_t t_us);
 
 /*!
  * @brief Configure the buttons, create the command queue and start the
  *        vehicle task.
  *
  * @return E_OK, E_LIMIT if a kernel object could not be created, or a
- *         tk_sta_tsk() error.
+ *         tk_sta_tsk() or hal_irq_gpio_attach() error.
  */
 int32_t
 vehicle_init (void)
 {
-    T_CMBF cmbf   = {0};
-    T_CTSK ctsk   = {0};
-    ID     h_task = 0;
-    ER     ercd   = E_LIMIT;
+    T_CMBF cmbf     = {0};
+    T_CTSK ctsk     = {0};
+    ID     h_task   = 0;
+    ER     ercd     = E_LIMIT;
+    ER     btn_ercd = E_OK;
 
     hal_gpio_init_in(PIN_BTN_START, true);
     hal_gpio_init_in(PIN_BTN_STOP, true);
+
+    /* Latch STOP presses: the task cannot poll the button while it waits
+       for the sonar. */
+    btn_ercd =
+        hal_irq_gpio_attach(PIN_BTN_STOP, HAL_GPIO_EDGE_FALL, stop_button_isr);
+
     g_st.state       = VS_IDLE;
     g_st.cruise_mm_s = car_math_round(SPEED_CRUISE_MM_S);
     g_st.front_mm    = ULTRASONIC_NO_ECHO;
@@ -171,6 +193,9 @@ vehicle_init (void)
     {
         ercd = tk_sta_tsk(h_task, 0);
     }
+
+    /* Without the interrupt STOP is still polled; report the fault. */
+    ercd = (E_OK == ercd) ? btn_ercd : ercd;
 
     return (ercd);
 }
@@ -324,8 +349,49 @@ clamp_speed (int32_t speed_mm_s)
 }
 
 /*!
- * @brief Buttons (active low, edge detected).  STOP while idle requests a
- *        calibration.
+ * @brief START button, acted on when released so that the car never moves
+ *        under the user's hand: a short press starts a run, a press held
+ *        for at least CALIB_HOLD_MS requests a calibration.  Only presses
+ *        that begin while the car is idle count.
+ *
+ * @param[in] b_start START is pressed now.
+ * @param[in] b_idle  The car is idle or stopped.
+ */
+static void
+poll_start_button (bool b_start, bool b_idle)
+{
+    uint32_t now = now_ms();
+
+    if (b_start && (!gb_btn_start_prev))
+    {
+        /* Just pressed: time the hold. */
+        g_start_down_ms = now;
+        gb_start_armed  = b_idle;
+    }
+    else if ((!b_start) && gb_btn_start_prev && gb_start_armed)
+    {
+        gb_start_armed = false;
+
+        if ((now - g_start_down_ms) >= CALIB_HOLD_MS)
+        {
+            gb_calib = true;
+        }
+        else
+        {
+            gb_start = true;
+        }
+    }
+    else
+    {
+        /* Held, or released after a press that began during a run. */
+    }
+}
+
+/*!
+ * @brief Buttons (active low).  START: see poll_start_button().  STOP
+ *        aborts a run or manoeuvre and is ignored while idle, so it never
+ *        moves the car; a press latched by stop_button_isr() counts even if
+ *        the button was released before this poll.
  */
 static void
 poll_buttons (void)
@@ -334,12 +400,36 @@ poll_buttons (void)
     bool b_stop    = !hal_gpio_get(PIN_BTN_STOP);
     bool b_idle    = (VS_IDLE == g_st.state) || (VS_STOPPED == g_st.state);
     bool b_pressed = b_stop && (!gb_btn_stop_prev);
+    UINT imask     = 0u;
 
-    gb_start          = gb_start || (b_start && (!gb_btn_start_prev));
-    gb_calib          = gb_calib || (b_pressed && b_idle);
+    DI(imask);
+    b_pressed       = b_pressed || gb_stop_latched;
+    gb_stop_latched = false;
+    EI(imask);
+
+    poll_start_button(b_start, b_idle);
     gb_abort          = gb_abort || (b_pressed && (!b_idle));
     gb_btn_start_prev = b_start;
     gb_btn_stop_prev  = b_stop;
+}
+
+/*!
+ * @brief STOP button edge callback (interrupt context): latch the press for
+ *        poll_buttons().
+ *
+ * @param[in] pin    Button pin (unused).
+ * @param[in] events HAL_GPIO_EDGE_* bits (unused: only the falling edge,
+ *                   a press, is enabled).
+ * @param[in] t_us   Time stamp of the interrupt (unused).
+ */
+static void
+stop_button_isr (uint32_t pin, uint32_t events, uint32_t t_us)
+{
+    (void) pin;
+    (void) events;
+    (void) t_us;
+
+    gb_stop_latched = true;
 }
 
 /*!
@@ -391,6 +481,20 @@ poll_inputs (void)
 {
     poll_buttons();
     poll_messages();
+}
+
+/*!
+ * @brief Scan callback (see obstacle_scan()): service the buttons and
+ *        queued commands between servo steps.
+ *
+ * @return true if a stop was requested, to end the scan early.
+ */
+static bool
+stop_requested (void)
+{
+    poll_inputs();
+
+    return (gb_abort);
 }
 
 /*!
@@ -744,20 +848,18 @@ bypass (avoidance_plan_t const * p_plan)
 }
 
 /*!
- * @brief Obstacle state (Buddy 5 with Buddy 2): stop, scan, plan and act.
+ * @brief Plan and carry out the avoidance action for a completed scan.
+ *
+ * @param[in] p_prof Obstacle profile from obstacle_scan().
  */
 static void
-handle_obstacle (void)
+act_on_scan (avoidance_profile_t const * p_prof)
 {
-    avoidance_profile_t prof;
-    avoidance_plan_t    plan;
-    motion_status_t     motion;
-    INT                 offset_mm = 0;
+    avoidance_plan_t plan;
+    motion_status_t  motion;
+    INT              offset_mm = 0;
 
-    motion_stop();
-    (void) tk_dly_tsk(STOP_SETTLE_MS);
-    (void) obstacle_scan(&prof);
-    plan             = avoidance_plan(&prof, g_attempts);
+    plan             = avoidance_plan(p_prof, g_attempts);
     g_st.last_action = plan.action;
     offset_mm        = car_math_round(plan.offset_mm);
 
@@ -807,6 +909,39 @@ handle_obstacle (void)
 }
 
 /*!
+ * @brief Obstacle state (Buddy 5 with Buddy 2): stop, back off after an
+ *        impact, scan, then plan and act.  A STOP during the reverse or the
+ *        scan skips the rest; handle_requests() then stops the car.
+ */
+static void
+handle_obstacle (void)
+{
+    avoidance_profile_t prof;
+
+    motion_stop();
+    (void) tk_dly_tsk(STOP_SETTLE_MS);
+
+    /* After an impact the obstacle can be closer than US_MIN_MM, where the
+       sonar gets no echo and the scan would report a clear path. */
+    if (gb_after_impact)
+    {
+        gb_after_impact = false;
+        motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
+        (void) run_move();
+    }
+
+    if (!gb_abort)
+    {
+        (void) obstacle_scan(&prof, stop_requested);
+    }
+
+    if (!gb_abort)
+    {
+        act_on_scan(&prof);
+    }
+}
+
+/*!
  * @brief Take a decoded barcode, if any, as the pending navigation
  *        command.
  *
@@ -846,8 +981,10 @@ nav_due (float32_t odo_mm)
 }
 
 /*!
- * @brief Whether an obstacle is ahead (front sonar) or the car was hit
- *        (IMU impact).  Updates the published front distance.
+ * @brief Whether an obstacle is ahead (front sonar, confirmed by
+ *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
+ *        Updates the published front distance and records whether an
+ *        impact was the reason.
  *
  * @param[in] odo_mm Current odometer reading.
  *
@@ -857,15 +994,13 @@ static bool
 obstacle_due (float32_t odo_mm)
 {
     imu_status_t imu;
-    int32_t      front   = obstacle_front_mm();
     bool         b_ahead = false;
     bool         b_hit   = false;
 
-    g_st.front_mm = front;
+    g_st.front_mm = obstacle_front_mm();
     imu_get_status(&imu);
-    b_ahead = (ULTRASONIC_NO_ECHO != front) && (front < OBST_DETECT_MM)
-              && (odo_mm > g_front_ignore_until);
-    b_hit = (imu.impacts > g_seen_impacts);
+    b_ahead = (obstacle_ahead()) && (odo_mm > g_front_ignore_until);
+    b_hit   = (imu.impacts > g_seen_impacts);
 
     /* The IMU clears its impact counter at the start of a run
        (imu_reset_run()); a smaller count is that reset, not an impact. */
@@ -873,6 +1008,8 @@ obstacle_due (float32_t odo_mm)
     {
         g_seen_impacts = imu.impacts;
     }
+
+    gb_after_impact = b_hit;
 
     return (b_ahead || b_hit);
 }
@@ -916,7 +1053,7 @@ handle_line_follow (void)
         steer = line_follow_steer(&g_lf, ir_snap.norm[IR_LEFT],
                                   ir_snap.norm[IR_RIGHT], DT_S);
 
-        /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t. */
+        /* Cast: the cruise speed is 60..300 mm/s, exact in float32_t. */
         speed = line_follow_speed((float32_t) g_st.cruise_mm_s, g_lf.error);
         g_st.line_error = g_lf.error;
         motion_set_velocity(speed - steer, speed + steer);

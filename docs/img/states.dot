@@ -2,16 +2,16 @@ digraph S {
   graph [rankdir=LR, fontname="Helvetica", nodesep=0.5, ranksep=0.7, pad=0.2];
   node [shape=box, style="rounded,filled", fillcolor="#e0e7ff", fontname="Helvetica", fontsize=11];
   edge [fontname="Helvetica", fontsize=9];
-  IDLE -> CALIBRATE [label="STOP btn / 'calibrate'"]; CALIBRATE -> IDLE [label="360 spin done"];
+  IDLE -> CALIBRATE [label="START held 2 s / 'calibrate'"]; CALIBRATE -> IDLE [label="360 spin done"];
   IDLE -> LINE_FOLLOW [label="START / 'start'"];
   LINE_FOLLOW -> NAV_TURN [label="barcode pending AND\n(junction | U-turn | 400 mm)"];
   NAV_TURN -> LINE_FOLLOW [label="line reacquired"]; NAV_TURN -> LINE_SEARCH [label="not found"];
   LINE_FOLLOW -> LINE_SEARCH [label="both IR white 150 ms"];
   LINE_SEARCH -> LINE_FOLLOW [label="found"]; LINE_SEARCH -> STOPPED [label="not found / end"];
-  LINE_FOLLOW -> OBSTACLE [label="front < 300 mm\nor IMU impact"];
-  OBSTACLE -> OBSTACLE [label="REVERSE 120 mm,\nre-scan"];
+  LINE_FOLLOW -> OBSTACLE [label="2 front readings < 300 mm\nor IMU impact"];
+  OBSTACLE -> OBSTACLE [label="REVERSE 120 mm,\nre-scan (also first\nafter an impact)"];
   OBSTACLE -> LINE_FOLLOW [label="bypassed / clear"]; OBSTACLE -> LINE_SEARCH [label="rejoin failed"];
   OBSTACLE -> STOPPED [label="blocked"];
-  STOPPED -> LINE_FOLLOW [label="START"]; STOPPED -> CALIBRATE [label="STOP btn"];
+  STOPPED -> LINE_FOLLOW [label="START"]; STOPPED -> CALIBRATE [label="START held 2 s"];
   IDLE [fillcolor="#f1f5f9"]; STOPPED [fillcolor="#fecaca"]; LINE_FOLLOW [fillcolor="#bbf7d0"];
 }

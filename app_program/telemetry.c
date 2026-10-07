@@ -612,7 +612,7 @@ emit_help (void)
        type; the texts are ASCII. */
     (void) tm_printf(
         (UB const *) "# commands: start | stop | calibrate | gains | help\n"
-                     "#   speed=<mm/s>        cruise speed (60..400)\n"
+                     "#   speed=<mm/s>        cruise speed (60..300)\n"
                      "#   pid=<kp>,<ki>,<kd>  wheel speed PID\n"
                      "#   ff=<kf>,<offset>    feed-forward + friction "
                      "offset (pct)\n"
