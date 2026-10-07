@@ -391,6 +391,8 @@ Controls:
 - **GP21 (STOP)** stops the car and never moves it. Presses are latched by an interrupt, so a short press during a scan is not missed.
 - MQTT commands can do the same remotely.
 
+A new run discards barcodes decoded while the car stood still (pushed by hand, or seen during the calibration spin), so they cannot become its first turn.
+
 # 6. Verification and Evidence
 
 **Build verification.** All eight application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.

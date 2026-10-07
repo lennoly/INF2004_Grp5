@@ -715,9 +715,13 @@ execute_nav (barcode_decode_nav_t cmd)
     {
         set_state(VS_LINE_FOLLOW, "nav done");
     }
-    else
+    else if (!gb_abort)
     {
         set_state(VS_LINE_SEARCH, "nav: line not found");
+    }
+    else
+    {
+        /* Stopped: handle_requests() sets the state on the next loop. */
     }
 }
 
@@ -893,9 +897,13 @@ act_on_scan (avoidance_profile_t const * p_prof)
                 g_st.obstacles_passed++;
                 set_state(VS_LINE_FOLLOW, "obstacle bypassed");
             }
-            else
+            else if (!gb_abort)
             {
                 set_state(VS_LINE_SEARCH, "bypass: line not found");
+            }
+            else
+            {
+                /* Stopped: handle_requests() sets the state next loop. */
             }
         break;
 
@@ -1072,23 +1080,41 @@ handle_line_search (void)
     {
         set_state(VS_LINE_FOLLOW, "line reacquired");
     }
-    else if (VS_LINE_SEARCH == g_st.state)
+    else if (!gb_abort)
     {
         set_state(VS_STOPPED, "line not found / end");
     }
     else
     {
-        /* Aborted: the stop request sets the state. */
+        /* Stopped: handle_requests() sets the state on the next loop. */
     }
 }
 
 /*!
- * @brief Begin a mission run.
+ * @brief Begin a mission run.  Barcodes decoded while the car stood still
+ *        (pushed by hand, or seen during the calibration spin) are
+ *        discarded: they are not commands for this run.
  */
 static void
 start_run (void)
 {
-    imu_status_t imu;
+    imu_status_t    imu;
+    barcode_event_t stale;
+    uint32_t        discarded = 0u;
+
+    while (barcode_get_event(&stale, TMO_POL))
+    {
+        discarded++;
+    }
+
+    if (discarded > 0u)
+    {
+        /* Casts: tm_printf() takes the kernel's UB string type (ASCII); at
+           most a few queued events, so the count fits INT. */
+        (void) tm_printf((UB const *) "[vehicle] %d stale barcode(s) "
+                                      "discarded\n",
+                         (INT) discarded);
+    }
 
     imu_reset_run();
     imu_get_status(&imu);
