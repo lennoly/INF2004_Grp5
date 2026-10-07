@@ -40,7 +40,9 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 3. Hold BOOTSEL, plug USB, copy `template/build_make/*.uf2` (or one from
    `firmware/`). Open the USB serial port.
 4. Press **GP20 (START)** to run a test / the mission. **GP21 (STOP)**
-   stops; STOP while idle = 360° calibration spin (IR + magnetometer).
+   stops and never moves the car. In the mission build START acts on
+   release: a short press starts a run; held for 2 s while idle, it runs
+   the 360° calibration spin (IR + magnetometer), as `calibrate` does.
 
 ## Dashboard and live tuning (no reflashing)
 ```

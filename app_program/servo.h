@@ -1,7 +1,8 @@
 /** @file servo.h
  *
  * @brief Buddy 5 - RC servo that pans the ultrasonic sensor.
- *        0 degrees = right, 90 = straight ahead, 180 = left.
+ *        0 degrees = right, 90 = straight ahead, 180 = left
+ *        (SERVO_INVERT in car_config.h corrects a mirrored mount).
  */
 
 #ifndef SERVO_H
