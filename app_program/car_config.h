@@ -144,11 +144,14 @@
 #define SERVO_MIN_US                (500u)    /* pulse at 0 deg [CALIBRATE] */
 #define SERVO_MAX_US                (2500u)   /* pulse at 180 deg           */
 #define SERVO_CENTRE_DEG            (90)      /* straight ahead             */
+/* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount)     */
+#define SERVO_INVERT                (0)
 #define SERVO_SETTLE_MS             (120u)
 #define US_TIMEOUT_MS               (40u)
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
 #define OBST_DETECT_MM              (300)     /* start profiling below this */
+#define OBST_CONFIRM_READINGS       (2u)      /* close front pings in a row */
 #define OBST_TOO_CLOSE_MM           (90)      /* reverse below this         */
 #define OBST_CLUSTER_DEPTH_MM       (150)
 #define OBST_MARGIN_MM              (60.0f)
@@ -158,6 +161,11 @@
 #define OBST_SIDE_SERVO_DEG         (15)      /* 15 = right, 165 = left     */
 #define OBST_PASS_MAX_MM            (600.0f)
 #define OBST_MAX_ATTEMPTS           (2u)
+
+/* ------------------------------------------------------------------------ */
+/* Vehicle controller (Buddy 5)                                             */
+/* ------------------------------------------------------------------------ */
+#define WATCHDOG_TIMEOUT_MS         (3000u)   /* loop stall => reset, 0 off */
 
 /* ------------------------------------------------------------------------ */
 /* Telemetry (Buddy 1)                                                      */

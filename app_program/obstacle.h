@@ -11,12 +11,19 @@
 #include <stdbool.h>
 #include "avoidance.h"
 
-int32_t obstacle_init(void);
-int32_t obstacle_front_mm(void);
-void    obstacle_monitor_enable(bool b_on);
-bool    obstacle_scan(avoidance_profile_t * p_prof);
-int32_t obstacle_look_mm(int32_t servo_deg);
-void    obstacle_get_last(avoidance_profile_t * p_prof, uint32_t * p_scans);
+/* Called by obstacle_scan() before every servo step, in the caller's task;
+   returns true to end the scan early. */
+typedef bool (*obstacle_stop_cb_t)(void);
+
+int32_t  obstacle_init(void);
+int32_t  obstacle_front_mm(void);
+bool     obstacle_ahead(void);
+void     obstacle_monitor_enable(bool b_on);
+bool     obstacle_scan(avoidance_profile_t * p_prof,
+                       obstacle_stop_cb_t    p_should_stop);
+int32_t  obstacle_look_mm(int32_t servo_deg);
+void     obstacle_get_last(avoidance_profile_t * p_prof, uint32_t * p_scans);
+uint32_t obstacle_get_points(avoidance_point_t * p_points, uint32_t max_points);
 
 #endif /* OBSTACLE_H */
 

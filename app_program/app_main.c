@@ -12,7 +12,8 @@
  *  10  telemetry 5 Hz JSON, heartbeat and commands              Buddy 1
  *  10  blink     template liveness LED (GP16)
  *  11  test      standalone test programs (APP_MODE=TEST_xxx)
- * ISRs: IO_BANK0 (encoders, echo) and TIMER alarm 3 (1 kHz IR sampler).
+ * ISRs: IO_BANK0 (encoders, echo, STOP button) and TIMER alarm 3 (1 kHz IR
+ * sampler).
  */
 
 #include <stdint.h>
@@ -32,6 +33,13 @@
 #include "vehicle.h"
 #include "app_tests.h"
 #include "app_main.h"
+
+/* Status snapshots shared between tasks are copied with interrupts disabled
+   (DI/EI), which is atomic only on the single-core kernel profile (design
+   assumption A13).  The template defines CNF_SMP=1 for an SMP=1 build. */
+#if defined(CNF_SMP) && (CNF_SMP != 0)
+#error "PicoCar needs the single-core kernel profile: build with SMP=0."
+#endif
 
 #define USB_WAIT_POLLS (50)
 #define USB_WAIT_MS    (100u)
