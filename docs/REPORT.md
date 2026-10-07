@@ -79,9 +79,9 @@ Studying the template revealed constraints that drove several design decisions:
 
 | Build | Flash (text) | RAM (data+bss) |
 |---|---|---|
-| Mission, UART console | ≈ 67 KB | ≈ 15 KB |
+| Mission, UART console | ≈ 68 KB | ≈ 15 KB |
 | Mission, USB console + WiFi + MQTT | 359 KB | 58 KB |
-| Application code only (linked, WiFi build) | 24.2 KB | 7.8 KB (+ 17.4 KB task stacks) |
+| Application code only (linked, WiFi build) | 24.6 KB | 7.9 KB (+ 17.4 KB task stacks) |
 
 The RP2040 has 264 KB of SRAM and 2 MB of flash, so all builds fit comfortably.
 
