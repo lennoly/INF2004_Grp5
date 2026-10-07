@@ -18,6 +18,7 @@
 #include "lwip/apps/mqtt.h"
 #include "mqtt_bridge.h"
 #include "mqtt_lwip.h"
+#include "obstacle.h"
 #include "pid.h"
 #include "sim/vehicle_sim.h"
 #include "terrain.h"
@@ -1108,7 +1109,8 @@ test_vehicle_buttons (void)
 static void
 test_vehicle_obstacle (void)
 {
-    uint32_t pings = 0u;
+    avoidance_point_t points[SCAN_MAX_POINTS];
+    uint32_t          pings = 0u;
 
     vehicle_start(DRIVE_MS);
     vehicle_sim_box(true);
@@ -1127,6 +1129,9 @@ test_vehicle_obstacle (void)
     check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
     check((vehicle_sim_pings() - pings) >= 12u,
           "vehicle: coarse then fine scan");
+    check((9u == obstacle_get_points(points, SCAN_MAX_POINTS))
+              && (70 == points[0].angle_deg) && (200 == points[1].dist_mm),
+          "vehicle: last scan points kept (70..110 deg fine scan)");
     check((2u == vehicle_sim_count("L90")) && (2u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: box-shaped bypass, line rejoined");

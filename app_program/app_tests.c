@@ -478,13 +478,18 @@ run_test (void)
  * @brief Buddy 5 test: full coarse-to-fine scan, profile and plan, plus a
  *        servo direction check (assumption A9): a box ahead but offset to
  *        the car's right must be found on the RIGHT (closest angle below
- *        90 degrees); otherwise set SERVO_INVERT in car_config.h.
+ *        90 degrees); otherwise set SERVO_INVERT in car_config.h.  The
+ *        raw scan points follow as "pt,angle,mm" lines for
+ *        tools/scan_plot.py.
  */
 static void
 run_test (void)
 {
-    avoidance_profile_t profile;
+    avoidance_profile_t profile = {0};
     avoidance_plan_t    plan;
+    avoidance_point_t   points[SCAN_MAX_POINTS];
+    uint32_t            count = 0u;
+    uint32_t            idx   = 0u;
 
     /* Casts in the messages: tm_printf() takes the kernel's UB string type
        (the literals are ASCII); distances, angles and clearances are at
@@ -500,6 +505,18 @@ run_test (void)
         print_int(profile.right_edge_mm), print_int(profile.width_mm),
         (INT) profile.clear_left_mm, (INT) profile.clear_right_mm,
         avoidance_action_name(plan.action), print_int(plan.offset_mm));
+
+    /* Raw points of this scan; casts as above. */
+    count = obstacle_get_points(points, SCAN_MAX_POINTS);
+    (void) tm_printf((UB const *) "# points=%d (pt,angle_deg,dist_mm; -1 = "
+                                  "no echo)\n",
+                     (INT) count);
+
+    for (idx = 0u; idx < count; idx++)
+    {
+        (void) tm_printf((UB const *) "pt,%d,%d\n", (INT) points[idx].angle_deg,
+                         (INT) points[idx].dist_mm);
+    }
 
     if (profile.b_found)
     {

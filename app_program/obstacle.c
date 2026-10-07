@@ -41,6 +41,8 @@ static volatile uint32_t            g_close_count = 0u;
 static volatile bool                gb_monitor    = true;
 static volatile avoidance_profile_t g_last;
 static volatile uint32_t            g_scans = 0u;
+static volatile avoidance_point_t   g_last_points[SCAN_MAX_POINTS];
+static volatile uint32_t            g_last_count = 0u;
 
 static void servo_go(int32_t angle_deg);
 static bool keep_scanning(obstacle_stop_cb_t p_should_stop);
@@ -164,6 +166,7 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
     int32_t           high       = FINE_MIN_DEG;
     bool              b_found    = false;
     bool              b_complete = false;
+    uint32_t          idx        = 0u;
     UINT              imask      = 0u;
 
     gb_monitor = false;
@@ -187,6 +190,13 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
 
         DI(imask);
         g_last = *p_prof;
+
+        for (idx = 0u; idx < count; idx++)
+        {
+            g_last_points[idx] = points[idx];
+        }
+
+        g_last_count = count;
         g_scans++;
         EI(imask);
 
@@ -228,6 +238,35 @@ obstacle_get_last (avoidance_profile_t * p_prof, uint32_t * p_scans)
     *p_prof  = g_last;
     *p_scans = g_scans;
     EI(imask);
+}
+
+/*!
+ * @brief Consistent copy of the points of the last completed scan (printed
+ *        by TEST_ULTRASONIC for tools/scan_plot.py).
+ *
+ * @param[out] p_points   Destination for up to max_points points.
+ * @param[in]  max_points Capacity of p_points.
+ *
+ * @return Number of points copied.
+ */
+uint32_t
+obstacle_get_points (avoidance_point_t * p_points, uint32_t max_points)
+{
+    uint32_t count = 0u;
+    uint32_t idx   = 0u;
+    UINT     imask = 0u;
+
+    DI(imask);
+    count = (g_last_count < max_points) ? g_last_count : max_points;
+
+    for (idx = 0u; idx < count; idx++)
+    {
+        p_points[idx] = g_last_points[idx];
+    }
+
+    EI(imask);
+
+    return (count);
 }
 
 /*!
