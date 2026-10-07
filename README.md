@@ -22,6 +22,7 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
 | `app_program/command, console_in` | text commands over USB/UART/MQTT (live tuning) |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
+| `tools/scan_plot.py` | plots `TEST_ULTRASONIC` scans against the real box and prints the error table (Buddy 5 evidence) |
 | `tests/host` | PC unit tests (`make -C tests/host`) — 124/124 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |

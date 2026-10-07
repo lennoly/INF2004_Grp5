@@ -377,7 +377,20 @@ Every step is abortable, including the scan (STOP is checked before each servo s
 - Too close: REVERSE, then STOP.
 - Box outside the corridor: CONTINUE.
 
-Hardware: record the profile against the true values for 3 obstacle positions (`APP_MODE=TEST_ULTRASONIC`), and the bypass success rate ___/10 and line re-acquisition rate ___/10.
+**Hardware test procedure** (`APP_MODE=TEST_ULTRASONIC`, then `MISSION`). Save the serial console to a file and run `python3 tools/scan_plot.py <log> --box X,Y,W` for one figure per scan and the error table.
+
+1. **Servo direction (A9).** Put a box 250 mm ahead and 60 mm to the right. The console must say `closest echo on the RIGHT`; otherwise set `SERVO_INVERT` to 1 in `car_config.h`.
+2. **Profile accuracy (A9).** Take three scans per position and record the mean (true / estimated, mm).
+
+| Box position (tape) | Closest | Left edge | Right edge | Width |
+|---|---|---|---|---|
+| centred, 150 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+| centred, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+| 60 mm right, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+| 60 mm left, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+
+3. **Avoidance and recovery (A10).** With the obstacle on the line, do 10 runs in `MISSION`: bypass completed ___/10, line re-acquired ___/10, largest sideways deviation ___ mm.
+4. **Safety.** Tap STOP during a scan: the car stops within one servo step. Bump a box: the car reverses 120 mm, then scans. Drive over the hump: no obstacle stop, and the front range stays above 300 mm on the approach (A12). A full scan, bypass and calibration run without a watchdog reset.
 
 # 5. Integration — Vehicle Controller
 
