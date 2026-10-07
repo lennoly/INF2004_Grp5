@@ -511,7 +511,7 @@ Pure algorithm modules contain no RTOS calls, which is why they can be unit-test
 - Obstacle depth is measured by side-looking sonar while passing. A very long obstacle is capped at 600 mm.
 - Tuned gains are held in RAM only and must be copied into `car_config.h`. Saving them to flash would need the template's core-parking protocol, which it does not provide.
 - MQTT commands are not authenticated beyond the broker login. Anyone who can publish to the broker can stop or start the car, so use a private network or set `MQTT_USERNAME`/`MQTT_PASSWORD` with a Mosquitto password file.
-- The build targets the qualified single-core profile. The data structures are SMP-aware (barriers, single-owner IRQs), but dual-core operation has not been tested.
+- The firmware needs the qualified single-core kernel profile. Status snapshots are copied with interrupts disabled, which is atomic only on one core (assumption A13), so `app_main.c` stops an `SMP=1` build with a compile error. Dual-core operation would need spinlock-protected copies.
 
 # 10. Week 10 Demonstration Plan
 
