@@ -8,7 +8,7 @@ digraph S {
   NAV_TURN -> LINE_FOLLOW [label="line reacquired"]; NAV_TURN -> LINE_SEARCH [label="not found"];
   LINE_FOLLOW -> LINE_SEARCH [label="both IR white 150 ms"];
   LINE_SEARCH -> LINE_FOLLOW [label="found"]; LINE_SEARCH -> STOPPED [label="not found / end"];
-  LINE_FOLLOW -> OBSTACLE [label="2 front readings < 300 mm\nor IMU impact"];
+  LINE_FOLLOW -> OBSTACLE [label="2 front readings < 300 mm\nor IMU impact\n(not on a hump)"];
   OBSTACLE -> OBSTACLE [label="REVERSE 120 mm,\nre-scan (also first\nafter an impact)"];
   OBSTACLE -> LINE_FOLLOW [label="bypassed / clear"]; OBSTACLE -> LINE_SEARCH [label="rejoin failed"];
   OBSTACLE -> STOPPED [label="blocked"];

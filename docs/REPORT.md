@@ -342,7 +342,7 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 
 - The HC-SR04 echo width is timestamped by GPIO interrupts (no busy-waiting), with distance = µs × 0.1715 mm.
 - The datasheet's 60 ms minimum cycle is enforced, and each scan point takes the median of 3 readings.
-- A background task monitors the front distance at ≈14 Hz. Two readings in a row under 300 mm are needed to stop the car, so one spurious echo is ignored.
+- A background task monitors the front distance at ≈14 Hz. Two readings in a row under 300 mm are needed to stop the car, so one spurious echo is ignored. Front and impact triggers are ignored while the IMU reports the car on a hump: the sonar sees the floor when the nose dips, and the landing jolt can look like an impact.
 - **Stage 1 (coarse):** readings at 30°, 60°, 90°, 120° and 150°.
 - **Stage 2 (fine):** if anything is under 300 mm, the sensor rescans ±20° around the detected region in 5° steps.
 
@@ -511,6 +511,7 @@ Pure algorithm modules contain no RTOS calls, which is why they can be unit-test
 - Encoders have no direction channel, so direction is inferred from the commanded sign. A wheel pushed backwards by an external force is counted as forward.
 - Ultrasonic beam width (±7.5°) makes obstacles look wider. We accept this as a safety margin; a beam-width correction could reduce the detour.
 - Obstacle depth is measured by side-looking sonar while passing. A very long obstacle is capped at 600 mm.
+- A low-mounted sonar can still see a hump's face before the car tilts (assumption A12). Log the front range while approaching the course hump; if it drops under 300 mm, aim the sensor higher.
 - Tuned gains are held in RAM only and must be copied into `car_config.h`. Saving them to flash would need the template's core-parking protocol, which it does not provide.
 - MQTT commands are not authenticated beyond the broker login. Anyone who can publish to the broker can stop or start the car, so use a private network or set `MQTT_USERNAME`/`MQTT_PASSWORD` with a Mosquitto password file.
 - The firmware needs the qualified single-core kernel profile. Status snapshots are copied with interrupts disabled, which is atomic only on one core (assumption A13), so `app_main.c` stops an `SMP=1` build with a compile error. Dual-core operation would need spinlock-protected copies.

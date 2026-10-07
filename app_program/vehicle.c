@@ -991,8 +991,10 @@ nav_due (float32_t odo_mm)
 /*!
  * @brief Whether an obstacle is ahead (front sonar, confirmed by
  *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
- *        Updates the published front distance and records whether an
- *        impact was the reason.
+ *        Both triggers are ignored while the IMU reports the car on a hump:
+ *        the sonar sees the floor when the nose dips, and the landing jolt
+ *        can look like an impact.  Updates the published front distance
+ *        and records whether an impact was the reason.
  *
  * @param[in] odo_mm Current odometer reading.
  *
@@ -1002,21 +1004,21 @@ static bool
 obstacle_due (float32_t odo_mm)
 {
     imu_status_t imu;
+    bool         b_hump  = false;
     bool         b_ahead = false;
     bool         b_hit   = false;
 
     g_st.front_mm = obstacle_front_mm();
     imu_get_status(&imu);
-    b_ahead = (obstacle_ahead()) && (odo_mm > g_front_ignore_until);
-    b_hit   = (imu.impacts > g_seen_impacts);
+    b_hump = (HUMP_FLAT != imu.hump.state);
+    b_ahead =
+        (!b_hump) && (obstacle_ahead()) && (odo_mm > g_front_ignore_until);
+    b_hit = (!b_hump) && (imu.impacts > g_seen_impacts);
 
-    /* The IMU clears its impact counter at the start of a run
-       (imu_reset_run()); a smaller count is that reset, not an impact. */
-    if (b_ahead || b_hit || (imu.impacts < g_seen_impacts))
-    {
-        g_seen_impacts = imu.impacts;
-    }
-
+    /* Always follow the IMU's impact counter: an impact on a hump is
+       dropped, not kept for later, and a smaller count is the reset at the
+       start of a run (imu_reset_run()), not an impact. */
+    g_seen_impacts  = imu.impacts;
     gb_after_impact = b_hit;
 
     return (b_ahead || b_hit);
