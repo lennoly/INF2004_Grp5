@@ -1,0 +1,12 @@
+# Fetched by setup.sh (course template with our patch, Pico SDK 2.2.0).
+# Wi-Fi and MQTT credentials live in template/config/, so they stay local.
+/template/
+/sdk/
+
+# Host unit-test binary (make -C tests/host)
+/tests/host/picocar_tests
+
+# Python and macOS
+__pycache__/
+*.pyc
+.DS_Store
