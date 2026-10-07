@@ -397,7 +397,7 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 
 **Build verification.** All eight application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
 
-**Host unit tests** (`make -C tests/host`): **89/89 pass**. The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
+**Host unit tests** (`make -C tests/host`): **124/124 pass**. The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
 
 | Module | What is proven |
 |---|---|
@@ -409,6 +409,7 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 | avoidance | width/centre estimates, side choice with a wall, reverse/stop/continue |
 | mqtt_lwip | against a fake lwIP (`tests/host/lwip/`): no attempt without a network, a 2 s window before a new attempt, `online` (retained) and the `cmd` subscription on connect, a message kept while the client is full, commands only from the `cmd` topic, reconnects counted |
 | mqtt_bridge | ring capacity, drop-when-offline, command path |
+| vehicle + obstacle | the real `vehicle.c`, `obstacle.c` and `servo.c` in a simulation on a fake µT-Kernel (`tests/host/sim/`, `tk/`, `tm/`) with simulated time, buttons, motion, IR, IMU and sonar: START on release and 2 s hold to calibrate, STOP never moves the car, a 6 ms STOP press between polls is latched, speed limited to 300 mm/s; one close echo ignored and two stop the car; coarse then fine scan and the box-shaped bypass back to the line; reverse before the scan after an impact; triggers ignored on a hump; a STOP or `stop` ends a scan at the next servo step; a STOP in a line search, U-turn or bypass gives one `STOPPED (stop command)`; stale barcodes discarded at START; longest gap between watchdog feeds 774 ms. Each of these fixes was broken on purpose once to confirm a check fails |
 | command | every command and its limits, spaces and case, rejection of bad counts, negative gains and trailing text; serial line assembly (CRLF, backspace, control bytes, overflow recovery); 3-decimal formatter (including NaN); live line gains surviving re-initialisation |
 
 **Dashboard.** Tested end to end against a Mosquitto broker with `sim_car.py`, which checked commands, acks, rejected commands, rate changes and CSV logs. The serial path was tested against an emulated USB console on a pseudo-terminal. That test also confirmed the 16-byte write pacing and that the dashboard requests the gains when the port opens.
@@ -490,6 +491,7 @@ Beyond these mechanical rules, the pass also marked every variable shared betwee
 | 2.2.a (complete sentences) | end-of-line comments on `#define`s and structure members | they label units and ranges (`/* mm/s per percent duty */`), which a sentence would not make clearer | block comments are full sentences |
 | scope | template files: kernel, libraries, `demo_tasks.c/.h`, `usb_console_compat.h` and the six patched template files | not our code; reformatting them would bury the real changes in the template patch | our hunks in the patched files follow the template's own style |
 | scope | `tests/host/lwip/`, the fake lwIP for the host test of `mqtt_lwip.c` | it must copy lwIP's own names and types | the test that drives it (`test_main.c`) is checked |
+| scope | `tests/host/tk/`, `tm/` and `sim/`, the fake µT-Kernel and the vehicle simulation | they copy the kernel's names and types, and `sim/vehicle_sim.c` includes `vehicle.c` to run its loop | the tests that drive them (`test_main.c`) are checked |
 
 ## 8.3 Latent defects found by the conformance pass
 
