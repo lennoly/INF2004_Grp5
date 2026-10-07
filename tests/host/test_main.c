@@ -19,7 +19,9 @@
 #include "mqtt_bridge.h"
 #include "mqtt_lwip.h"
 #include "pid.h"
+#include "sim/vehicle_sim.h"
 #include "terrain.h"
+#include "vehicle.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -107,6 +109,16 @@
 #define FIRST_WINDOW_MS (2000u)  /* the first attempt's time limit   */
 #define SESSION_MS      (60000u) /* a session that ran for a while   */
 
+/* Vehicle simulation (sim/): one press of START, a 1.5 s drive (past the
+   150 mm front-ignore window after "path clear") and a close echo pair. */
+#define TAP_AT_MS (20u)
+#define TAP_MS    (40u)
+#define DRIVE_MS  (1500u)
+#define NEAR_MM   (250)
+#define NEARER_MM (240)
+#define FAR_MM    (500)
+#define CENTRE_US (1500u) /* servo pulse at 90 degrees */
+
 typedef struct
 {
     char         symbol;
@@ -152,6 +164,15 @@ static uint32_t  feed_text(command_line_t * p_line, char const * p_text,
                            char * p_out);
 static void      test_command(void);
 static void      test_line_gains(void);
+static vehicle_status_t vehicle_status(void);
+static bool             vehicle_is(vehicle_state_t state, char const * p_why);
+static void             vehicle_start(uint32_t drive_ms);
+static void             vehicle_close_echo(void);
+static void             test_vehicle_buttons(void);
+static void             test_vehicle_obstacle(void);
+static void             test_vehicle_scan_stop(void);
+static void             test_vehicle_manoeuvre_stop(void);
+static void             test_vehicle_barcode_watchdog(void);
 
 /*!
  * @brief Run every test group and print the summary.
@@ -167,6 +188,11 @@ main (void)
     test_barcode();
     test_terrain();
     test_obstacle();
+    test_vehicle_buttons(); /* the vehicle tests share one car, in order */
+    test_vehicle_obstacle();
+    test_vehicle_scan_stop();
+    test_vehicle_manoeuvre_stop();
+    test_vehicle_barcode_watchdog();
     test_bridge();
     test_mqtt_client();
     test_command();
@@ -965,6 +991,281 @@ test_line_gains (void)
     line_follow_set_gains(NULL, LINE_KP, LINE_KI, LINE_KD);
     (void) printf("command: parser, line assembler, formatter and live gains "
                   "OK\n");
+}
+
+/*!
+ * @brief Snapshot of the simulated vehicle's status.
+ *
+ * @return Status.
+ */
+static vehicle_status_t
+vehicle_status (void)
+{
+    vehicle_status_t status;
+
+    vehicle_get_status(&status);
+
+    return (status);
+}
+
+/*!
+ * @brief Whether the simulated vehicle is in a state, for a reason.
+ *
+ * @param[in] state Expected state.
+ * @param[in] p_why Expected reason, or NULL for any.
+ *
+ * @return true if both match.
+ */
+static bool
+vehicle_is (vehicle_state_t state, char const * p_why)
+{
+    vehicle_status_t status = vehicle_status();
+
+    return ((state == status.state)
+            && ((NULL == p_why) || (0 == strcmp(status.p_reason, p_why))));
+}
+
+/*!
+ * @brief Tap START (a run starts on release), then drive on the line.
+ *
+ * @param[in] drive_ms Simulated time to run for.
+ */
+static void
+vehicle_start (uint32_t drive_ms)
+{
+    vehicle_sim_line(true);
+    vehicle_sim_press(PIN_BTN_START, TAP_AT_MS, TAP_MS);
+    vehicle_sim_run(drive_ms);
+}
+
+/*!
+ * @brief Two front readings in a row closer than OBST_DETECT_MM.
+ */
+static void
+vehicle_close_echo (void)
+{
+    vehicle_sim_front(NEAR_MM);
+    vehicle_sim_front(NEARER_MM);
+}
+
+/*!
+ * @brief Vehicle task: START and STOP buttons and the speed limit.
+ */
+static void
+test_vehicle_buttons (void)
+{
+    vehicle_sim_init();
+    check(vehicle_is(VS_IDLE, "boot"), "vehicle: boots IDLE");
+    check(CENTRE_US == vehicle_sim_servo_us(), "vehicle: sonar centred");
+
+    vehicle_sim_press(PIN_BTN_STOP, 50u, 200u);
+    vehicle_sim_run(600u);
+    check((vehicle_is(VS_IDLE, NULL)) && (0u == vehicle_sim_count("L360")),
+          "vehicle: STOP while idle never moves the car");
+
+    vehicle_sim_press(PIN_BTN_START, 50u, 300u);
+    vehicle_sim_run(300u);
+    check(vehicle_is(VS_IDLE, NULL), "vehicle: START held: no run yet");
+    vehicle_sim_run(200u);
+    check(vehicle_is(VS_LINE_FOLLOW, "start"), "vehicle: START released: run");
+
+    /* 6 ms, between two 20 ms polls: only the interrupt latch sees it. */
+    vehicle_sim_press(PIN_BTN_STOP, 3u, 6u);
+    vehicle_sim_run(60u);
+    check(vehicle_is(VS_STOPPED, "stop command"),
+          "vehicle: short STOP press latched");
+
+    vehicle_sim_clear_log();
+    vehicle_sim_press(PIN_BTN_START, 50u, 2500u);
+    vehicle_sim_run(2500u);
+    check(0u == vehicle_sim_count("L360"), "vehicle: no spin while held");
+    vehicle_sim_run(1500u);
+    check((1u == vehicle_sim_count("L360"))
+              && (vehicle_is(VS_IDLE, "calibrated")),
+          "vehicle: START held 2 s calibrates on release");
+
+    vehicle_start(450u);
+    vehicle_sim_press(PIN_BTN_START, 50u, 350u);
+    vehicle_sim_press(PIN_BTN_STOP, 100u, 50u);
+    vehicle_sim_run(600u);
+    check(vehicle_is(VS_STOPPED, "stop command"),
+          "vehicle: START pressed during a run does not restart it");
+
+    (void) vehicle_command(VCMD_SET_SPEED, 400);
+    vehicle_sim_step();
+    check(300 == vehicle_status().cruise_mm_s, "vehicle: speed=400 -> 300");
+    (void) vehicle_command(VCMD_SET_SPEED, 10);
+    vehicle_sim_step();
+    check(60 == vehicle_status().cruise_mm_s, "vehicle: speed=10 -> 60");
+    (void) vehicle_command(VCMD_SET_SPEED, 180);
+    vehicle_sim_step();
+}
+
+/*!
+ * @brief Vehicle task: obstacle triggers, scan, bypass, impact reverse and
+ *        the hump guard.
+ */
+static void
+test_vehicle_obstacle (void)
+{
+    uint32_t pings = 0u;
+
+    vehicle_start(DRIVE_MS);
+    vehicle_sim_box(true);
+    vehicle_sim_clear_log();
+    vehicle_sim_front(NEAR_MM);
+    vehicle_sim_run(40u);
+    check(0u == vehicle_sim_count("-> OBSTACLE"),
+          "vehicle: one close echo is ignored");
+    vehicle_sim_front(NEARER_MM);
+    vehicle_sim_step();
+    check(vehicle_is(VS_OBSTACLE, NULL), "vehicle: two close echoes stop");
+
+    vehicle_sim_clear_log();
+    pings = vehicle_sim_pings();
+    vehicle_sim_step();
+    check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
+    check((vehicle_sim_pings() - pings) >= 12u,
+          "vehicle: coarse then fine scan");
+    check((2u == vehicle_sim_count("L90")) && (2u == vehicle_sim_count("R90"))
+              && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
+          "vehicle: box-shaped bypass, line rejoined");
+    vehicle_sim_box(false);
+
+    vehicle_sim_impact();
+    vehicle_sim_step();
+    check(vehicle_is(VS_OBSTACLE, NULL), "vehicle: impact stops the car");
+    vehicle_sim_clear_log();
+    vehicle_sim_step();
+    check(vehicle_sim_log_starts("back120;u"),
+          "vehicle: impact: reverse 120 mm, then scan");
+    check(vehicle_is(VS_LINE_FOLLOW, "path clear"),
+          "vehicle: nothing found: continue");
+
+    vehicle_sim_run(DRIVE_MS);
+    vehicle_sim_hump(HUMP_DESCENDING);
+    vehicle_sim_clear_log();
+    vehicle_close_echo();
+    vehicle_sim_impact();
+    vehicle_sim_run(40u);
+    check(0u == vehicle_sim_count("-> OBSTACLE"),
+          "vehicle: on a hump, sonar and impact are ignored");
+    vehicle_sim_hump(HUMP_FLAT);
+    vehicle_sim_front(FAR_MM);
+    vehicle_sim_run(200u);
+    check(0u == vehicle_sim_count("-> OBSTACLE"),
+          "vehicle: an impact on the hump is not replayed");
+}
+
+/*!
+ * @brief Vehicle task: STOP button and stop command during a scan.
+ */
+static void
+test_vehicle_scan_stop (void)
+{
+    uint32_t pings = 0u;
+
+    vehicle_close_echo();
+    vehicle_sim_step();
+    check(vehicle_is(VS_OBSTACLE, NULL), "vehicle: obstacle (scan stop)");
+    vehicle_sim_clear_log();
+    pings = vehicle_sim_pings();
+    vehicle_sim_press(PIN_BTN_STOP, 420u, 30u); /* in the first servo step */
+    vehicle_sim_step();
+    check((1u == (vehicle_sim_pings() - pings))
+              && (1u == vehicle_sim_count("{[scan] stopped}")),
+          "vehicle: STOP ends the scan at the next step");
+    check((0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("fwd")),
+          "vehicle: no move after a stopped scan");
+    check(CENTRE_US == vehicle_sim_servo_us(), "vehicle: sonar re-centred");
+    vehicle_sim_step();
+    check(vehicle_is(VS_STOPPED, "stop command"),
+          "vehicle: scan stopped -> STOPPED (stop command)");
+
+    vehicle_start(DRIVE_MS);
+    vehicle_close_echo();
+    vehicle_sim_step();
+    pings = vehicle_sim_pings();
+    vehicle_sim_stop_command_at(900u); /* during the second servo step */
+    vehicle_sim_step();
+    vehicle_sim_step();
+    check((2u == (vehicle_sim_pings() - pings))
+              && (vehicle_is(VS_STOPPED, "stop command")),
+          "vehicle: stop command ends the scan at the next step");
+}
+
+/*!
+ * @brief Vehicle task: a STOP during a line search, a barcode U-turn or a
+ *        bypass gives one STOPPED (stop command) and no failure state.
+ */
+static void
+test_vehicle_manoeuvre_stop (void)
+{
+    vehicle_start(200u);
+    vehicle_sim_clear_log();
+    vehicle_sim_line(false);
+    vehicle_sim_press(PIN_BTN_STOP, 1200u, 60u); /* during the sweeps */
+    vehicle_sim_run(8000u);
+    check(1u == vehicle_sim_count("-> LINE_SEARCH (line lost)"),
+          "vehicle: line lost -> LINE_SEARCH");
+    check((vehicle_is(VS_STOPPED, "stop command"))
+              && (0u == vehicle_sim_count("line not found")),
+          "vehicle: STOP in a line search reported once");
+
+    vehicle_start(200u);
+    vehicle_sim_barcode(NAV_UTURN);
+    vehicle_sim_step();
+    check(vehicle_is(VS_NAV_TURN, NULL), "vehicle: U-turn barcode");
+    vehicle_sim_clear_log();
+    vehicle_sim_press(PIN_BTN_STOP, 100u, 30u); /* during the 180 turn */
+    vehicle_sim_run(600u);
+    check((vehicle_is(VS_STOPPED, "stop command"))
+              && (0u == vehicle_sim_count("LINE_SEARCH")),
+          "vehicle: STOP in a U-turn reported once");
+
+    vehicle_start(DRIVE_MS);
+    vehicle_sim_box(true);
+    vehicle_close_echo();
+    vehicle_sim_step();
+    vehicle_sim_clear_log();
+    vehicle_sim_stop_on_next_turn();
+    vehicle_sim_step();
+    vehicle_sim_step();
+    check((1u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("fwd"))
+              && (vehicle_is(VS_STOPPED, "stop command"))
+              && (0u == vehicle_sim_count("LINE_SEARCH")),
+          "vehicle: STOP in a bypass reported once");
+    vehicle_sim_box(false);
+}
+
+/*!
+ * @brief Vehicle task: stale barcodes at START and the watchdog feed gap.
+ */
+static void
+test_vehicle_barcode_watchdog (void)
+{
+    uint32_t gap = 0u;
+
+    vehicle_sim_barcode(NAV_LEFT);
+    vehicle_sim_barcode(NAV_RIGHT);
+    vehicle_sim_clear_log();
+    vehicle_start(200u);
+    check((NAV_NONE == vehicle_status().pending_nav)
+              && (0u == vehicle_sim_queued_barcodes())
+              && (1u == vehicle_sim_count("2 stale barcode(s) discarded")),
+          "vehicle: barcodes read while stopped are discarded");
+    vehicle_sim_barcode(NAV_RIGHT);
+    vehicle_sim_step();
+    check(NAV_RIGHT == vehicle_status().pending_nav,
+          "vehicle: a barcode read during the run is kept");
+
+    gap = vehicle_sim_watchdog_gap_ms();
+    check((WATCHDOG_TIMEOUT_MS == vehicle_sim_watchdog_timeout_ms())
+              && (gap < (WATCHDOG_TIMEOUT_MS / 2u)),
+          "vehicle: watchdog fed within half its timeout");
+    (void) printf("vehicle: buttons, scan, bypass, impact, hump, stop and "
+                  "barcode scenarios; longest watchdog gap %" PRIu32 " ms\n",
+                  gap);
 }
 
 /*** end of file ***/
