@@ -432,6 +432,7 @@ The BARR-C conformance pass and the independent review of it found seven more; t
 
 - **Sensor faults.** Missing echoes, I2C timeouts (2 ms per transfer, counted in the heartbeat as `i2cerr`) and low-contrast calibration are all detected and reported. They never hang a task.
 - **Motion safety.** Every move has a stall timeout and every manoeuvre can be aborted.
+- **Watchdog.** The vehicle task starts the RP2040 watchdog (`WATCHDOG_TIMEOUT_MS`, 3 s) and feeds it in every wait, at least once a second (the longest gap is one scan step). If the task stalls, because it or a higher-priority task hangs, the chip resets, which turns the motor outputs off, and the first state after boot reports `watchdog reset` as its reason.
 - **Line recovery.** A lost line gets an expanding sweep search before the car gives up with a reason.
 - **Collision.** An IMU impact triggers a stop, a 120 mm reverse, a scan and avoidance.
 - **Communication.** Reconnection uses back-off, the last-will marks the car offline, a heartbeat sequence number reveals lost messages, and telemetry is simply dropped (and counted) when offline, so control is never delayed by the network.

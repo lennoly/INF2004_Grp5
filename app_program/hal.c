@@ -26,6 +26,8 @@
 #include "hardware/structs/i2c.h"
 #include "hardware/structs/timer.h"
 #include "hardware/structs/uart.h"
+#include "hardware/structs/watchdog.h"
+#include "hardware/structs/psm.h"
 #include "hal.h"
 #include "hal_irq.h"
 
@@ -54,12 +56,21 @@ typedef char hal_irq_timer_matches_sdk_t
 #define SPIKE_DIV            (16u) /* spike filter = lcnt / 16, at least 1 */
 #define I2C_ERROR            (-1)
 #define HALF_RANGE_US        (0x7FFFFFFFu) /* wrap-safe "in the past" test */
+#define US_PER_MS            (1000u)
+#define WATCHDOG_X_FACTOR    (2u) /* RP2040-E1: counts down twice per tick */
+#define WATCHDOG_LOAD_PER_MS (US_PER_MS * WATCHDOG_X_FACTOR)
+#define WATCHDOG_MAX_MS      (WATCHDOG_LOAD_BITS / WATCHDOG_LOAD_PER_MS)
+#define WATCHDOG_SCRATCH     (4u)
+#define WATCHDOG_MAGIC       (0x6ab73121u) /* as the SDK's watchdog_enable() */
 
 /* Chosen by the init task and then used by the IMU task, or shared by a
    task and the sampler ISR: volatile (Rule 1.8.c). */
 static i2c_hw_t * volatile gp_i2c       = i2c0_hw;
 static volatile bool     gb_i2c_restart = false;
 static volatile uint32_t g_alarm_target = 0u;
+
+/* Watchdog reload value; written and used only by the vehicle task. */
+static uint32_t g_watchdog_load = 0u;
 
 static void gpio_route(uint32_t pin, uint32_t func);
 static bool i2c_wait_bits(volatile uint32_t const * p_reg, uint32_t mask);
@@ -554,6 +565,71 @@ hal_memory_barrier (void)
        (Rule 1.1.c).  DMB orders all earlier memory accesses before later
        ones; the "memory" clobber also stops the compiler reordering. */
     __asm__ volatile("dmb" ::: "memory");
+}
+
+/*!
+ * @brief Start the hardware watchdog, as the SDK's watchdog_enable() does:
+ *        unless hal_watchdog_feed() is called within timeout_ms, every block
+ *        except the oscillators is reset, which also turns the motor
+ *        outputs off.  The counter runs on the same 1 us tick as the TIMER
+ *        and pauses while a debugger halts a core.
+ *
+ * @param[in] timeout_ms Timeout in ms, limited to WATCHDOG_MAX_MS (about
+ *                       8.3 s); 0 leaves the watchdog off.
+ */
+void
+hal_watchdog_start (uint32_t timeout_ms)
+{
+    uint32_t load = WATCHDOG_LOAD_BITS;
+
+    if (timeout_ms > 0u)
+    {
+        /* RP2040-E1: the counter decrements twice per tick, so the load is
+           doubled; the limit check keeps the product inside 24 bits. */
+        if (timeout_ms < WATCHDOG_MAX_MS)
+        {
+            load = timeout_ms * WATCHDOG_LOAD_PER_MS;
+        }
+
+        hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+        hw_set_bits(&psm_hw->wdsel,
+                    PSM_WDSEL_BITS
+                        & ~(PSM_WDSEL_ROSC_BITS | PSM_WDSEL_XOSC_BITS));
+        hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_PAUSE_DBG0_BITS
+                                            | WATCHDOG_CTRL_PAUSE_DBG1_BITS
+                                            | WATCHDOG_CTRL_PAUSE_JTAG_BITS);
+        watchdog_hw->scratch[WATCHDOG_SCRATCH] = WATCHDOG_MAGIC;
+        g_watchdog_load                        = load;
+        watchdog_hw->load                      = load;
+        hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    }
+}
+
+/*!
+ * @brief Reload the watchdog counter; nothing happens before
+ *        hal_watchdog_start().
+ */
+void
+hal_watchdog_feed (void)
+{
+    if (0u != g_watchdog_load)
+    {
+        watchdog_hw->load = g_watchdog_load;
+    }
+}
+
+/*!
+ * @brief Whether the last reset was a timeout of hal_watchdog_start()'s
+ *        watchdog (the SDK's watchdog_enable_caused_reboot() test; a
+ *        power-on clears the scratch marker).
+ *
+ * @return true after a watchdog reset.
+ */
+bool
+hal_watchdog_caused_reset (void)
+{
+    return ((0u != watchdog_hw->reason)
+            && (WATCHDOG_MAGIC == watchdog_hw->scratch[WATCHDOG_SCRATCH]));
 }
 
 /*!

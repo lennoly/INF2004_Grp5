@@ -172,7 +172,7 @@ vehicle_init (void)
     g_st.state       = VS_IDLE;
     g_st.cruise_mm_s = car_math_round(SPEED_CRUISE_MM_S);
     g_st.front_mm    = ULTRASONIC_NO_ECHO;
-    g_st.p_reason    = "boot";
+    g_st.p_reason    = hal_watchdog_caused_reset() ? "watchdog reset" : "boot";
 
     cmbf.mbfatr = TA_TFIFO;
     cmbf.bufsz  = MBF_MSGS * (sizeof(vehicle_msg_t) + sizeof(UW));
@@ -474,11 +474,14 @@ poll_messages (void)
 }
 
 /*!
- * @brief Buttons and queued commands.
+ * @brief Buttons and queued commands; also feeds the watchdog, because every
+ *        wait in this task calls this at least once a second (every LOOP_MS,
+ *        or between the servo steps of a scan).
  */
 static void
 poll_inputs (void)
 {
+    hal_watchdog_feed();
     poll_buttons();
     poll_messages();
 }
@@ -1234,6 +1237,10 @@ vehicle_task (INT stacd, void * p_exinf)
 
     /* The line follower is private to this task, so it is set up here. */
     line_follow_init(&g_lf);
+
+    /* From now on a stalled vehicle loop (a hung or starved task) resets
+       the chip, which stops the motors. */
+    hal_watchdog_start(WATCHDOG_TIMEOUT_MS);
 
     for (;;)
     {

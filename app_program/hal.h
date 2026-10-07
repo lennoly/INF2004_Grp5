@@ -63,6 +63,11 @@ void hal_alarm_ack_rearm(uint32_t period_us);
 /* Memory barrier for data shared between tasks and cores. */
 void hal_memory_barrier(void);
 
+/* Hardware watchdog: resets the chip unless fed in time. */
+void hal_watchdog_start(uint32_t timeout_ms);
+void hal_watchdog_feed(void);
+bool hal_watchdog_caused_reset(void);
+
 #endif /* HAL_H */
 
 /*** end of file ***/
