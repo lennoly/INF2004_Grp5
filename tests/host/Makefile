@@ -23,5 +23,5 @@ picocar_tests: $(SRCS) $(wildcard $(APP)/*.h $(APP)/*/*.h) test_main.h hal_stub.
 	$(CC) $(CFLAGS) -o $@ $(SRCS) -lm
 
 clean:
-	rm -f picocar_tests
+	rm -f picocar_tests picocar_tests.exe
 .PHONY: run clean

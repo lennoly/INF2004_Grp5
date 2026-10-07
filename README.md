@@ -36,6 +36,7 @@ convention: one folder per student under `app_program/`, `TEAM.md`,
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
 | `tools/barr_*`, `app_program/.clang-format` | BARR-C:2018 formatter and checker (see below) |
 | `docs/ABBREVIATIONS.md`, `docs/templates/` | BARR-C abbreviations table and module templates |
+| `docs/BUDDY2_DATA_SHEET.md` | bench sheet for the PID tuning and motion accuracy measurements |
 
 ## First-time setup
 You need git, GNU make, a C compiler (to build the `elf2uf2` tool) and the
