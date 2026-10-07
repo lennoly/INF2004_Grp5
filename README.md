@@ -61,6 +61,7 @@ cp wifi_credentials.example.h wifi_credentials.h   # SSID/pass, SET=1
 cp mqtt_config.example.h mqtt_config.h             # broker IP, SET=1
 cd ../..
 gmake -C template/build_make -j8 CONSOLE=usb_cdc WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
+# telemetry test over WiFi: same command plus APP_MODE=TEST_TELEMETRY
 python tools/dashboard/picocar_dashboard.py --mqtt <broker>
 # or: mosquitto_pub -h <broker> -t picocar/car1/cmd -m start
 ```

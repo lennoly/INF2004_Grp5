@@ -1,0 +1,12 @@
+# Fetched by setup.sh; your WiFi and broker settings live in template/config/
+/template/
+/sdk/
+
+# Build outputs and caches
+tests/host/picocar_tests
+__pycache__/
+*.pyc
+.DS_Store
+
+# Dashboard session logs
+logs/
