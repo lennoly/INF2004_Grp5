@@ -448,7 +448,7 @@ All application code (`app_program/`, 52 files) and the host tests (`tests/host/
 | Manual review | comment quality, `volatile` on every variable shared with an ISR or another task, `const` parameters, `isfinite()` after floating-point calculations, header contents, single-owner kernel objects | 1.8, 2.2, 4.2, 5.4.b.v |
 | Project documents | abbreviations table `docs/ABBREVIATIONS.md`; file templates `docs/templates/module.c` and `module.h` | 1.5.b, 4.4.a |
 
-To reproduce, from the repository root: `sh tools/barr_format.sh --check` (clang-format plus `barr_layout.py`; reports any file whose layout would change), `python3 tools/barr_check.py app_program/*.[ch] tests/host/*.[ch]` (skips the template-owned files) and `make -C tests/host`. `sh tools/barr_format.sh` reformats in place.
+To reproduce, from the repository root: `sh tools/barr_format.sh --check` (clang-format plus `barr_layout.py`; reports any file whose layout would change), `python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]` (skips the template-owned files) and `make -C tests/host`. `sh tools/barr_format.sh` reformats in place.
 
 **Result.** `tools/barr_check.py` on the earlier code and on the delivered code:
 
