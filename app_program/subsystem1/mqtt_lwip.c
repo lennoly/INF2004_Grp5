@@ -38,6 +38,7 @@
 #include "mqtt_config.h"
 #include "mqtt_bridge.h"
 #include "hal.h"
+#include "timing.h"
 
 #define TOPIC_ROOT          "picocar/" MQTT_CAR_ID "/"
 #define TOPIC_CMD           TOPIC_ROOT "cmd"
@@ -93,8 +94,9 @@ static void on_data(void * p_arg, u8_t const * p_data, u16_t len, u8_t flags);
 void
 cyw43_utk_app_poll (struct netif * p_netif)
 {
-    uint32_t now   = sys_now();
-    bool     b_net = (netif_is_up(p_netif)) && (netif_is_link_up(p_netif))
+    uint32_t start_us = timing_start();
+    uint32_t now      = sys_now();
+    bool     b_net    = (netif_is_up(p_netif)) && (netif_is_link_up(p_netif))
                  && (!ip4_addr_isany_val(*netif_ip4_addr(p_netif)));
 
     watch_link(p_netif, now);
@@ -122,6 +124,8 @@ cyw43_utk_app_poll (struct netif * p_netif)
     {
         /* An attempt is running, or the car is backing off. */
     }
+
+    timing_stop(TIMING_NET, start_us);
 }
 
 /*!
@@ -136,7 +140,8 @@ watch_link (struct netif * p_netif, uint32_t now)
     /* Before the first link the template's own join runs (one scan, one
        try): it is left to finish before re-joining, in case the hotspot
        was not on at power-up. */
-    uint32_t wait_ms = gb_ever_linked ? REJOIN_AFTER_MS : BOOT_JOIN_MS;
+    uint32_t wait_ms  = gb_ever_linked ? REJOIN_AFTER_MS : BOOT_JOIN_MS;
+    uint32_t start_us = 0u;
 
     if (1u == g_rejoin_tries)
     {
@@ -171,7 +176,12 @@ watch_link (struct netif * p_netif, uint32_t now)
         g_down_ms = now;
         g_rejoin_tries++;
         mqtt_bridge_count_rejoin();
+
+        /* CSC05: this runs in the cyw43 task, above motion, so its time
+           is measured (TIMING_REJOIN) during an access-point loss. */
+        start_us = timing_start();
         (void) hal_wifi_rejoin();
+        timing_stop(TIMING_REJOIN, start_us);
     }
     else
     {

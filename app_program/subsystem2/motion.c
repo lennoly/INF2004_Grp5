@@ -12,6 +12,7 @@
 #include "encoder.h"
 #include "motor.h"
 #include "pid.h"
+#include "timing.h"
 #include "motion.h"
 
 #define TASK_PRIORITY    (5)
@@ -788,6 +789,8 @@ control_cyclic_isr (void * p_exinf)
 static void
 motion_task (INT stacd, void * p_exinf)
 {
+    uint32_t start_us = 0u;
+
     (void) stacd;
     (void) p_exinf;
 
@@ -801,7 +804,10 @@ motion_task (INT stacd, void * p_exinf)
     for (;;)
     {
         (void) tk_slp_tsk(TMO_FEVR);
+        start_us = timing_start();
+        timing_period(start_us); /* control-loop jitter (A2, NFR1) */
         control_step();
+        timing_stop(TIMING_MOTION, start_us);
     }
 }
 

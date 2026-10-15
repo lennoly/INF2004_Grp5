@@ -12,6 +12,7 @@
 #include <tm/tmonitor.h>
 #include "car_config.h"
 #include "ir_sensor.h"
+#include "timing.h"
 #include "barcode.h"
 
 #define TASK_PRIORITY      (7)
@@ -112,13 +113,16 @@ barcode_get_stats (barcode_stats_t * p_out)
 static void
 barcode_task (INT stacd, void * p_exinf)
 {
-    ir_sensor_element_t element = {false, 0u};
+    ir_sensor_element_t element  = {false, 0u};
+    uint32_t            start_us = 0u;
 
     (void) stacd;
     (void) p_exinf;
 
     for (;;)
     {
+        start_us = timing_start();
+
         while (ir_sensor_barcode_pop(&element))
         {
             add_element(&element);
@@ -131,6 +135,7 @@ barcode_task (INT stacd, void * p_exinf)
             finish_frame();
         }
 
+        timing_stop(TIMING_BARCODE, start_us);
         (void) tk_dly_tsk(POLL_MS);
     }
 }

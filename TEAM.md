@@ -28,7 +28,7 @@ Shared files (`app_program/*.c|h` outside the subsystem folders, this file,
 | 3 | `ir_sensor`, `line_follow`, `barcode`, `barcode_decode`; tests `subsystem3_test` (TEST_IR, TEST_BARCODE) |
 | 4 | `imu`, `terrain`; tests `subsystem4_test` (TEST_IMU) |
 | 5 | `ultrasonic`, `servo`, `obstacle`, `avoidance`; tests `subsystem5_test` (TEST_ULTRASONIC) |
-| shared | `app_main`, `app_tests` (test runner: START button, per-mode set-up), `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`; `demo_tasks`, `usb_console_compat.h` (from the template) |
+| shared | `app_main`, `app_tests` (test runner: START button, per-mode set-up), `timing` (task times, jitter, CPU load), `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`; `demo_tasks`, `usb_console_compat.h` (from the template) |
 
 All pins and tunables are in `app_program/car_config.h`.
 
@@ -98,7 +98,7 @@ Priorities follow deadlines (Week 6 design, `docs/REPORT.md` section 2.1).
 | 4 | `imu` – 8 – 20 ms |
 | 5 | `sonar` – 9 – ~70 ms |
 | 1 | `telemetry` – 10 – 20 ms |
-| shared | `blink` (template) – 10; `app_tests` – 11 (test builds only) |
+| shared | `blink` (template) – 10; `app_tests` – 11 (test builds only); `timing` idle probe – 32 (lowest; measures CPU load) |
 
 Single-core build (`SMP=0`): status snapshots are copied with interrupts
 disabled, which is atomic only on one core (Week 6 assumption A13).
@@ -127,7 +127,7 @@ Limits are in `template/config/config.h`; counted from the code.
 
 | Object | Limit | S1 | S2 | S3 | S4 | S5 | shared |
 |---|---|---|---|---|---|---|---|
-| Task | 32 | 1 | 1 | 1 | 1 | 1 | 2 (+1 in test builds) |
+| Task | 32 | 1 | 1 | 1 | 1 | 1 | 3 (+1 in test builds) |
 | Semaphore | 16 | | | | | 1 | |
 | Event flag | 16 | | 1 | | | 1 | |
 | Message buffer | 4 | | | 1 | | | 1 |

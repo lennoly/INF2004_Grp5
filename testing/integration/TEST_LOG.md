@@ -12,9 +12,10 @@ Define a test here before running it. Test IDs never change.
 |---|---|---|---|---|---|
 | INT-01 | barcode command executed at the next junction | IF-01, IF-03 | manual | MISSION: drive over each barcode before a junction | car turns the decoded way |
 | INT-02 | MQTT STOP brakes the car while driving | IF-02, IF-05, NFR3 | manual | MISSION + WiFi: send `stop` from the dashboard | motors braked within 100 ms of arrival |
-| INT-03 | WiFi does not disturb the control loop | IF-05, A2 | board | TEST_MOTION with 5 Hz telemetry streaming, WiFi on and off; log control-cycle jitter | jitter ≤ 2 ms (else lower the cyw43 priority) |
+| INT-03 | WiFi does not disturb the control loop | IF-05, A2 | board | TEST_MOTION with 5 Hz telemetry streaming, WiFi on and off; send `timing` after each | `jit_max_us` ≤ 2000 (else lower the cyw43 priority) |
 | INT-04 | sonar shared between monitor and scans | IF-04 | manual | MISSION: obstacle ahead; watch scan output | no overlapping pings, scan completes |
 | INT-05 | telemetry carries every subsystem's status | IF-06, IF-07 | manual | MISSION + dashboard: drive over a hump, a barcode and an obstacle | plots and events show all of them |
+| INT-06 | WCET and total CPU load (CSC05) | A2, A14, NFR1 | board | MISSION + WiFi telemetry at 5 Hz, one full lap; then send `timing` | record max/avg of motion, vehicle, barcode, imu, hump, ir_isr, net; `load_pct`; `jit_max_us` ≤ 2000 |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`
 build on the car; **link** = `wifi_test.py`; **manual** = a person measures.
