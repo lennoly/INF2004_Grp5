@@ -44,6 +44,11 @@ typedef struct
     uint32_t           dropped; /* TX ring full or link down */
     uint32_t           commands;
     uint32_t           reconnects;
+    uint32_t           rejoins;  /* WiFi access-point re-join attempts */
+    uint32_t           attempts; /* broker connection attempts        */
+    uint32_t           address;  /* own IPv4 address, network order  */
+    char const *       p_why;    /* how the last attempt ended       */
+    char const *       p_wifi;   /* WiFi connection state            */
 } mqtt_bridge_stats_t;
 
 /* Application side. */
@@ -58,6 +63,11 @@ void mqtt_bridge_drop_tx(void);
 void mqtt_bridge_put_command(uint8_t const * p_data, uint32_t len);
 void mqtt_bridge_set_link(mqtt_bridge_link_t link);
 void mqtt_bridge_count_reconnect(void);
+void mqtt_bridge_count_rejoin(void);
+void mqtt_bridge_count_attempt(void);
+void mqtt_bridge_set_address(uint32_t address);
+void mqtt_bridge_set_why(char const * p_why);
+void mqtt_bridge_set_wifi(char const * p_wifi);
 
 #endif /* MQTT_BRIDGE_H */
 
