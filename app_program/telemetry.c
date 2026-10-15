@@ -478,18 +478,19 @@ send_heartbeat (void)
         gp_out,
         (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
                      "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
-                     "\"rejoin\":%u,\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
+                     "\"rejoin\":%u,\"wifi\":\"%s\","
+                     "\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
                      "\"tries\":%u,\"why\":\"%s\",\"imu\":%d,"
                      "\"i2cerr\":%u}",
         as_uint(now.lo / MS_PER_S), as_uint(g_hb_seq),
         vehicle_state_name(veh.state), link_name(link_stats.link),
         as_uint(link_stats.published), as_uint(link_stats.dropped),
         as_uint(link_stats.commands), as_uint(link_stats.reconnects),
-        as_uint(link_stats.rejoins), ip_byte(link_stats.address, 0u),
-        ip_byte(link_stats.address, 1u), ip_byte(link_stats.address, 2u),
-        ip_byte(link_stats.address, 3u), BROKER_TEXT,
-        as_uint(link_stats.attempts), link_stats.p_why, imu.b_ok ? 1 : 0,
-        as_uint(imu.i2c_errors));
+        as_uint(link_stats.rejoins), link_stats.p_wifi,
+        ip_byte(link_stats.address, 0u), ip_byte(link_stats.address, 1u),
+        ip_byte(link_stats.address, 2u), ip_byte(link_stats.address, 3u),
+        BROKER_TEXT, as_uint(link_stats.attempts), link_stats.p_why,
+        imu.b_ok ? 1 : 0, as_uint(imu.i2c_errors));
     emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 

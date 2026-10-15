@@ -99,6 +99,8 @@ cyw43_utk_app_poll (struct netif * p_netif)
 
     watch_link(p_netif, now);
 
+    mqtt_bridge_set_wifi(hal_wifi_state());
+
     if (b_net)
     {
         mqtt_bridge_set_address(netif_ip4_addr(p_netif)->addr);
