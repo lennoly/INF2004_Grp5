@@ -9,14 +9,18 @@
 # cannot express.  Template-owned files and the hand-aligned car_config.h
 # are left alone.  Run from the repository root.
 set -e
-FILES=$(ls app_program/*.c app_program/*.h tests/host/*.c tests/host/*.h |
+FILES=$(ls app_program/*.c app_program/*.h app_program/*/*.c app_program/*/*.h \
+          tests/host/*.c tests/host/*.h |
         grep -v -e demo_tasks -e usb_console_compat -e car_config.h)
 if [ "$1" = "--check" ]; then
     TMP=$(mktemp -d)
+    for d in app_program tests/host; do        # subfolders inherit these
+        mkdir -p "$TMP/$d"
+        cp "$d/.clang-format" "$TMP/$d/"
+    done
     for f in $FILES; do
         mkdir -p "$TMP/$(dirname "$f")"
         cp "$f" "$TMP/$f"
-        cp "$(dirname "$f")/.clang-format" "$TMP/$(dirname "$f")/"
     done
     (cd "$TMP" && clang-format -i $FILES && \
      python3 "$OLDPWD/tools/barr_layout.py" $FILES > /dev/null)

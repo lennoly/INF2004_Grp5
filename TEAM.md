@@ -1,0 +1,136 @@
+# Team and subsystems
+
+Laid out like the course's
+[INF2004_ProjectTemplate](https://github.com/sirfonzie/INF2004_ProjectTemplate)
+`TEAM.md`, filled in with the PicoCar as built. It is the single place that
+says **who owns what**, so five people can work in one firmware image
+without clashing over pins, priorities or kernel objects. Keep it up to date.
+
+Rule: **only the owner edits a subsystem's folder.** To change another
+subsystem, ask its owner or open a pull request for them to review.
+Shared files (`app_program/*.c|h` outside the subsystem folders, this file,
+`docs/template_changes.patch`) change only by agreement of the team.
+
+## 1. Members and subsystems
+
+| # | Subsystem (what it does) | Student ID | GitHub username | Code | Tests |
+|---|---|---|---|---|---|
+| 1 | WiFi, MQTT, telemetry, commands (Network Gatekeeper) | | | `app_program/subsystem1/` | `testing/subsystem1/` |
+| 2 | Motors, encoders, wheel PID, moves (Real-Time Taskmaster) | | | `app_program/subsystem2/` | `testing/subsystem2/` |
+| 3 | IR sensors, line following, barcode (Track Purist) | | | `app_program/subsystem3/` | `testing/subsystem3/` |
+| 4 | IMU, terrain, humps (Physics Watchdog) | | | `app_program/subsystem4/` | `testing/subsystem4/` |
+| 5 | Ultrasonic, servo, obstacle profiling and bypass (Spatial Optimizer) | | | `app_program/subsystem5/` | `testing/subsystem5/` |
+
+| Subsystem | Files |
+|---|---|
+| 1 | `mqtt_bridge`, `mqtt_lwip`, `telemetry`, `command`, `console_in` |
+| 2 | `motor`, `encoder`, `pid`, `motion` |
+| 3 | `ir_sensor`, `line_follow`, `barcode`, `barcode_decode` |
+| 4 | `imu`, `terrain` |
+| 5 | `ultrasonic`, `servo`, `obstacle`, `avoidance` |
+| shared | `app_main`, `app_tests`, `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`; `demo_tasks`, `usb_console_compat.h` (from the template) |
+
+All pins and tunables are in `app_program/car_config.h`.
+
+## 2. Pins
+
+One owner per pin. Claim a pin here **before** you wire or code it.
+
+| Pin | Owner | Used for |
+|---|---|---|
+| GP23, GP24, GP25, GP29 | *reserved* | Pico W radio (WL_ON, data, CS, clock) |
+| GP0 / GP1 | shared (console) | UART0 TX / RX, template console |
+| GP2 | S2 | left wheel encoder |
+| GP3 | S2 | right wheel encoder |
+| GP4 / GP5 | S4 | I2C0 SDA / SCL, IMU |
+| GP6 | S5 | ultrasonic TRIG |
+| GP7 | S5 | ultrasonic ECHO |
+| GP8 / GP9 | S2 | left motor M1A / M1B (PWM4 A/B) |
+| GP10 / GP11 | S2 | right motor M2A / M2B (PWM5 A/B) |
+| GP12 | S5 | servo (PWM6 A) |
+| GP16 | shared (template blink task) | liveness LED |
+| GP20 | shared (vehicle) | START button |
+| GP21 | shared (vehicle) | STOP button |
+| GP26 | S3 | IR left (ADC0) |
+| GP27 | S3 | IR right (ADC1) |
+| GP28 | S3 | IR barcode (ADC2) |
+| GP13–GP15, GP17–GP19, GP22 | | free |
+
+Wiring diagram: `docs/img/wiring.png`, details in `docs/WIRING.md`.
+
+## 3. Peripherals
+
+**Each peripheral is driven by exactly one owning task (or ISR).** Every
+other task asks the owner through a kernel object or a status snapshot.
+
+| Peripheral | Owner subsystem | Owning task / handler | Pins |
+|---|---|---|---|
+| PWM4, PWM5 (motors) | S2 | `motion` | GP8–GP11 |
+| PWM6 (servo) | S5 | `obstacle.c` calls from the `vehicle` task | GP12 |
+| ADC (IR) | S3 | `ir_sample_isr` (TIMER alarm 3, 1 kHz) | GP26–GP28 |
+| TIMER alarm 3 | S3 | `ir_sample_isr` | — |
+| I2C0 (IMU) | S4 | `imu` | GP4, GP5 |
+| GPIO IRQ (encoders, echo) | S2 / S5 | `encoder_edge_isr`, `echo_edge_isr` | GP2, GP3, GP7 |
+| HC-SR04 | S5 | `sonar` and `vehicle` scans, under a semaphore | GP6, GP7 |
+| UART0 RX (console commands) | S1 | `telemetry` (polls the FIFO) | GP1 |
+| WiFi radio, lwIP, MQTT | *kernel* + S1 | template `cyw43` task; S1's `mqtt_lwip.c` runs inside it through the `cyw43_utk_app_poll()` hook | GP23–25, GP29 |
+
+### WiFi and MQTT
+
+Only the template's `cyw43` task calls `cyw43_...` or lwIP. Subsystem 1's MQTT
+client (`mqtt_lwip.c`) runs **inside** that task through the weak hook
+`cyw43_utk_app_poll()`. Every other task exchanges messages with it through
+the non-blocking rings in `mqtt_bridge.c`; while the link is down, messages
+are dropped and counted (heartbeat `drop`), so the network never delays
+driving.
+
+## 4. Task priorities
+
+1 is the highest. 3 and 4 are the template's USB and WiFi service tasks.
+Priorities follow deadlines (Week 6 design, `docs/REPORT.md` section 2.1).
+
+| Subsystem | Tasks (name – priority – rate) |
+|---|---|
+| kernel | `usb` – 3; `cyw43` – 4 – 2 ms poll (also runs S1's MQTT client) |
+| 2 | `motion` – 5 – 20 ms, woken by a cyclic handler |
+| shared | `vehicle` – 6 – 20 ms (mission state machine) |
+| 3 | `barcode` – 7 – 10 ms |
+| 4 | `imu` – 8 – 20 ms |
+| 5 | `sonar` – 9 – ~70 ms |
+| 1 | `telemetry` – 10 – 20 ms |
+| shared | `blink` (template) – 10; `app_tests` – 11 (test builds only) |
+
+Single-core build (`SMP=0`): status snapshots are copied with interrupts
+disabled, which is atomic only on one core (Week 6 assumption A13).
+
+## 5. Interfaces between subsystems
+
+The **provider** creates the object and publishes its API in its header;
+the **user** only sends to it or reads it.
+
+| ID | From → To | Mechanism | API / object | Data / meaning | Agreed by |
+|---|---|---|---|---|---|
+| IF-01 | S3 → vehicle | message buffer (owned by S3) | `barcode.h` | turn command LEFT / RIGHT / STRAIGHT / U-TURN | Week 6 design |
+| IF-02 | S1 → vehicle | message buffer (owned by vehicle) | `vehicle.h` | start / stop / calibrate / speed commands | Week 6 design |
+| IF-03 | vehicle → S2 | request copy + "done" event flag (owned by S2) | `motion.h` (`motion_wait`) | move, velocity, stop; completion OK / FAIL | Week 6 design |
+| IF-04 | S5 ↔ vehicle | semaphore (owned by S5) | `ultrasonic.h` | one user of the sensor at a time, ≥ 60 ms between pings | Week 6 design |
+| IF-05 | S1 ↔ cyw43 task | two SPSC rings with memory barriers (owned by S1) | `mqtt_bridge.h` | JSON out (≤ 512 B), command lines in, link statistics | Week 6 design |
+| IF-06 | S2, S3, S4, S5, vehicle → S1 | status snapshots (copied with interrupts off) | each `*_get_status()` | telemetry fields, events, heartbeat | Week 6 design |
+| IF-07 | S2 → S4 | status snapshot | `motion_get_status()` | distance travelled, for hump height | Week 6 design |
+
+Each interface is tested by at least one integration test
+(`testing/integration/TEST_LOG.md`).
+
+## 6. Kernel object budget
+
+Limits are in `template/config/config.h`; counted from the code.
+
+| Object | Limit | S1 | S2 | S3 | S4 | S5 | shared |
+|---|---|---|---|---|---|---|---|
+| Task | 32 | 1 | 1 | 1 | 1 | 1 | 2 (+1 in test builds) |
+| Semaphore | 16 | | | | | 1 | |
+| Event flag | 16 | | 1 | | | 1 | |
+| Message buffer | 4 | | | 1 | | | 1 |
+| Cyclic handler | 4 | | 1 | | | | |
+
+(The template's USB and WiFi service tasks use a few more.)

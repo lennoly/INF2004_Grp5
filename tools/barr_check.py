@@ -2,8 +2,8 @@
 """
 Heuristic BARR-C:2018 checker for the PicoCar application code.
 
-    python3 tools/barr_check.py app_program/*.[ch]          summary
-    python3 tools/barr_check.py -v app_program/*.[ch]       every finding
+    python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch]     summary
+    python3 tools/barr_check.py -v app_program/*.[ch] app_program/*/*.[ch]  every finding
 
 It tokenises each file (comments, strings, preprocessor lines and code are
 kept apart) and checks the rules that can be decided mechanically.  It is a

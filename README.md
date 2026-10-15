@@ -8,19 +8,26 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 `docs/img/wiring.png`.
 
 ## Layout
+Follows the course's
+[INF2004_ProjectTemplate](https://github.com/sirfonzie/INF2004_ProjectTemplate)
+convention: one folder per student under `app_program/`, `TEAM.md`,
+`testing/` and `videos/`.
+
 | Path | Content |
 |---|---|
+| `TEAM.md` | **who owns what**: subsystems, pins, peripherals, task priorities, interfaces, kernel objects |
 | `app_program/car_config.h` | **all pins and tunables** (edit [CALIBRATE] values) |
-| `app_program/motor, encoder, pid, motion` | Buddy 2 motion control |
-| `app_program/ir_sensor, line_follow, barcode*` | Buddy 3 line + barcode |
-| `app_program/imu, terrain` | Buddy 4 IMU / humps |
-| `app_program/servo, ultrasonic, obstacle, avoidance` | Buddy 5 scanning / avoidance |
-| `app_program/mqtt_*, telemetry` | Buddy 1 WiFi / MQTT / telemetry |
-| `app_program/vehicle` | integration state machine |
-| `app_program/hal*` | Pico C SDK HAL + µT-Kernel interrupt binding |
-| `app_program/app_main, app_tests` | entry point + per-buddy test programs |
+| `app_program/subsystem1/` | Buddy 1: WiFi / MQTT (`mqtt_*`), telemetry, commands (`command`, `console_in`) |
+| `app_program/subsystem2/` | Buddy 2: `motor`, `encoder`, `pid`, `motion` |
+| `app_program/subsystem3/` | Buddy 3: `ir_sensor`, `line_follow`, `barcode*` |
+| `app_program/subsystem4/` | Buddy 4: `imu`, `terrain` |
+| `app_program/subsystem5/` | Buddy 5: `servo`, `ultrasonic`, `obstacle`, `avoidance` |
+| `app_program/vehicle` | integration state machine (shared) |
+| `app_program/hal*` | Pico C SDK HAL + µT-Kernel interrupt binding (shared) |
+| `app_program/app_main, app_tests` | entry point + per-buddy test programs (shared) |
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
-| `app_program/command, console_in` | text commands over USB/UART/MQTT (live tuning) |
+| `testing/` | test cases and results per subsystem, integration and system (`testing/README.md`) |
+| `videos/` | index of unlisted YouTube videos of tests and demos |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
 | `tests/host` | PC unit tests (`make -C tests/host`) — 89/89 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
@@ -69,6 +76,14 @@ the course template (at the version our patch was made against) into
 and links `template/app_program` to our `app_program/`. Both folders are
 git-ignored, so edit code in `app_program/` only. Set `PICO_SDK_PATH` first to
 use an SDK you already have.
+
+**Already have a `template/` from before the subsystem folders?** Its build
+rule only looks in `app_program/` itself, so the build stops with
+`motion.h: No such file or directory`. Refresh that one file once:
+```
+git -C template checkout -- build_make/mtkernel_3/app_program/subdir.mk
+git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../docs/template_changes.patch
+```
 
 ## Build and flash
 1. `gmake -C template/build_make -j8 APP_MODE=TEST_MOTOR CONSOLE=usb_cdc`
@@ -146,7 +161,7 @@ how it is checked and the few deviations the kernel and SDK force.
 Before committing:
 ```
 sh tools/barr_format.sh                                   # layout (clang-format 18 + barr_layout.py)
-python3 tools/barr_check.py app_program/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
+python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
 make -C tests/host                                        # unit tests, -Werror
 ```
 New modules start from `docs/templates/module.c` and `module.h`.
