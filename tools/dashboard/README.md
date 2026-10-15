@@ -72,6 +72,25 @@ Each run creates `logs/<date_time>/`:
 | `console.log` | raw serial console (includes the TEST_xxx CSV output) |
 | `dashboard_*.png` | saved with **Save PNG** |
 
+## WiFi link test (bare Pico W is enough)
+Flash `APP_MODE=TEST_TELEMETRY` with the WiFi flags (main README), start
+mosquitto, then:
+```
+python wifi_test.py --mqtt <broker-ip> [--car car1] [--minutes 10]
+```
+
+| Check | Target |
+|---|---|
+| telemetry rate while connected | ≥ 4.5 Hz (5 Hz) |
+| heartbeat | 1 Hz, none missed while connected |
+| command round trip (`#<id> gains`) | median < 100 ms, no reply lost while connected |
+| messages dropped by the board | 0 while connected |
+| outages (stop mosquitto ~60 s, then the hotspot ~30 s) | every one recovered; recovery time listed |
+
+Results: `logs/<date_time>/wifi_summary.txt`, `wifi_pings.csv`,
+`wifi_outages.csv`. `python wifi_test.py --self-test` checks the script
+itself with a simulated board; it also runs against `sim_car.py`.
+
 ## Try it without the car
 ```
 mosquitto -v                                   # terminal 1

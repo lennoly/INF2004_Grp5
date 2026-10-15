@@ -17,4 +17,27 @@ hal_memory_barrier (void)
     __asm__ volatile("" ::: "memory");
 }
 
+/*!
+ * @brief No WiFi driver in the host tests: the re-join request does
+ *        nothing (the test counts attempts with the bridge's counter).
+ *
+ * @return false.
+ */
+bool
+hal_wifi_rejoin (void)
+{
+    return (false);
+}
+
+/*!
+ * @brief WiFi state text for the host tests.
+ *
+ * @return A fixed string literal, checked by the tests.
+ */
+char const *
+hal_wifi_state (void)
+{
+    return ("host");
+}
+
 /*** end of file ***/

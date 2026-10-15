@@ -26,6 +26,10 @@
 #include "hardware/structs/i2c.h"
 #include "hardware/structs/timer.h"
 #include "hardware/structs/uart.h"
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+#include "cyw43.h"
+#include "wifi_credentials.h"
+#endif
 #include "hal.h"
 #include "hal_irq.h"
 
@@ -60,6 +64,11 @@ typedef char hal_irq_timer_matches_sdk_t
 static i2c_hw_t * volatile gp_i2c       = i2c0_hw;
 static volatile bool     gb_i2c_restart = false;
 static volatile uint32_t g_alarm_target = 0u;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+static uint8_t const g_ssid[]     = UTK_WIFI_SSID;
+static uint8_t const g_password[] = UTK_WIFI_PASSWORD;
+#endif
 
 static void gpio_route(uint32_t pin, uint32_t func);
 static bool i2c_wait_bits(volatile uint32_t const * p_reg, uint32_t mask);
@@ -538,6 +547,83 @@ hal_alarm_ack_rearm (uint32_t period_us)
     }
 
     timer_hw->alarm[SAMPLER_ALARM] = g_alarm_target;
+}
+
+/*!
+ * @brief Start a non-blocking re-join of the access point with the
+ *        build's credentials (config/wifi_credentials.h).  Call only from
+ *        the CYW43 service task (the MQTT poll hook), which holds the
+ *        driver lock, as the template's own join does.  It lives here
+ *        because the CYW43 driver headers need C11 (see the file header).
+ *
+ * @return true if the join request was accepted; false without WiFi.
+ */
+bool
+hal_wifi_rejoin (void)
+{
+    bool b_ok = false;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+    b_ok = (0
+            == cyw43_wifi_join(&cyw43_state, sizeof(g_ssid) - 1u, g_ssid,
+                               sizeof(g_password) - 1u, g_password,
+                               UTK_WIFI_AUTH, NULL, CYW43_CHANNEL_NONE));
+#endif
+
+    return (b_ok);
+}
+
+/*!
+ * @brief The WiFi connection state in words (heartbeat "wifi").  Call only
+ *        from the CYW43 service task, like hal_wifi_rejoin().
+ *
+ * @return A string literal.
+ */
+char const *
+hal_wifi_state (void)
+{
+    char const * p_text = "-";
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+#if defined(TM_WIFI_NETIF) && TM_WIFI_NETIF
+    int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+#else
+    int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+#endif
+
+    switch (status)
+    {
+        case CYW43_LINK_UP:
+            p_text = "joined";
+        break;
+
+        case CYW43_LINK_NOIP:
+            p_text = "joined, waiting for an IP address";
+        break;
+
+        case CYW43_LINK_JOIN:
+            p_text = "joining";
+        break;
+
+        case CYW43_LINK_NONET:
+            p_text = "hotspot not found (2.4 GHz? name?)";
+        break;
+
+        case CYW43_LINK_BADAUTH:
+            p_text = "wrong WiFi password";
+        break;
+
+        case CYW43_LINK_FAIL:
+            p_text = "join failed";
+        break;
+
+        default:
+            p_text = "not joined";
+        break;
+    }
+#endif
+
+    return (p_text);
 }
 
 /*!

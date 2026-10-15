@@ -125,6 +125,11 @@ mqtt_bridge_get_stats (mqtt_bridge_stats_t * p_out)
     p_out->dropped    = g_stats.dropped;
     p_out->commands   = g_stats.commands;
     p_out->reconnects = g_stats.reconnects;
+    p_out->rejoins    = g_stats.rejoins;
+    p_out->attempts   = g_stats.attempts;
+    p_out->address    = g_stats.address;
+    p_out->p_why      = (NULL != g_stats.p_why) ? g_stats.p_why : "-";
+    p_out->p_wifi     = (NULL != g_stats.p_wifi) ? g_stats.p_wifi : "-";
 }
 
 /*!
@@ -227,6 +232,57 @@ void
 mqtt_bridge_count_reconnect (void)
 {
     g_stats.reconnects++;
+}
+
+/*!
+ * @brief Count one WiFi re-join attempt (network side).
+ */
+void
+mqtt_bridge_count_rejoin (void)
+{
+    g_stats.rejoins++;
+}
+
+/*!
+ * @brief Count one broker connection attempt (network side).
+ */
+void
+mqtt_bridge_count_attempt (void)
+{
+    g_stats.attempts++;
+}
+
+/*!
+ * @brief Record the board's own IPv4 address (network side).
+ *
+ * @param[in] address Address in network byte order, as lwIP stores it.
+ */
+void
+mqtt_bridge_set_address (uint32_t address)
+{
+    g_stats.address = address;
+}
+
+/*!
+ * @brief Record how the last connection attempt ended (network side).
+ *
+ * @param[in] p_why A string literal, e.g. "refused: not authorised".
+ */
+void
+mqtt_bridge_set_why (char const * p_why)
+{
+    g_stats.p_why = p_why;
+}
+
+/*!
+ * @brief Record the WiFi connection state (network side).
+ *
+ * @param[in] p_wifi A string literal, e.g. "hotspot not found".
+ */
+void
+mqtt_bridge_set_wifi (char const * p_wifi)
+{
+    g_stats.p_wifi = p_wifi;
 }
 
 /*** end of file ***/
