@@ -163,6 +163,27 @@ An iPhone hotspot hides itself from new devices after a while: keep
 Settings → Personal Hotspot open (with "Maximise Compatibility" on) while
 the board powers up.
 
+**Fixed IP** (if `wifi` stays at `joined, waiting for an IP address`): skip
+DHCP and give the board its own address on the hotspot.
+```
+cp template/config/network_config.example.h template/config/network_config.h
+```
+Set `UTK_NETWORK_CONFIG_SET` to `1` and the addresses for your network. For
+an iPhone hotspot: address `172.20.10.14`, netmask `255.255.255.240`,
+gateway and ping target `172.20.10.1` (the iPhone hands out addresses from
+`.2` upwards, so `.14` stays free). Then build with `WIFI_STATIC=1` instead
+of `WIFI_DHCP=1 WIFI_DNS=1`:
+```
+gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=usb_cdc WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_STATIC=1 WIFI_MQTT=1
+# flash template/build_make/mtk3pico_smp0_usb_cdc_wifi_static.uf2
+```
+A `template/` set up before this option existed needs its build rule
+updated once:
+```
+git -C template checkout -- build_make/mtkernel_3/app_program/subdir.mk
+git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../docs/template_changes.patch
+```
+
 The mosquitto window shows `New client connected from <board ip>` when the
 board gets through.
 

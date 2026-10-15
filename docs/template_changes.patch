@@ -11,7 +11,7 @@ diff --git a/build_make/mtkernel_3/app_program/subdir.mk b/build_make/mtkernel_3
 index a8fe4cd..d9af0e1 100644
 --- a/build_make/mtkernel_3/app_program/subdir.mk
 +++ b/build_make/mtkernel_3/app_program/subdir.mk
-@@ -1,16 +1,94 @@
+@@ -1,16 +1,95 @@
 -################################################################################
 -# micro T-Kernel 3.0 BSP  makefile
 -################################################################################
@@ -35,7 +35,8 @@ index a8fe4cd..d9af0e1 100644
 +#   * Pico C SDK header paths for app_program/hal.c (header-only use).
 +#   * APP_MODE=<MISSION|TEST_MOTOR|TEST_MOTION|TEST_IR|TEST_BARCODE|
 +#               TEST_IMU|TEST_ULTRASONIC|TEST_TELEMETRY>
-+#   * WIFI_MQTT=1 enables lwIP TCP + lwIP's MQTT client (needs WIFI_DNS=1).
++#   * WIFI_MQTT=1 enables lwIP TCP + lwIP's MQTT client (needs WIFI_DNS=1,
++#     or WIFI_STATIC=1 for a fixed address).
 +#   * Strict C99 and extra warnings for application files only (BARR-C).
 +#   * Stale-object guard: changing APP_MODE / WIFI_MQTT rebuilds what depends
 +#     on them (the template's own guard does not know these knobs).
@@ -46,8 +47,8 @@ index a8fe4cd..d9af0e1 100644
 +PICO_SDK_PATH ?= ../../sdk/pico-sdk
 +
 +ifeq ($(WIFI_MQTT),1)
-+ifneq ($(WIFI_DNS),1)
-+$(error WIFI_MQTT=1 requires WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1)
++ifeq ($(filter 1,$(WIFI_DNS) $(WIFI_STATIC)),)
++$(error WIFI_MQTT=1 requires WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 and either WIFI_DHCP=1 WIFI_DNS=1 or WIFI_STATIC=1)
 +endif
 +ifeq ($(wildcard ../config/mqtt_config.h),)
 +$(error WIFI_MQTT=1 needs config/mqtt_config.h; copy config/mqtt_config.example.h)
