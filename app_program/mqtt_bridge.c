@@ -129,6 +129,7 @@ mqtt_bridge_get_stats (mqtt_bridge_stats_t * p_out)
     p_out->attempts   = g_stats.attempts;
     p_out->address    = g_stats.address;
     p_out->p_why      = (NULL != g_stats.p_why) ? g_stats.p_why : "-";
+    p_out->p_wifi     = (NULL != g_stats.p_wifi) ? g_stats.p_wifi : "-";
 }
 
 /*!
@@ -271,6 +272,17 @@ void
 mqtt_bridge_set_why (char const * p_why)
 {
     g_stats.p_why = p_why;
+}
+
+/*!
+ * @brief Record the WiFi connection state (network side).
+ *
+ * @param[in] p_wifi A string literal, e.g. "hotspot not found".
+ */
+void
+mqtt_bridge_set_wifi (char const * p_wifi)
+{
+    g_stats.p_wifi = p_wifi;
 }
 
 /*** end of file ***/

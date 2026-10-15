@@ -48,6 +48,7 @@ typedef struct
     uint32_t           attempts; /* broker connection attempts        */
     uint32_t           address;  /* own IPv4 address, network order  */
     char const *       p_why;    /* how the last attempt ended       */
+    char const *       p_wifi;   /* WiFi connection state            */
 } mqtt_bridge_stats_t;
 
 /* Application side. */
@@ -66,6 +67,7 @@ void mqtt_bridge_count_rejoin(void);
 void mqtt_bridge_count_attempt(void);
 void mqtt_bridge_set_address(uint32_t address);
 void mqtt_bridge_set_why(char const * p_why);
+void mqtt_bridge_set_wifi(char const * p_wifi);
 
 #endif /* MQTT_BRIDGE_H */
 
