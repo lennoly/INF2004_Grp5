@@ -25,6 +25,13 @@
 #include "line_follow.h"
 #include "telemetry.h"
 
+#if defined(TM_WIFI_MQTT) && TM_WIFI_MQTT
+#include "mqtt_config.h"
+#define BROKER_TEXT MQTT_BROKER_IP
+#else
+#define BROKER_TEXT "-"
+#endif
+
 #define TASK_PRIORITY      (10)
 #define TASK_STACK         (3072)
 #define MAX_BYTES_PER_POLL (64u) /* bound the console work per tick     */
@@ -36,6 +43,8 @@
 #define GAIN_TEXTS         (8u) /* 3 PID + 2 feed-forward + 3 line     */
 #define LINE_GAINS         (3u)
 #define TERMINATOR         ('\0')
+#define BYTE_MASK          (0xFFu)
+#define BITS_PER_BYTE      (8u)
 
 /* The WiFi test build also prints the heartbeat on the USB console, so the
    link can be watched there even while MQTT is down. */
@@ -91,6 +100,7 @@ static INT          to_int(float32_t value);
 static INT          tenths(float32_t value);
 static INT          permille(float32_t value);
 static INT          as_int(int32_t value);
+static UINT         ip_byte(uint32_t address, uint32_t index);
 static UINT         as_uint(uint32_t value);
 
 /*!
@@ -468,12 +478,17 @@ send_heartbeat (void)
         gp_out,
         (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
                      "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
-                     "\"rejoin\":%u,\"imu\":%d,\"i2cerr\":%u}",
+                     "\"rejoin\":%u,\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
+                     "\"tries\":%u,\"imu\":%d,\"i2cerr\":%u}",
         as_uint(now.lo / MS_PER_S), as_uint(g_hb_seq),
         vehicle_state_name(veh.state), link_name(link_stats.link),
         as_uint(link_stats.published), as_uint(link_stats.dropped),
         as_uint(link_stats.commands), as_uint(link_stats.reconnects),
-        as_uint(link_stats.rejoins), imu.b_ok ? 1 : 0, as_uint(imu.i2c_errors));
+        as_uint(link_stats.rejoins), ip_byte(link_stats.address, 0u),
+        ip_byte(link_stats.address, 1u), ip_byte(link_stats.address, 2u),
+        ip_byte(link_stats.address, 3u), BROKER_TEXT,
+        as_uint(link_stats.attempts), imu.b_ok ? 1 : 0,
+        as_uint(imu.i2c_errors));
     emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 
@@ -733,6 +748,23 @@ static INT
 as_int (int32_t value)
 {
     return (value);
+}
+
+/*!
+ * @brief One byte of an IPv4 address for printing.
+ *
+ * @param[in] address Address in network byte order, as lwIP stores it
+ *                    (the first byte in memory is the first number).
+ * @param[in] index   0 for the first number .. 3 for the last.
+ *
+ * @return The byte, 0..255.
+ */
+static UINT
+ip_byte (uint32_t address, uint32_t index)
+{
+    /* The RP2040 is little-endian, so the first byte in memory is the
+       least significant one. */
+    return ((address >> (index * BITS_PER_BYTE)) & BYTE_MASK);
 }
 
 /*!

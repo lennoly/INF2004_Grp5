@@ -795,6 +795,9 @@ test_mqtt_client (void)
     cyw43_utk_app_poll(&netif);
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "one attempt once the network is up");
+    mqtt_bridge_get_stats(&stats);
+    check((1u == stats.attempts) && (1u == stats.address),
+          "attempt counted, own address recorded");
     g_fake_now_ms += FIRST_WINDOW_MS - 1u;
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "the attempt gets 2 s");
