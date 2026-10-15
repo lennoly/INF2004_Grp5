@@ -801,11 +801,26 @@ test_mqtt_client (void)
     g_fake_now_ms += FIRST_WINDOW_MS - 1u;
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "the attempt gets 2 s");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_why, "-"), "no reason before an answer");
     g_fake_now_ms++;
     cyw43_utk_app_poll(&netif);
     check(2u == g_fake_connects, "then a new attempt");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strncmp(stats.p_why, "no answer", 9u),
+          "an unanswered attempt is reported");
+    fake_mqtt_connection(MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_);
+    mqtt_bridge_get_stats(&stats);
+    check((0 == strncmp(stats.p_why, "refused: not authorised", 23u))
+              && (LINK_BACKOFF == stats.link),
+          "a refusal is reported in words");
+    g_fake_now_ms += FIRST_WINDOW_MS * 2u;
+    cyw43_utk_app_poll(&netif);
+    check(3u == g_fake_connects, "a refused attempt is retried");
 
     fake_mqtt_connection(MQTT_CONNECT_ACCEPTED);
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_why, "connected"), "success is reported");
     check((0 == strcmp(g_fake_topic, "picocar/t/status"))
               && (1u == g_fake_retain)
               && (0 == strcmp(g_fake_subscribed, "picocar/t/cmd")),
@@ -832,7 +847,7 @@ test_mqtt_client (void)
     g_fake_now_ms += SESSION_MS;
     fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
     cyw43_utk_app_poll(&netif);
-    check(3u == g_fake_connects, "a lost session reconnects at once");
+    check(4u == g_fake_connects, "a lost session reconnects at once");
     fake_mqtt_connection(MQTT_CONNECT_ACCEPTED);
     mqtt_bridge_get_stats(&stats);
     check((LINK_CONNECTED == stats.link) && (1u == stats.reconnects),
