@@ -8,5 +8,13 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Dashboard session logs
-logs/
+# Dashboard session logs (testing/*/logs/ IS committed: test evidence)
+/logs/
+/tools/dashboard/logs/
+
+# Videos are shared as unlisted YouTube links (videos/README.md), never committed
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
