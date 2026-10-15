@@ -106,6 +106,8 @@
 #define NET_UP_MS       (5000u)  /* the network comes up after boot  */
 #define FIRST_WINDOW_MS (2000u)  /* the first attempt's time limit   */
 #define SESSION_MS      (60000u) /* a session that ran for a while   */
+#define REJOIN_AFTER_MS (3000u)  /* first re-join after the link drops */
+#define REJOIN_STEPS    (4u)     /* retries checked after the first     */
 
 typedef struct
 {
@@ -123,6 +125,10 @@ static c39_pattern_t const g_c39[] = {{'A', "100001001"},
                                       {'C', "101001000"},
                                       {'D', "000011001"},
                                       {'*', "010010100"}};
+
+/* WiFi re-join retry intervals after the first attempt. */
+static uint32_t const g_rejoin_waits[REJOIN_STEPS] = {5000u, 10000u, 20000u,
+                                                      20000u};
 
 static uint32_t g_pass = 0u;
 static uint32_t g_fail = 0u;
@@ -148,6 +154,8 @@ static uint32_t  scan_box(avoidance_point_t * p_points, float32_t centre_x,
 static void      test_obstacle(void);
 static void      test_bridge(void);
 static void      test_mqtt_client(void);
+static void      test_rejoin(struct netif * p_netif);
+static uint32_t  rejoins(void);
 static uint32_t  feed_text(command_line_t * p_line, char const * p_text,
                            char * p_out);
 static void      test_command(void);
@@ -826,6 +834,65 @@ test_mqtt_client (void)
     mqtt_bridge_get_stats(&stats);
     check((LINK_CONNECTED == stats.link) && (1u == stats.reconnects),
           "reconnect counted");
+    test_rejoin(&netif);
+}
+
+/*!
+ * @brief WiFi re-join: 3 s after the link drops, then after 5 s, 10 s and
+ *        every 20 s; a new outage starts again at 3 s.
+ *
+ * @param[in,out] p_netif The fake network interface (link up on entry).
+ */
+static void
+test_rejoin (struct netif * p_netif)
+{
+    uint32_t idx     = 0u;
+    bool     b_early = false;
+
+    check(0u == rejoins(), "no re-join while linked");
+    p_netif->b_up = 0u;
+    fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += REJOIN_AFTER_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(0u == rejoins(), "no re-join before 3 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == rejoins(), "re-join after 3 s");
+
+    for (idx = 0u; idx < REJOIN_STEPS; idx++)
+    {
+        g_fake_now_ms += g_rejoin_waits[idx] - 1u;
+        cyw43_utk_app_poll(p_netif);
+        b_early = b_early || ((idx + 1u) != rejoins());
+        g_fake_now_ms++;
+        cyw43_utk_app_poll(p_netif);
+    }
+
+    check((!b_early) && ((REJOIN_STEPS + 1u) == rejoins()),
+          "retries after 5 s, 10 s, then every 20 s");
+    p_netif->b_up = 1u;
+    cyw43_utk_app_poll(p_netif);
+    p_netif->b_up = 0u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += REJOIN_AFTER_MS;
+    cyw43_utk_app_poll(p_netif);
+    check((REJOIN_STEPS + 2u) == rejoins(), "a new outage starts again at 3 s");
+}
+
+/*!
+ * @brief WiFi re-join attempts counted by the bridge.
+ *
+ * @return The count.
+ */
+static uint32_t
+rejoins (void)
+{
+    mqtt_bridge_stats_t stats;
+
+    mqtt_bridge_get_stats(&stats);
+
+    return (stats.rejoins);
 }
 
 /*!
@@ -902,6 +969,17 @@ test_command (void)
     check(!command_parse("stop now", &cmd), "trailing text rejected");
     check(!command_parse("gains=1", &cmd), "gains takes no value");
     check(!command_parse("", &cmd), "empty rejected");
+    check((command_parse("#17 gains", &cmd)) && (17u == cmd.req_id)
+              && (COMMAND_GAINS == cmd.kind),
+          "request id");
+    check((command_parse("speed=150", &cmd)) && (0u == cmd.req_id),
+          "no request id is 0");
+    check((!command_parse("#12gains", &cmd))
+              && (!command_parse("#0 gains", &cmd))
+              && (!command_parse("# gains", &cmd)),
+          "malformed request ids rejected");
+    check((!command_parse("#5 bogus", &cmd)) && (5u == cmd.req_id),
+          "the id survives a bad command (for the reply)");
 
     /* Line assembler: CRLF, backspace, control bytes and overflow. */
     command_line_init(&line);

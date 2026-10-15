@@ -15,6 +15,13 @@
  * once.  Last will: picocar/<id>/status = "offline" (retained); on
  * connect the client publishes "online" (retained) and subscribes to
  * picocar/<id>/cmd.
+ *
+ * WiFi re-join: the template joins the access point once at boot.  If the
+ * link has been up and then stays down for REJOIN_AFTER_MS, a non-blocking
+ * join (hal_wifi_rejoin()) is started from this hook, which runs in the
+ * same task and under the same driver lock as the template's own join,
+ * then retried after 5 s, 10 s and every 20 s until the link is back.
+ * Attempts are counted in the heartbeat ("rejoin").
  */
 
 #include <stdint.h>
@@ -30,12 +37,17 @@
 #include "lwip/apps/mqtt_priv.h" /* static client, as lwIP documents */
 #include "mqtt_config.h"
 #include "mqtt_bridge.h"
+#include "hal.h"
 
 #define TOPIC_ROOT          "picocar/" MQTT_CAR_ID "/"
 #define TOPIC_CMD           TOPIC_ROOT "cmd"
 #define TOPIC_STATUS        TOPIC_ROOT "status"
 #define RETRY_BASE_MS       (1000u)
-#define RETRY_DOUBLINGS_MAX (3u) /* attempt windows 2, 4, then 8 s */
+#define RETRY_DOUBLINGS_MAX (3u)     /* attempt windows 2, 4, then 8 s */
+#define REJOIN_AFTER_MS     (3000u)  /* link down this long: re-join */
+#define REJOIN_FIRST_MS     (5000u)  /* then retry after 5 s, ...    */
+#define REJOIN_SECOND_MS    (10000u) /* ... 10 s ...                 */
+#define REJOIN_EVERY_MS     (20000u) /* ... and then every 20 s      */
 #define QOS_0               (0u)
 #define RETAIN              (1u)
 #define NO_RETAIN           (0u)
@@ -57,7 +69,12 @@ static bool          gb_cmd_topic   = false; /* incoming publish is a command */
 static uint8_t       g_cmd[MQTT_BRIDGE_CMD_MAX];
 static uint32_t      g_cmd_len = 0u;
 static char          g_msg[MQTT_BRIDGE_PAYLOAD_MAX];
+static bool          gb_ever_linked = false; /* the link was up once     */
+static bool          gb_link_down   = false;
+static uint32_t      g_down_ms      = 0u; /* outage start or last try */
+static uint32_t      g_rejoin_tries = 0u; /* attempts in this outage  */
 
+static void watch_link(struct netif * p_netif, uint32_t now);
 static void start_connect(uint32_t now);
 static void flush_tx(void);
 static void on_connection(mqtt_client_t * p_client, void * p_arg,
@@ -77,6 +94,8 @@ cyw43_utk_app_poll (struct netif * p_netif)
     bool     b_net = (netif_is_up(p_netif)) && (netif_is_link_up(p_netif))
                  && (!ip4_addr_isany_val(*netif_ip4_addr(p_netif)));
 
+    watch_link(p_netif, now);
+
     if (0u != mqtt_client_is_connected(&g_client))
     {
         flush_tx();
@@ -92,6 +111,58 @@ cyw43_utk_app_poll (struct netif * p_netif)
     else
     {
         /* An attempt is running, or the car is backing off. */
+    }
+}
+
+/*!
+ * @brief Re-join the access point after an outage (see the file header).
+ *
+ * @param[in] p_netif The WiFi network interface.
+ * @param[in] now     Current time in ms.
+ */
+static void
+watch_link (struct netif * p_netif, uint32_t now)
+{
+    uint32_t wait_ms = REJOIN_AFTER_MS;
+
+    if (1u == g_rejoin_tries)
+    {
+        wait_ms = REJOIN_FIRST_MS;
+    }
+    else if (2u == g_rejoin_tries)
+    {
+        wait_ms = REJOIN_SECOND_MS;
+    }
+    else if (g_rejoin_tries > 2u)
+    {
+        wait_ms = REJOIN_EVERY_MS;
+    }
+    else
+    {
+        /* First attempt: REJOIN_AFTER_MS. */
+    }
+
+    if (netif_is_link_up(p_netif))
+    {
+        gb_ever_linked = true;
+        gb_link_down   = false;
+        g_rejoin_tries = 0u;
+    }
+    else if (gb_ever_linked && (!gb_link_down))
+    {
+        gb_link_down = true;
+        g_down_ms    = now;
+    }
+    else if (gb_link_down && ((now - g_down_ms) >= wait_ms))
+    {
+        g_down_ms = now;
+        g_rejoin_tries++;
+        mqtt_bridge_count_rejoin();
+        (void) hal_wifi_rejoin();
+    }
+    else
+    {
+        /* Linked, waiting, or the template's first join is running. */
     }
 }
 

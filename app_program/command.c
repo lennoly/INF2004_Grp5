@@ -29,6 +29,7 @@
 #define MIN_DIGITS          (4u)     /* "0.000" has 4 digits            */
 #define DIGITS_MAX          (12u)    /* 2e9 has 10 digits               */
 #define FORMAT_LIMIT        (2.0e6f) /* x1000 still fits in int32_t     */
+#define ID_DIGITS_MAX       (9u)     /* request ids up to 999999999     */
 #define TERMINATOR          ('\0')
 
 typedef struct
@@ -57,6 +58,7 @@ static char const g_digit_chars[] = "0123456789";
 static char const * gp_error = "";
 
 static char const * skip_space(char const * p_text);
+static char const * parse_request_id(char const * p_text, uint32_t * p_id);
 static char const * parse_decimal(char const * p_text, float32_t * p_value);
 static char const * match_keyword(char const * p_text, char const * p_name);
 static char const * find_keyword(char const * p_text, uint32_t * p_index);
@@ -85,9 +87,16 @@ command_parse (char const * p_text, command_t * p_cmd)
     p_cmd->n_args = 0u;
     gp_error      = "unknown command (try help)";
 
-    /* Step 1: the keyword. */
-    p_cursor = find_keyword(skip_space(p_text), &spec_idx);
+    /* Step 0: the optional request id. */
+    p_cursor = parse_request_id(skip_space(p_text), &p_cmd->req_id);
     b_ok     = (NULL != p_cursor);
+
+    /* Step 1: the keyword. */
+    if (b_ok)
+    {
+        p_cursor = find_keyword(skip_space(p_cursor), &spec_idx);
+        b_ok     = (NULL != p_cursor);
+    }
 
     /* Step 2: the optional "=value,value,..." list. */
     if (b_ok)
@@ -294,6 +303,52 @@ skip_space (char const * p_text)
     while (0 != isspace((unsigned char) *p_cursor))
     {
         p_cursor++;
+    }
+
+    return (p_cursor);
+}
+
+/*!
+ * @brief Parse an optional "#<id>" request id followed by white space.
+ *
+ * @param[in]  p_text Text (white space already skipped).
+ * @param[out] p_id   The id, or 0 if there is none.
+ *
+ * @return Pointer after the id (p_text if there is none), or NULL with
+ *         gp_error set for a malformed id.
+ */
+static char const *
+parse_request_id (char const * p_text, uint32_t * p_id)
+{
+    char const * p_cursor = p_text;
+    uint32_t     digits   = 0u;
+    uint32_t     value    = 0u;
+
+    *p_id = 0u;
+
+    if ('#' == *p_cursor)
+    {
+        p_cursor++;
+
+        /* Cast: a digit minus '0' is 0..9, which uint32_t holds. */
+        while ((*p_cursor >= '0') && (*p_cursor <= '9')
+               && (digits < ID_DIGITS_MAX))
+        {
+            value = (value * DECIMAL_BASE_U) + (uint32_t) (*p_cursor - '0');
+            digits++;
+            p_cursor++;
+        }
+
+        /* Cast: the ctype functions take the character as unsigned char. */
+        if ((0u == value) || (0 == isspace((unsigned char) *p_cursor)))
+        {
+            gp_error = "bad request id (use #1..#999999999 then a space)";
+            p_cursor = NULL;
+        }
+        else
+        {
+            *p_id = value;
+        }
     }
 
     return (p_cursor);
