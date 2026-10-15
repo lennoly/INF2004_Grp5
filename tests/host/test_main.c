@@ -160,6 +160,7 @@ static uint32_t  rejoins(void);
 static uint32_t  feed_text(command_line_t * p_line, char const * p_text,
                            char * p_out);
 static void      test_command(void);
+static void      test_command_limits(void);
 static void      test_line_gains(void);
 
 /*!
@@ -179,6 +180,7 @@ main (void)
     test_bridge();
     test_mqtt_client();
     test_command();
+    test_command_limits();
     test_line_gains();
     (void) printf("\n%" PRIu32 " passed, %" PRIu32 " failed\n", g_pass, g_fail);
 
@@ -1044,6 +1046,41 @@ test_command (void)
     check(0 == strcmp(text, "0.000"), "-0.0004 gives 0.000");
     command_format_decimal(text, sqrtf(-1.0f));
     check(0 == strcmp(text, "0.000"), "NaN gives 0.000");
+}
+
+/*!
+ * @brief Command limits from the CSC05 review: speed= 60..300 (NFR2),
+ *        range-checked rate=, the timing command, and tuning only
+ *        while the car is stationary.
+ */
+static void
+test_command_limits (void)
+{
+    command_t cmd;
+
+    check((command_parse("speed=300", &cmd))
+              && (command_parse("speed=60", &cmd))
+              && (!command_parse("speed=301", &cmd))
+              && (!command_parse("speed=59", &cmd))
+              && (!command_parse("speed=99999999999", &cmd)),
+          "speed 60..300 only (NFR2)");
+    check((!command_parse("rate=99999999999", &cmd))
+              && (!command_parse("rate=-5", &cmd)),
+          "rate: huge or negative values rejected");
+    check((command_parse("timing", &cmd)) && (COMMAND_TIMING == cmd.kind),
+          "timing command");
+    check((!command_allowed(COMMAND_SPEED, false))
+              && (!command_allowed(COMMAND_PID, false))
+              && (!command_allowed(COMMAND_FF, false))
+              && (!command_allowed(COMMAND_LINE, false)),
+          "tuning refused while driving");
+    check((command_allowed(COMMAND_PID, true))
+              && (command_allowed(COMMAND_STOP, false))
+              && (command_allowed(COMMAND_START, false))
+              && (command_allowed(COMMAND_RATE, false))
+              && (command_allowed(COMMAND_GAINS, false))
+              && (command_allowed(COMMAND_TIMING, false)),
+          "tuning when stationary; other commands always");
 }
 
 /*!

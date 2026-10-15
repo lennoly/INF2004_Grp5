@@ -143,23 +143,70 @@ Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic ana
 
 ### MQTT documentation
 
-| Topic | Dir | Rate | Content |
-|---|---|---|---|
-| `picocar/<id>/telemetry` | pub | 5 Hz (`rate=` 0–20 Hz) | full snapshot (below) |
-| `picocar/<id>/heartbeat` | pub | 1 Hz | `up` s, `seq`, state, link statistics, IMU health |
-| `picocar/<id>/event` | pub | on change | `state`, `barcode`, `hump`, `obstacle`, `impact`, `cmd` ack, `gains`, `help` |
-| `picocar/<id>/status` | pub, retained | connect / LWT | `online` / `offline` |
-| `picocar/<id>/cmd` | sub | — | text commands, see *Commands and live tuning* below |
+All topics start with `picocar/<id>/`, where `<id>` is `MQTT_CAR_ID` in
+`mqtt_config.h` (default `car1`). Payloads are one-line JSON with integers
+only, except `status` (plain text) and `cmd` (a text command).
 
-Telemetry fields and units (integers only, which keeps it resource-friendly):
+| Topic | Dir | QoS / retain | Rate | Payload |
+|---|---|---|---|---|
+| `picocar/<id>/telemetry` | car → laptop | 0 / no | 5 Hz (`rate=`: off, or 50–5000 ms) | telemetry object |
+| `picocar/<id>/heartbeat` | car → laptop | 0 / no | 1 Hz | heartbeat object |
+| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | one event object (`type` below) |
+| `picocar/<id>/status` | car → laptop | 0 / **retained** | on connect; last will | `online` / `offline` |
+| `picocar/<id>/cmd` | laptop → car | 0 / no | on demand | `[#<id> ]<command>`, see *Commands* |
 
-- `t` run time in ms; `st` vehicle state.
-- `spd`/`tgt` wheel speed and target (mm/s); `pwm` duty (%); `enc` encoder ticks.
-- `odo` distance (mm); `hdg`, `pitch`, `roll`, `yaw` angles (deci-degrees); `rate` turn rate (deci-°/s).
-- `ir` normalised IR readings (per-mille); `le` line error (per-mille); `ls` line state (ON / LOST / JUNC).
-- `bc` last barcode, `nav` last command, `nbc` barcode count.
-- `hump` object {`h` current height, `pk` last peak, `max` run maximum (mm), `n` humps}.
-- `ev` motion event; `front` sonar distance (mm); `act` last avoidance action; `nobs` obstacles passed.
+**Telemetry**:
+`{"t","st","spd":[l,r],"tgt":[l,r],"pwm":[l,r],"enc":[l,r],"odo","hdg","ir":[l,r,bc],"le","ls","bc","nav","nbc","pitch","roll","yaw","rate","hump":{"h","pk","max","n"},"ev","front","act","nobs"}`
+
+| Field | Type, unit | Meaning |
+|---|---|---|
+| `t` | int, ms | run time |
+| `st` | string | vehicle state: `IDLE`, `CALIBRATE`, `LINE_FOLLOW`, `NAV_TURN`, `LINE_SEARCH`, `OBSTACLE`, `STOPPED` |
+| `spd`, `tgt` | [int, int], mm/s | wheel speed and its target, left / right |
+| `pwm` | [int, int], % | motor duty, left / right |
+| `enc` | [uint, uint] | encoder ticks (both edges), left / right |
+| `odo` | int, mm | distance travelled |
+| `hdg`, `pitch`, `roll`, `yaw` | int, 0.1° | heading, tilt and IMU heading |
+| `rate` | int, 0.1°/s | turn rate |
+| `ir` | [int ×3], ‰ | normalised IR: left, right, barcode (0 white … 1000 black) |
+| `le` | int, ‰ | line error (left − right) |
+| `ls` | string | line state: `ON`, `LOST`, `JUNC` |
+| `bc`, `nav` | string | last barcode text and its command |
+| `nbc` | uint | barcodes read |
+| `hump` | object | `h` height now, `pk` last peak, `max` run maximum (mm); `n` humps |
+| `ev` | string | motion event (`STATIONARY`, `CRUISING`, `CLIMBING`, … `IMPACT`) |
+| `front` | int, mm | front sonar distance |
+| `act`, `nobs` | string, uint | last avoidance action; obstacles passed |
+
+**Heartbeat**:
+`{"up","seq","st","link","pub","drop","rx","recon","rejoin","wifi","ip","broker","tries","why","imu","i2cerr"}`
+
+| Field | Type | Meaning |
+|---|---|---|
+| `up` | uint, s | time since boot |
+| `seq` | uint | heartbeat number (a gap = a lost heartbeat) |
+| `st` | string | vehicle state, as in telemetry |
+| `link` | string | `WAIT_NET`, `CONNECTING`, `CONNECTED`, `BACKOFF` |
+| `pub`, `drop`, `rx` | uint | messages published, dropped while offline, commands received |
+| `recon`, `rejoin`, `tries` | uint | broker reconnects, Wi-Fi re-joins, broker attempts |
+| `wifi` | string | Wi-Fi state in words (`joined`, `hotspot not found …`, `waiting for an IP address`, …) |
+| `ip`, `broker` | string | the car's address; the broker address it was built with |
+| `why` | string | how the last broker attempt ended, in words |
+| `imu`, `i2cerr` | int, uint | IMU healthy (1/0); I2C errors |
+
+**Events** (`event` topic, one object each, told apart by `type`):
+
+| `type` | Fields | Sent when |
+|---|---|---|
+| `cmd` | `id` (request id, 0 if none), `cmd` (the text), `ok` (1/0), `err` (reason, only when `ok` is 0) | every command |
+| `gains` | `pid` [kp,ki,kd], `ff` [kf,offset], `line` [kp,ki,kd], `speed` mm/s, `rate` ms | 60 ms after a tuning command, and on `gains` |
+| `state` | `st`, `why` (reason) | every state change |
+| `barcode` | `code`, `cmd` | a barcode is decoded |
+| `hump` | `n`, `peak_mm`, `max_mm` | a hump is counted |
+| `impact` | `n` | an IMU impact |
+| `obstacle` | `found`, `dist` mm, `ang` °, `width` mm, `centre`, `cl`, `cr` (clearances, mm), `act` | after each obstacle scan |
+| `timing` | `win_ms`, `load_pct`, `jit_max_us`, `periods`, then per section [max_us, avg_us, count]: `motion`, `vehicle`, `barcode`, `imu`, `hump`, `ir_isr`, `net`, `rejoin` | on `timing` |
+| `help` | `cmds` | on `help` |
 
 ### Commands and live tuning
 
@@ -168,12 +215,18 @@ The same text commands are accepted on the MQTT `cmd` topic **and** typed on the
 | Command | Effect | Applied by |
 |---|---|---|
 | `start`, `stop`, `calibrate` | run control, as the GP20/GP21 buttons | vehicle task (message buffer) |
-| `speed=<mm/s>` | cruise speed, 60–400 | vehicle task |
+| `speed=<mm/s>` | cruise speed, 60–300 (NFR2: barcode sampling) | vehicle task |
 | `pid=<kp>,<ki>,<kd>` | wheel-speed PID, both wheels | `motion_set_speed_gains()` |
 | `ff=<kf>,<offset>` | feed-forward (%/(mm/s)) and static-friction offset (%) | `motion_set_feedforward()` |
-| `line=<kp>,<ki>,<kd>` | line-following PID, applied without resetting the running controller | vehicle task, which owns the follower |
+| `line=<kp>,<ki>,<kd>` | line-following PID, applied without resetting the controller | vehicle task, which owns the follower |
 | `rate=<ms>` | telemetry period: 0 = off, 50–5000 | telemetry task |
 | `gains`, `help` | report the gains in use / list commands | telemetry task |
+| `timing` | task times, control jitter and CPU load since the last `timing` (a `timing` event) | telemetry task |
+
+The tuning commands (`speed=`, `pid=`, `ff=`, `line=`) are accepted only while
+the car is IDLE or STOPPED, so the controllers never change mid-run; while
+driving they are answered `"ok":0,"err":"only while IDLE or STOPPED"`.
+`start`, `stop`, `rate=`, `gains`, `help` and `timing` work in every state.
 
 - Keywords are case-insensitive and spaces are ignored.
 - Every command is answered with `{"type":"cmd","cmd":"…","ok":1}`, or `"ok":0` with the reason (for example `wrong number of values`, `gain out of range 0..1000`, or `not available in this build`).
@@ -263,7 +316,7 @@ Record on the real car:
 - **JUNCTION** is declared only after 10 mm of travel with both sensors on black.
 - These confirmations mean a single noisy sample cannot trigger an action.
 
-**Line PID tuning.** Build `MISSION`, press **Start** on the dashboard, and adjust `line=<kp>,<ki>,<kd>` while the car follows the line. The new gains take effect immediately without resetting the controller, so the line-error plot shows the change straight away. A good result is a line error that settles close to 0 on straights without sustained oscillation. Record the tuned values:
+**Line PID tuning.** Build `MISSION`, press **Start** on the dashboard and watch the line-error plot; press **Stop**, set `line=<kp>,<ki>,<kd>` (tuning is accepted only while IDLE or STOPPED), and press **Start** again to compare runs. A good result is a line error that settles close to 0 on straights without sustained oscillation. Record the tuned values:
 
 | Line gains (kp / ki / kd) | Speed | Line-error RMS on straight | Laps without losing the line |
 |---|---|---|---|

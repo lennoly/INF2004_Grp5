@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include "car_types.h"
 #include "car_math.h"
+#include "car_config.h"
 #include "command.h"
 
 #define MAX_FRACTION_DIGITS (6u)
@@ -48,7 +49,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"pid", COMMAND_PID, 3u},
                                          {"ff", COMMAND_FF, 2u},
                                          {"line", COMMAND_LINE, 3u},
-                                         {"rate", COMMAND_RATE, 1u}};
+                                         {"rate", COMMAND_RATE, 1u},
+                                         {"timing", COMMAND_TIMING, 0u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -147,6 +149,26 @@ char const *
 command_error (void)
 {
     return (gp_error);
+}
+
+/*!
+ * @brief Whether a command may run in the car's current state.  The
+ *        tuning commands change the controllers, so they are refused
+ *        while the car is driving (CSC05 review, FR10).
+ *
+ * @param[in] kind         Parsed command.
+ * @param[in] b_stationary true while the car is IDLE or STOPPED (and in
+ *                         test builds, which have no mission).
+ *
+ * @return true if the command may run now.
+ */
+bool
+command_allowed (command_id_t kind, bool b_stationary)
+{
+    bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
+                    || (COMMAND_FF == kind) || (COMMAND_LINE == kind);
+
+    return ((!b_tuning) || b_stationary);
 }
 
 /*!
@@ -566,18 +588,28 @@ validate (command_t const * p_cmd)
         break;
 
         case COMMAND_RATE:
-            /* Integer comparison: floats are never tested for equality
-               (Rule 5.4.b.iv). */
-            rate_ms = car_math_round(p_cmd->arg[0]);
-            b_ok    = (0 == rate_ms)
-                   || ((rate_ms >= COMMAND_RATE_MIN_MS)
-                       && (rate_ms <= COMMAND_RATE_MAX_MS));
+            /* Range first, so that car_math_round() never sees a value
+               beyond int32_t (the parser accepts up to 12 digits); then
+               an integer comparison, as floats are never tested for
+               equality (Rule 5.4.b.iv).  Cast: the limit is a small
+               integer, exact in float32_t. */
+            b_ok = (p_cmd->arg[0] >= 0.0f)
+                   && (p_cmd->arg[0] <= (float32_t) COMMAND_RATE_MAX_MS);
+            rate_ms = b_ok ? car_math_round(p_cmd->arg[0]) : -1;
+            b_ok    = b_ok
+                   && ((0 == rate_ms)
+                       || ((rate_ms >= COMMAND_RATE_MIN_MS)
+                           && (rate_ms <= COMMAND_RATE_MAX_MS)));
             gp_error = b_ok ? gp_error : "rate: 0 (off) or 50..5000 ms";
         break;
 
         case COMMAND_SPEED:
-            b_ok     = (p_cmd->arg[0] > 0.0f);
-            gp_error = b_ok ? gp_error : "speed must be > 0";
+            /* Casts: the limits are small integers, exact in float32_t;
+               floats are only compared with < and >, never for equality
+               (Rule 5.4.b.iv). */
+            b_ok = (p_cmd->arg[0] >= (float32_t) SPEED_CMD_MIN_MM_S)
+                   && (p_cmd->arg[0] <= (float32_t) SPEED_CMD_MAX_MM_S);
+            gp_error = b_ok ? gp_error : "speed: 60..300 mm/s";
         break;
 
         default:

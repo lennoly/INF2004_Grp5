@@ -29,6 +29,7 @@
 #include "servo.h"
 #include "ultrasonic.h"
 #include "obstacle.h"
+#include "timing.h"
 #include "vehicle.h"
 
 #define TASK_PRIORITY      (6)
@@ -52,8 +53,8 @@
 #define SEEK_EXTRA_MM      (200.0f)
 #define FRONT_IGNORE_MM    (150.0f)
 #define STRAIGHT_EXTRA_MM  (20.0f)
-#define SPEED_MIN_CMD      (60)
-#define SPEED_MAX_CMD      (400)
+#define SPEED_MIN_CMD      (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
+#define SPEED_MAX_CMD      (SPEED_CMD_MAX_MM_S)
 #define STOP_SETTLE_MS     (200u)
 #define REACQ_SWEEPS       (5u)
 #define REACQ_BASE_MS      (350u)
@@ -1064,6 +1065,9 @@ run_state (void)
 static void
 vehicle_task (INT stacd, void * p_exinf)
 {
+    uint32_t        start_us = 0u;
+    vehicle_state_t before   = VS_IDLE;
+
     (void) stacd;
     (void) p_exinf;
 
@@ -1072,9 +1076,21 @@ vehicle_task (INT stacd, void * p_exinf)
 
     for (;;)
     {
+        start_us = timing_start();
+        before   = g_st.state;
         poll_inputs();
         handle_requests();
         run_state();
+
+        /* Only states that never wait inside the loop are timed, so the
+           figure is CPU time (WCET), not time spent waiting for a move. */
+        if ((g_st.state == before)
+            && ((VS_LINE_FOLLOW == before) || (VS_IDLE == before)
+                || (VS_STOPPED == before)))
+        {
+            timing_stop(TIMING_VEHICLE, start_us);
+        }
+
         (void) tk_dly_tsk(LOOP_MS);
     }
 }

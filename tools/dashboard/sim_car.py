@@ -109,6 +109,11 @@ class Car:
             err = "rate: 0 (off) or 50..5000 ms"
         elif name in ("pid", "line") and any(v < 0 or v > 1000 for v in vals):
             err = "gain out of range 0..1000"
+        elif name == "speed" and not 60 <= vals[0] <= 300:
+            err = "speed: 60..300 mm/s"
+        elif name in ("speed", "pid", "ff", "line") and \
+                self.state not in ("IDLE", "STOPPED"):
+            err = "only while IDLE or STOPPED"   # as the firmware (CSC05)
         if err:
             self.event({"type": "cmd", "id": req_id, "cmd": text, "ok": 0,
                         "err": err})
@@ -121,7 +126,7 @@ class Car:
         elif name == "calibrate":
             self.set_state("CALIBRATE", "spin 360")
         elif name == "speed":
-            self.cruise = int(min(max(vals[0], 60), 400))
+            self.cruise = int(vals[0])
         elif name == "pid":
             self.g["kp"], self.g["ki"], self.g["kd"] = vals
         elif name == "ff":

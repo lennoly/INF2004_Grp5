@@ -17,6 +17,8 @@ Define a test here before running it. Test IDs never change.
 | S1-U05 | WiFi outage recovered (re-join) | FR11 | link | during S1-U03 switch the hotspot off ~30 s | `rejoin` rises, board recovers without reset |
 | S1-U06 | link is WiFi, not the cable | FR9 | link | power the board from a phone charger; `wifi_test.py --minutes 2` | PASS with no cable to the laptop |
 | S1-U07 | live command from the dashboard | FR10 | manual | dashboard `--mqtt`; send `speed=200` | car acknowledges; gains report shows 200 |
+| S1-U08 | tuning refused while driving (CSC05) | FR10 | manual | MISSION: press START, send `pid=0.1,0.6,0`; then STOP and send it again | first reply `"ok":0` "only while IDLE or STOPPED"; after STOP `"ok":1` |
+| S1-U09 | Wi-Fi re-join does not stall the car (CSC05) | FR11, A2 | link | MISSION + WiFi, driving: hotspot off ~30 s, then send `timing` | `rejoin` max_us small against the 20 ms period; `jit_max_us` still within NFR1 |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`
 build on the car; **link** = `wifi_test.py`; **manual** = a person measures.

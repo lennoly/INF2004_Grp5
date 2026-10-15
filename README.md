@@ -24,12 +24,13 @@ convention: one folder per student under `app_program/`, `TEAM.md`,
 | `app_program/subsystem5/` | Buddy 5: `servo`, `ultrasonic`, `obstacle`, `avoidance` |
 | `app_program/vehicle` | integration state machine (shared) |
 | `app_program/hal*` | Pico C SDK HAL + µT-Kernel interrupt binding (shared) |
+| `app_program/timing` | task times, control jitter and CPU load: send `timing` (shared) |
 | `app_program/app_main, app_tests` | entry point + test runner (shared); each buddy's test program is `subsystemN/subsystemN_test.c` |
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
 | `testing/` | test cases and results per subsystem, integration and system (`testing/README.md`) |
 | `videos/` | index of unlisted YouTube videos of tests and demos |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 107/107 pass |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 112/112 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |

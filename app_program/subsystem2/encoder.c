@@ -4,6 +4,7 @@
  */
 
 #include <tk/tkernel.h>
+#include <tm/tmonitor.h>
 #include "car_config.h"
 #include "car_math.h"
 #include "hal.h"
@@ -31,6 +32,7 @@ typedef struct
 static volatile wheel_state_t g_wheel[ENCODER_COUNT];
 
 static void encoder_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
+static void check_glitch_filter(void);
 
 /*!
  * @brief Configure both encoder inputs and their edge interrupts.
@@ -54,6 +56,8 @@ encoder_init (void)
                                    HAL_GPIO_EDGE_RISE | HAL_GPIO_EDGE_FALL,
                                    encoder_edge_isr);
     }
+
+    check_glitch_filter();
 
     return (ercd);
 }
@@ -114,6 +118,34 @@ float32_t
 encoder_mm_per_tick (void)
 {
     return (MM_PER_SLOT / TICKS_PER_SLOT);
+}
+
+/*!
+ * @brief Print the shortest half-period at the fastest wheel speed and
+ *        warn if ENCODER_GLITCH_US would reject real edges (CSC05 review:
+ *        the filter must stay below it; see ENCODER_SLOTS, which must
+ *        match the real pulses per wheel turn).
+ */
+static void
+check_glitch_filter (void)
+{
+    float32_t half_us =
+        (MM_PER_SLOT * US_PER_S) / (2.0f * SPEED_WHEEL_MAX_MM_S);
+
+    /* Casts: tm_printf() takes the kernel's UB string type (the literals
+       are ASCII); the half-period is microseconds below 2^31 and the
+       filter a small constant, so both fit INT / float32_t exactly. */
+    (void) tm_printf((UB const *) "[encoder] %u slots: half-period %d us at "
+                                  "max wheel speed, glitch filter %u us\n",
+                     (UINT) ENCODER_SLOTS, (INT) half_us,
+                     (UINT) ENCODER_GLITCH_US);
+
+    if ((float32_t) ENCODER_GLITCH_US >= half_us)
+    {
+        (void) tm_printf((UB const *) "[encoder] WARNING: the glitch filter "
+                                      "rejects real edges: lower "
+                                      "ENCODER_GLITCH_US\n");
+    }
 }
 
 /*!

@@ -9,7 +9,7 @@ SRCS   := test_main.c $(APP)/car_math.c $(APP)/subsystem2/pid.c \
           $(APP)/subsystem3/line_follow.c $(APP)/subsystem3/barcode_decode.c \
           $(APP)/subsystem4/terrain.c $(APP)/subsystem5/avoidance.c \
           $(S1)/mqtt_bridge.c $(S1)/mqtt_lwip.c $(S1)/command.c \
-          hal_stub.c lwip/fake_lwip.c
+          hal_stub.c timing_stub.c lwip/fake_lwip.c
 CFLAGS := -std=c99 -Wpedantic -Wall -Wextra -Wsign-conversion \
           -Wfloat-equal -Wdouble-promotion -Wshadow -Werror -O1 -I$(APP) \
           $(addprefix -I,$(wildcard $(APP)/*/)) -I. \
@@ -18,7 +18,7 @@ CFLAGS := -std=c99 -Wpedantic -Wall -Wextra -Wsign-conversion \
 run: picocar_tests
 	./picocar_tests
 
-picocar_tests: $(SRCS) $(wildcard $(APP)/*.h $(APP)/*/*.h) test_main.h hal_stub.h \
+picocar_tests: $(SRCS) $(wildcard $(APP)/*.h $(APP)/*/*.h) test_main.h hal_stub.h timing_stub.h \
                mqtt_config.h lwip/apps/mqtt.h
 	$(CC) $(CFLAGS) -o $@ $(SRCS) -lm
 
