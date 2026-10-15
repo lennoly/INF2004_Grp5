@@ -106,6 +106,7 @@
 #define NET_UP_MS       (5000u)  /* the network comes up after boot  */
 #define FIRST_WINDOW_MS (2000u)  /* the first attempt's time limit   */
 #define SESSION_MS      (60000u) /* a session that ran for a while   */
+#define BOOT_JOIN_MS    (40000u) /* first join at power-up may take   */
 #define REJOIN_AFTER_MS (3000u)  /* first re-join after the link drops */
 #define REJOIN_STEPS    (4u)     /* retries checked after the first     */
 
@@ -790,6 +791,12 @@ test_mqtt_client (void)
     g_fake_now_ms = NET_UP_MS;
     cyw43_utk_app_poll(&netif);
     check(0u == g_fake_connects, "no attempt without a network");
+    g_fake_now_ms += BOOT_JOIN_MS - 1u;
+    cyw43_utk_app_poll(&netif);
+    check(0u == rejoins(), "the first join at power-up is left to finish");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(&netif);
+    check(1u == rejoins(), "a failed first join is retried");
     netif.b_up    = 1u;
     netif.ip.addr = 1u;
     cyw43_utk_app_poll(&netif);
@@ -857,7 +864,8 @@ test_mqtt_client (void)
 
 /*!
  * @brief WiFi re-join: 3 s after the link drops, then after 5 s, 10 s and
- *        every 20 s; a new outage starts again at 3 s.
+ *        every 20 s; a new outage starts again at 3 s. One re-join was
+ *        already counted for the failed first join.
  *
  * @param[in,out] p_netif The fake network interface (link up on entry).
  */
@@ -867,27 +875,27 @@ test_rejoin (struct netif * p_netif)
     uint32_t idx     = 0u;
     bool     b_early = false;
 
-    check(0u == rejoins(), "no re-join while linked");
+    check(1u == rejoins(), "no re-join while linked");
     p_netif->b_up = 0u;
     fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
     cyw43_utk_app_poll(p_netif);
     g_fake_now_ms += REJOIN_AFTER_MS - 1u;
     cyw43_utk_app_poll(p_netif);
-    check(0u == rejoins(), "no re-join before 3 s");
+    check(1u == rejoins(), "no re-join before 3 s");
     g_fake_now_ms++;
     cyw43_utk_app_poll(p_netif);
-    check(1u == rejoins(), "re-join after 3 s");
+    check(2u == rejoins(), "re-join after 3 s");
 
     for (idx = 0u; idx < REJOIN_STEPS; idx++)
     {
         g_fake_now_ms += g_rejoin_waits[idx] - 1u;
         cyw43_utk_app_poll(p_netif);
-        b_early = b_early || ((idx + 1u) != rejoins());
+        b_early = b_early || ((idx + 2u) != rejoins());
         g_fake_now_ms++;
         cyw43_utk_app_poll(p_netif);
     }
 
-    check((!b_early) && ((REJOIN_STEPS + 1u) == rejoins()),
+    check((!b_early) && ((REJOIN_STEPS + 2u) == rejoins()),
           "retries after 5 s, 10 s, then every 20 s");
     p_netif->b_up = 1u;
     cyw43_utk_app_poll(p_netif);
@@ -895,7 +903,7 @@ test_rejoin (struct netif * p_netif)
     cyw43_utk_app_poll(p_netif);
     g_fake_now_ms += REJOIN_AFTER_MS;
     cyw43_utk_app_poll(p_netif);
-    check((REJOIN_STEPS + 2u) == rejoins(), "a new outage starts again at 3 s");
+    check((REJOIN_STEPS + 3u) == rejoins(), "a new outage starts again at 3 s");
 }
 
 /*!
