@@ -44,6 +44,7 @@
 #define TOPIC_STATUS        TOPIC_ROOT "status"
 #define RETRY_BASE_MS       (1000u)
 #define RETRY_DOUBLINGS_MAX (3u)     /* attempt windows 2, 4, then 8 s */
+#define BOOT_JOIN_MS        (40000u) /* template's first join: scan + 30 s */
 #define REJOIN_AFTER_MS     (3000u)  /* link down this long: re-join */
 #define REJOIN_FIRST_MS     (5000u)  /* then retry after 5 s, ...    */
 #define REJOIN_SECOND_MS    (10000u) /* ... 10 s ...                 */
@@ -130,7 +131,10 @@ cyw43_utk_app_poll (struct netif * p_netif)
 static void
 watch_link (struct netif * p_netif, uint32_t now)
 {
-    uint32_t wait_ms = REJOIN_AFTER_MS;
+    /* Before the first link the template's own join runs (one scan, one
+       try): it is left to finish before re-joining, in case the hotspot
+       was not on at power-up. */
+    uint32_t wait_ms = gb_ever_linked ? REJOIN_AFTER_MS : BOOT_JOIN_MS;
 
     if (1u == g_rejoin_tries)
     {
@@ -155,7 +159,7 @@ watch_link (struct netif * p_netif, uint32_t now)
         gb_link_down   = false;
         g_rejoin_tries = 0u;
     }
-    else if (gb_ever_linked && (!gb_link_down))
+    else if (!gb_link_down)
     {
         gb_link_down = true;
         g_down_ms    = now;
@@ -169,7 +173,7 @@ watch_link (struct netif * p_netif, uint32_t now)
     }
     else
     {
-        /* Linked, waiting, or the template's first join is running. */
+        /* Waiting for the next re-join. */
     }
 }
 
