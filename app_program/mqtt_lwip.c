@@ -71,14 +71,16 @@ static uint32_t      g_cmd_len = 0u;
 static char          g_msg[MQTT_BRIDGE_PAYLOAD_MAX];
 static bool          gb_ever_linked = false; /* the link was up once     */
 static bool          gb_link_down   = false;
-static uint32_t      g_down_ms      = 0u; /* outage start or last try */
-static uint32_t      g_rejoin_tries = 0u; /* attempts in this outage  */
+static uint32_t      g_down_ms      = 0u;   /* outage start or last try */
+static uint32_t      g_rejoin_tries = 0u;   /* attempts in this outage  */
+static bool          gb_answered    = true; /* broker answered the last try */
 
-static void watch_link(struct netif * p_netif, uint32_t now);
-static void start_connect(uint32_t now);
-static void flush_tx(void);
-static void on_connection(mqtt_client_t * p_client, void * p_arg,
-                          mqtt_connection_status_t status);
+static void         watch_link(struct netif * p_netif, uint32_t now);
+static void         start_connect(uint32_t now);
+static void         flush_tx(void);
+static void         on_connection(mqtt_client_t * p_client, void * p_arg,
+                                  mqtt_connection_status_t status);
+static char const * status_text(mqtt_connection_status_t status);
 static void on_publish(void * p_arg, char const * p_topic, u32_t tot_len);
 static void on_data(void * p_arg, u8_t const * p_data, u16_t len, u8_t flags);
 
@@ -195,6 +197,15 @@ start_connect (uint32_t now)
     mqtt_disconnect(&g_client); /* does nothing when already idle */
     mqtt_bridge_count_attempt();
 
+    /* The previous attempt ran out of time without any answer: usually a
+       firewall on the broker's computer, or a wrong broker address. */
+    if (!gb_answered)
+    {
+        mqtt_bridge_set_why("no answer from broker (firewall? address?)");
+    }
+
+    gb_answered = false;
+
     if (0 != ipaddr_aton(MQTT_BROKER_IP, &broker))
     {
         err = mqtt_client_connect(&g_client, &broker, MQTT_BROKER_PORT,
@@ -206,6 +217,11 @@ start_connect (uint32_t now)
     if (ERR_OK == err)
     {
         mqtt_set_inpub_callback(&g_client, on_publish, on_data, NULL);
+    }
+    else
+    {
+        gb_answered = true; /* nothing was sent: no answer to wait for */
+        mqtt_bridge_set_why("could not start (bad broker address?)");
     }
 
     mqtt_bridge_set_link((ERR_OK == err) ? LINK_CONNECTING : LINK_BACKOFF);
@@ -248,6 +264,8 @@ on_connection (mqtt_client_t * p_client, void * p_arg,
                mqtt_connection_status_t status)
 {
     (void) p_arg;
+    gb_answered = true;
+    mqtt_bridge_set_why(status_text(status));
 
     if (MQTT_CONNECT_ACCEPTED == status)
     {
@@ -271,6 +289,57 @@ on_connection (mqtt_client_t * p_client, void * p_arg,
     {
         mqtt_bridge_set_link(LINK_BACKOFF);
     }
+}
+
+/*!
+ * @brief Plain-words reason for a connection result (shown in the
+ *        heartbeat as "why").
+ *
+ * @param[in] status Result from lwIP's MQTT client.
+ *
+ * @return A string literal.
+ */
+static char const *
+status_text (mqtt_connection_status_t status)
+{
+    char const * p_text = "closed by broker or network (TCP reset)";
+
+    switch (status)
+    {
+        case MQTT_CONNECT_ACCEPTED:
+            p_text = "connected";
+        break;
+
+        case MQTT_CONNECT_REFUSED_PROTOCOL_VERSION:
+            p_text = "refused: protocol version";
+        break;
+
+        case MQTT_CONNECT_REFUSED_IDENTIFIER:
+            p_text = "refused: client id";
+        break;
+
+        case MQTT_CONNECT_REFUSED_SERVER:
+            p_text = "refused: broker unavailable";
+        break;
+
+        case MQTT_CONNECT_REFUSED_USERNAME_PASS:
+            p_text = "refused: bad username or password";
+        break;
+
+        case MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_:
+            p_text = "refused: not authorised (allow_anonymous true?)";
+        break;
+
+        case MQTT_CONNECT_TIMEOUT:
+            p_text = "broker did not reply to CONNECT";
+        break;
+
+        default:
+            /* MQTT_CONNECT_DISCONNECTED: the default text. */
+        break;
+    }
+
+    return (p_text);
 }
 
 /*!

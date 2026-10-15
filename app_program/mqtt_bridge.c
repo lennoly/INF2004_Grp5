@@ -128,6 +128,7 @@ mqtt_bridge_get_stats (mqtt_bridge_stats_t * p_out)
     p_out->rejoins    = g_stats.rejoins;
     p_out->attempts   = g_stats.attempts;
     p_out->address    = g_stats.address;
+    p_out->p_why      = (NULL != g_stats.p_why) ? g_stats.p_why : "-";
 }
 
 /*!
@@ -259,6 +260,17 @@ void
 mqtt_bridge_set_address (uint32_t address)
 {
     g_stats.address = address;
+}
+
+/*!
+ * @brief Record how the last connection attempt ended (network side).
+ *
+ * @param[in] p_why A string literal, e.g. "refused: not authorised".
+ */
+void
+mqtt_bridge_set_why (char const * p_why)
+{
+    g_stats.p_why = p_why;
 }
 
 /*** end of file ***/

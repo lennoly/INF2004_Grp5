@@ -479,7 +479,8 @@ send_heartbeat (void)
         (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
                      "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
                      "\"rejoin\":%u,\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
-                     "\"tries\":%u,\"imu\":%d,\"i2cerr\":%u}",
+                     "\"tries\":%u,\"why\":\"%s\",\"imu\":%d,"
+                     "\"i2cerr\":%u}",
         as_uint(now.lo / MS_PER_S), as_uint(g_hb_seq),
         vehicle_state_name(veh.state), link_name(link_stats.link),
         as_uint(link_stats.published), as_uint(link_stats.dropped),
@@ -487,7 +488,7 @@ send_heartbeat (void)
         as_uint(link_stats.rejoins), ip_byte(link_stats.address, 0u),
         ip_byte(link_stats.address, 1u), ip_byte(link_stats.address, 2u),
         ip_byte(link_stats.address, 3u), BROKER_TEXT,
-        as_uint(link_stats.attempts), imu.b_ok ? 1 : 0,
+        as_uint(link_stats.attempts), link_stats.p_why, imu.b_ok ? 1 : 0,
         as_uint(imu.i2c_errors));
     emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
