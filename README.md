@@ -22,7 +22,7 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
 | `app_program/command, console_in` | text commands over USB/UART/MQTT (live tuning) |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 98/98 pass |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 104/104 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
@@ -110,7 +110,8 @@ cd ../..
   mosquitto, on that same WiFi, then `MQTT_CONFIG_SET` to `(1)`.
   Find the IP with `ipconfig getifaddr en0` (macOS) or `ipconfig` in
   PowerShell (Windows: the "IPv4 Address" of the WiFi adapter).
-  Leave the port (1883) and the rest as they are.
+  Leave the port (1883, the same as `listener` in `mosquitto.conf`) and the
+  rest as they are.
 
 Until both `SET` values are 1 the build stops with an error naming the file.
 
@@ -121,7 +122,12 @@ allow_anonymous true
 ```
 then run `mosquitto -c mosquitto.conf -v`
 (install: `brew install mosquitto` on macOS; the installer from
-mosquitto.org on Windows, and allow it through Windows Firewall).
+mosquitto.org on Windows). On Windows, stop the installer's background
+service first (`net stop mosquitto`) and let port 1883 in, in an
+administrator PowerShell:
+```
+New-NetFirewallRule -DisplayName "MQTT 1883" -Direction Inbound -Protocol TCP -LocalPort 1883 -Action Allow -Profile Any
+```
 
 **3. Build, flash and watch:**
 ```
@@ -132,9 +138,28 @@ python tools/dashboard/picocar_dashboard.py --mqtt <broker IP>
 ```
 `TEST_TELEMETRY` runs only WiFi, MQTT and telemetry (no robot hardware), so
 **a bare Pico W is enough**; keep the USB cable in: the console prints the
-heartbeat every second (`link`, `pub`, `drop`, `recon`, `rejoin`). Sensor
-values in the telemetry read 0 in this build. Use `APP_MODE=MISSION` for the
-full mission with WiFi on the car.
+heartbeat every second. Sensor values in the telemetry read 0 in this build.
+Use `APP_MODE=MISSION` for the full mission with WiFi on the car.
+
+| Heartbeat field | Meaning |
+|---|---|
+| `link` | `WAIT_NET` (no WiFi yet), `CONNECTING`, `CONNECTED`, `BACKOFF` (refused, retrying) |
+| `ip`, `broker` | the board's own address, and the broker address it was built with |
+| `tries`, `recon`, `rejoin` | broker attempts, reconnects after a loss, WiFi re-joins |
+| `pub`, `drop` | messages sent, and dropped while offline |
+| `why` | how the last broker attempt ended, in words (below) |
+
+If `link` never reaches `CONNECTED`, `why` says where to look:
+
+| `why` | Fix |
+|---|---|
+| `no answer from broker (firewall? address?)` | firewall rule above; `broker` must be the laptop's current IP |
+| `closed by broker or network (TCP reset)` | nothing accepted the connection: antivirus/VPN firewall, or wrong port |
+| `refused: not authorised ...` | mosquitto started without `allow_anonymous true` (use `-c`) |
+| `ip` is `0.0.0.0` | not on the WiFi: check SSID/password, 2.4 GHz, and that the hotspot is on |
+
+The mosquitto window shows `New client connected from <board ip>` when the
+board gets through.
 
 **4. Test the link** (with the board from step 3):
 ```
@@ -147,6 +172,10 @@ run, stop mosquitto for about 60 s (the board reconnects: `recon` goes up),
 then switch the hotspot off for about 30 s (the board re-joins the WiFi
 3 s after losing it, then retries after 5 s, 10 s and every 20 s: `rejoin`
 goes up).
+
+The USB cable carries only power and the console, never MQTT: everything
+`wifi_test.py` measures went over WiFi. To show it, power the board from a
+phone charger instead of the laptop and run the test again.
 
 ## Bring-up order
 motor → motion → IR (calibrate) → barcode → IMU → ultrasonic → telemetry → mission.
