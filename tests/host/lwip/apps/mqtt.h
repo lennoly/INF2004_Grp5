@@ -39,8 +39,14 @@ struct mqtt_connect_client_info_t {
 };
 
 typedef enum {
-    MQTT_CONNECT_ACCEPTED     = 0,
-    MQTT_CONNECT_DISCONNECTED = 256
+    MQTT_CONNECT_ACCEPTED                 = 0,
+    MQTT_CONNECT_REFUSED_PROTOCOL_VERSION = 1,
+    MQTT_CONNECT_REFUSED_IDENTIFIER       = 2,
+    MQTT_CONNECT_REFUSED_SERVER           = 3,
+    MQTT_CONNECT_REFUSED_USERNAME_PASS    = 4,
+    MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_  = 5,
+    MQTT_CONNECT_DISCONNECTED             = 256,
+    MQTT_CONNECT_TIMEOUT                  = 257
 } mqtt_connection_status_t;
 
 enum { MQTT_DATA_FLAG_LAST = 1 };

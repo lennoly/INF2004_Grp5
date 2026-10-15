@@ -106,6 +106,9 @@
 #define NET_UP_MS       (5000u)  /* the network comes up after boot  */
 #define FIRST_WINDOW_MS (2000u)  /* the first attempt's time limit   */
 #define SESSION_MS      (60000u) /* a session that ran for a while   */
+#define BOOT_JOIN_MS    (40000u) /* first join at power-up may take   */
+#define REJOIN_AFTER_MS (3000u)  /* first re-join after the link drops */
+#define REJOIN_STEPS    (4u)     /* retries checked after the first     */
 
 typedef struct
 {
@@ -123,6 +126,10 @@ static c39_pattern_t const g_c39[] = {{'A', "100001001"},
                                       {'C', "101001000"},
                                       {'D', "000011001"},
                                       {'*', "010010100"}};
+
+/* WiFi re-join retry intervals after the first attempt. */
+static uint32_t const g_rejoin_waits[REJOIN_STEPS] = {5000u, 10000u, 20000u,
+                                                      20000u};
 
 static uint32_t g_pass = 0u;
 static uint32_t g_fail = 0u;
@@ -148,6 +155,8 @@ static uint32_t  scan_box(avoidance_point_t * p_points, float32_t centre_x,
 static void      test_obstacle(void);
 static void      test_bridge(void);
 static void      test_mqtt_client(void);
+static void      test_rejoin(struct netif * p_netif);
+static uint32_t  rejoins(void);
 static uint32_t  feed_text(command_line_t * p_line, char const * p_text,
                            char * p_out);
 static void      test_command(void);
@@ -782,19 +791,45 @@ test_mqtt_client (void)
     g_fake_now_ms = NET_UP_MS;
     cyw43_utk_app_poll(&netif);
     check(0u == g_fake_connects, "no attempt without a network");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_wifi, "host"), "the WiFi state is reported");
+    g_fake_now_ms += BOOT_JOIN_MS - 1u;
+    cyw43_utk_app_poll(&netif);
+    check(0u == rejoins(), "the first join at power-up is left to finish");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(&netif);
+    check(1u == rejoins(), "a failed first join is retried");
     netif.b_up    = 1u;
     netif.ip.addr = 1u;
     cyw43_utk_app_poll(&netif);
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "one attempt once the network is up");
+    mqtt_bridge_get_stats(&stats);
+    check((1u == stats.attempts) && (1u == stats.address),
+          "attempt counted, own address recorded");
     g_fake_now_ms += FIRST_WINDOW_MS - 1u;
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "the attempt gets 2 s");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_why, "-"), "no reason before an answer");
     g_fake_now_ms++;
     cyw43_utk_app_poll(&netif);
     check(2u == g_fake_connects, "then a new attempt");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strncmp(stats.p_why, "no answer", 9u),
+          "an unanswered attempt is reported");
+    fake_mqtt_connection(MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_);
+    mqtt_bridge_get_stats(&stats);
+    check((0 == strncmp(stats.p_why, "refused: not authorised", 23u))
+              && (LINK_BACKOFF == stats.link),
+          "a refusal is reported in words");
+    g_fake_now_ms += FIRST_WINDOW_MS * 2u;
+    cyw43_utk_app_poll(&netif);
+    check(3u == g_fake_connects, "a refused attempt is retried");
 
     fake_mqtt_connection(MQTT_CONNECT_ACCEPTED);
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_why, "connected"), "success is reported");
     check((0 == strcmp(g_fake_topic, "picocar/t/status"))
               && (1u == g_fake_retain)
               && (0 == strcmp(g_fake_subscribed, "picocar/t/cmd")),
@@ -821,11 +856,71 @@ test_mqtt_client (void)
     g_fake_now_ms += SESSION_MS;
     fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
     cyw43_utk_app_poll(&netif);
-    check(3u == g_fake_connects, "a lost session reconnects at once");
+    check(4u == g_fake_connects, "a lost session reconnects at once");
     fake_mqtt_connection(MQTT_CONNECT_ACCEPTED);
     mqtt_bridge_get_stats(&stats);
     check((LINK_CONNECTED == stats.link) && (1u == stats.reconnects),
           "reconnect counted");
+    test_rejoin(&netif);
+}
+
+/*!
+ * @brief WiFi re-join: 3 s after the link drops, then after 5 s, 10 s and
+ *        every 20 s; a new outage starts again at 3 s. One re-join was
+ *        already counted for the failed first join.
+ *
+ * @param[in,out] p_netif The fake network interface (link up on entry).
+ */
+static void
+test_rejoin (struct netif * p_netif)
+{
+    uint32_t idx     = 0u;
+    bool     b_early = false;
+
+    check(1u == rejoins(), "no re-join while linked");
+    p_netif->b_up = 0u;
+    fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += REJOIN_AFTER_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == rejoins(), "no re-join before 3 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(2u == rejoins(), "re-join after 3 s");
+
+    for (idx = 0u; idx < REJOIN_STEPS; idx++)
+    {
+        g_fake_now_ms += g_rejoin_waits[idx] - 1u;
+        cyw43_utk_app_poll(p_netif);
+        b_early = b_early || ((idx + 2u) != rejoins());
+        g_fake_now_ms++;
+        cyw43_utk_app_poll(p_netif);
+    }
+
+    check((!b_early) && ((REJOIN_STEPS + 2u) == rejoins()),
+          "retries after 5 s, 10 s, then every 20 s");
+    p_netif->b_up = 1u;
+    cyw43_utk_app_poll(p_netif);
+    p_netif->b_up = 0u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += REJOIN_AFTER_MS;
+    cyw43_utk_app_poll(p_netif);
+    check((REJOIN_STEPS + 3u) == rejoins(), "a new outage starts again at 3 s");
+}
+
+/*!
+ * @brief WiFi re-join attempts counted by the bridge.
+ *
+ * @return The count.
+ */
+static uint32_t
+rejoins (void)
+{
+    mqtt_bridge_stats_t stats;
+
+    mqtt_bridge_get_stats(&stats);
+
+    return (stats.rejoins);
 }
 
 /*!
@@ -902,6 +997,17 @@ test_command (void)
     check(!command_parse("stop now", &cmd), "trailing text rejected");
     check(!command_parse("gains=1", &cmd), "gains takes no value");
     check(!command_parse("", &cmd), "empty rejected");
+    check((command_parse("#17 gains", &cmd)) && (17u == cmd.req_id)
+              && (COMMAND_GAINS == cmd.kind),
+          "request id");
+    check((command_parse("speed=150", &cmd)) && (0u == cmd.req_id),
+          "no request id is 0");
+    check((!command_parse("#12gains", &cmd))
+              && (!command_parse("#0 gains", &cmd))
+              && (!command_parse("# gains", &cmd)),
+          "malformed request ids rejected");
+    check((!command_parse("#5 bogus", &cmd)) && (5u == cmd.req_id),
+          "the id survives a bad command (for the reply)");
 
     /* Line assembler: CRLF, backspace, control bytes and overflow. */
     command_line_init(&line);

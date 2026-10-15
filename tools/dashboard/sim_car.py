@@ -87,6 +87,11 @@ class Car:
     # ---- commands (same grammar and limits as command.c) -----------------
     def command(self, text):
         text = text.strip()
+        req_id = 0                       # optional "#<id> " prefix
+        if text.startswith("#"):
+            head, _, body = text[1:].partition(" ")
+            if head.isdigit() and int(head) > 0 and body.strip():
+                req_id, text = int(head), body.strip()
         name, _, rest = text.partition("=")
         name = name.strip().lower()
         spec = {"start": 0, "stop": 0, "calibrate": 0, "gains": 0, "help": 0,
@@ -105,7 +110,8 @@ class Car:
         elif name in ("pid", "line") and any(v < 0 or v > 1000 for v in vals):
             err = "gain out of range 0..1000"
         if err:
-            self.event({"type": "cmd", "cmd": text, "ok": 0, "err": err})
+            self.event({"type": "cmd", "id": req_id, "cmd": text, "ok": 0,
+                        "err": err})
             return
         if name == "start":
             self.run_t0 = time.time()
@@ -124,7 +130,7 @@ class Car:
             self.line = vals
         elif name == "rate":
             self.rate_ms = int(vals[0])
-        self.event({"type": "cmd", "cmd": text, "ok": 1})
+        self.event({"type": "cmd", "id": req_id, "cmd": text, "ok": 1})
         if name == "help":
             self.event({"type": "help", "cmds": "start|stop|calibrate|gains|"
                         "help|speed=|pid=|ff=|line=|rate="})
