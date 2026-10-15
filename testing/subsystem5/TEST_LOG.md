@@ -13,6 +13,7 @@ Define a test here before running it. Test IDs never change.
 | S5-U01 | obstacle profile and bypass plan | FR7–FR8 | host | `make -C tests/host` | 0 failed |
 | S5-U02 | profile of known boxes | FR7, A9 | board | `APP_MODE=TEST_ULTRASONIC`; boxes at 150 and 250 mm, straight and offset | edges match tape measurements; servo 0° points right |
 | S5-U03 | bypass and line re-acquisition | FR8–FR9, A10 | manual | full bypass on the course, each allowed obstacle position, 5 times | clean rejoin every time |
+| S5-U04 | HC-SR04 no-target behaviour at 3.3 V (CSC05: test first) | A9, FR7 | board | `APP_MODE=TEST_ULTRASONIC`, sensor aimed at open space > 4 m; read the `a9,...` lines | every ping OUT_OF_RANGE; FAULT means no pulse: switch to 5 V + 1 k / 2 k divider before relying on "clear" |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`
 build on the car; **link** = `wifi_test.py`; **manual** = a person measures.

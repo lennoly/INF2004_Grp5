@@ -17,6 +17,7 @@
 #include "car_math.h"
 #include "hal.h"
 #include "motion.h"
+#include "timing.h"
 #include "imu.h"
 
 #define TASK_PRIORITY  (8)
@@ -609,6 +610,7 @@ imu_step (imu_history_t * p_hist)
     float32_t       speed    = 0.0f;
     bool            b_impact = false;
     uint32_t        axis     = 0u;
+    uint32_t        start_us = 0u;
 
     if (!read_sensors(acc, mag))
     {
@@ -630,8 +632,10 @@ imu_step (imu_history_t * p_hist)
         update_heading(mag, motion.turn_rate_dps);
         b_impact = detect_impact(acc, p_hist);
 
+        start_us = timing_start();
         terrain_hump_update(&g_hump, g_work.pitch_deg,
                             motion.odo_mm - p_hist->odo);
+        timing_stop(TIMING_HUMP, start_us);
         g_work.hump = g_hump;
         g_work.event =
             terrain_classify(speed, g_work.accel_mm_s2, motion.turn_rate_dps,
@@ -658,8 +662,9 @@ imu_step (imu_history_t * p_hist)
 static void
 imu_task (INT stacd, void * p_exinf)
 {
-    imu_history_t history = {0.0f, 0.0f, {0.0f, 0.0f, ONE_G_MG}, 0u};
-    UINT          imask   = 0u;
+    imu_history_t history  = {0.0f, 0.0f, {0.0f, 0.0f, ONE_G_MG}, 0u};
+    UINT          imask    = 0u;
+    uint32_t      start_us = 0u;
 
     (void) stacd;
     (void) p_exinf;
@@ -675,7 +680,9 @@ imu_task (INT stacd, void * p_exinf)
 
     for (;;)
     {
+        start_us = timing_start();
         imu_step(&history);
+        timing_stop(TIMING_IMU, start_us);
         (void) tk_dly_tsk(IMU_PERIOD_MS);
     }
 }

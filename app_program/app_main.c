@@ -31,6 +31,7 @@
 #include "telemetry.h"
 #include "vehicle.h"
 #include "app_tests.h"
+#include "timing.h"
 #include "app_main.h"
 
 #define USB_WAIT_POLLS (50)
@@ -69,6 +70,9 @@ usermain (void)
     (void) tm_printf((UB const *) "\n=== PicoCar on uT-Kernel 3.0 "
                                   "(APP_MODE %d) ===\n",
                      APP_MODE);
+
+    /* Task times, control jitter and CPU load: "timing" command. */
+    report_init("timing", timing_init());
 
 #if APP_MODE == APP_MODE_TEST_TELEMETRY
     /* Buddy 1 WiFi / MQTT test: telemetry only, no robot hardware, so it

@@ -41,10 +41,13 @@ The tuning boxes fill in from the car. Edit and press **Apply**:
 | `pid=kp,ki,kd` | wheel-speed PID | `SPEED_KP/KI/KD` 0.08, 0.6, 0 |
 | `ff=kf,offset` | feed-forward %/(mm/s), friction offset % | `SPEED_KF` 0.10, `SPEED_OFFSET_PCT` 18 |
 | `line=kp,ki,kd` | line-following PID | `LINE_KP/KI/KD` 160, 0, 12 |
-| `speed=mm/s` | cruise speed (60..400) | `SPEED_CRUISE_MM_S` 180 |
+| `speed=mm/s` | cruise speed (60..300) | `SPEED_CRUISE_MM_S` 180 |
 | `rate=ms` | telemetry period, 0 = off | 200 (MQTT), 1000 (USB) |
 
-Other commands: `start`, `stop`, `calibrate`, `gains`, `help`.
+Other commands: `start`, `stop`, `calibrate`, `gains`, `help`, `timing`
+(task times, control jitter and CPU load).
+Tuning (`pid=`, `ff=`, `line=`, `speed=`) is accepted only while the car is
+IDLE or STOPPED; while it drives, the reply says so.
 The car answers every command with an event (`cmd ... ok` or the reason it
 failed) and then reports the gains now in use.
 
@@ -57,8 +60,8 @@ Suggested workflow for speed PID (with `APP_MODE=TEST_MOTOR`):
 2. Press **Fast 20 Hz** to watch the step response in the speed plot.
 3. Change `pid=` / `ff=`, press START again (only the steps repeat), compare.
 
-Line PID: build `MISSION`, press **Start**, and adjust `line=` while the car
-follows the line; watch the line-error plot settle.
+Line PID: build `MISSION`, press **Start** and watch the line-error plot;
+press **Stop**, change `line=`, press **Start** again and compare.
 
 ## Logs (for the report)
 Each run creates `logs/<date_time>/`:

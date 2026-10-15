@@ -14,6 +14,7 @@ Define a test here before running it. Test IDs never change.
 | S2-U02 | motor response and speed loop | A4 | board | `APP_MODE=TEST_MOTOR`: open-loop PWM sweep, then step responses (dashboard serial, Fast 20 Hz) | speed follows the step without sustained oscillation |
 | S2-U03 | straight distance | NFR7, A3 | manual | `APP_MODE=TEST_MOTION`; 5 × 500 mm, measure with a tape | error within the NFR7 limit |
 | S2-U04 | 90° turns each way | NFR7, A3 | manual | `APP_MODE=TEST_MOTION`; 5 turns each way, protractor | error within the NFR7 limit |
+| S2-U05 | encoder glitch filter below the shortest half-period (CSC05) | A3 | board | boot any build with the encoder; read the `[encoder]` line; measure edges per wheel turn from telemetry `enc` (turn a wheel once) and set ENCODER_SLOTS, max speed from the TEST_MOTOR sweep into SPEED_WHEEL_MAX_MM_S | no `WARNING` line |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`
 build on the car; **link** = `wifi_test.py`; **manual** = a person measures.
