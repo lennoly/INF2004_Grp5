@@ -96,6 +96,11 @@ cyw43_utk_app_poll (struct netif * p_netif)
 
     watch_link(p_netif, now);
 
+    if (b_net)
+    {
+        mqtt_bridge_set_address(netif_ip4_addr(p_netif)->addr);
+    }
+
     if (0u != mqtt_client_is_connected(&g_client))
     {
         flush_tx();
@@ -188,12 +193,19 @@ start_connect (uint32_t now)
     g_attempt_ms = now;
     g_tries      = (g_tries < RETRY_DOUBLINGS_MAX) ? (g_tries + 1u) : g_tries;
     mqtt_disconnect(&g_client); /* does nothing when already idle */
-    mqtt_set_inpub_callback(&g_client, on_publish, on_data, NULL);
+    mqtt_bridge_count_attempt();
 
     if (0 != ipaddr_aton(MQTT_BROKER_IP, &broker))
     {
         err = mqtt_client_connect(&g_client, &broker, MQTT_BROKER_PORT,
                                   on_connection, NULL, &info);
+    }
+
+    /* mqtt_client_connect() clears the whole client, so the receive
+       callbacks are set after it, or commands would never arrive. */
+    if (ERR_OK == err)
+    {
+        mqtt_set_inpub_callback(&g_client, on_publish, on_data, NULL);
     }
 
     mqtt_bridge_set_link((ERR_OK == err) ? LINK_CONNECTING : LINK_BACKOFF);

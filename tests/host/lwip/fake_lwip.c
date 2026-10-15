@@ -46,6 +46,8 @@ err_t mqtt_client_connect(mqtt_client_t * client, ip_addr_t const * ipaddr,
     gp_client   = client;
     gp_conn_cb  = cb;
     client->b_connected = 0u;
+    gp_pub_cb  = NULL; /* like lwIP: connecting wipes the whole client */
+    gp_data_cb = NULL;
     return ERR_OK;
 }
 
@@ -113,6 +115,10 @@ void fake_mqtt_incoming(char const * topic, char const * text)
 {
     size_t len = strlen(text);
 
-    gp_pub_cb(NULL, topic, (u32_t) len);
-    gp_data_cb(NULL, (u8_t const *) text, (u16_t) len, MQTT_DATA_FLAG_LAST);
+    if ((NULL != gp_pub_cb) && (NULL != gp_data_cb))   /* as lwIP checks */
+    {
+        gp_pub_cb(NULL, topic, (u32_t) len);
+        gp_data_cb(NULL, (u8_t const *) text, (u16_t) len,
+                   MQTT_DATA_FLAG_LAST);
+    }
 }
