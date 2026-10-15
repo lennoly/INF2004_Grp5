@@ -126,7 +126,11 @@ class WifiAnalyzer:
         return False
 
     def results(self, now):
-        span = (self.last_msg - self.first) if self.first is not None else 0.0
+        open_outage = bool(self.outages) and self.outages[-1]["end"] is None
+        # An outage still going on runs until now, so the span must too, or
+        # the connected time goes negative and the rates explode.
+        end_t = now if open_outage else self.last_msg
+        span = (end_t - self.first) if self.first is not None else 0.0
         down = sum(((o["end"] if o["end"] is not None else now) - o["start"])
                    for o in self.outages)
         online_s = max(span - down, 1e-6)
@@ -159,8 +163,7 @@ class WifiAnalyzer:
             "rejoin": hb1.get("rejoin", 0) - hb0.get("rejoin", 0),
             "reboots": self.reboots,
             "outages": [dict(o) for o in self.outages],
-            "open_outage": bool(self.outages)
-            and self.outages[-1]["end"] is None,
+            "open_outage": open_outage,
         }
 
     def verdicts(self, r):
@@ -418,6 +421,12 @@ def self_test():
         ("250 ms round trip fails",
          v["command round trip (A1, < 100 ms)"] == "FAIL"),
     ]
+
+    short = WifiAnalyzer()                  # 10 s up, then 60 s silent
+    end = simulate(short, 70.0, (10.0, 1e9), 0.03, end_in_outage=True)
+    r = short.results(end)
+    checks.append(("rate stays ~5 Hz in a long open outage",
+                   4.5 <= r["tel_hz"] <= 5.5))
 
     empty = WifiAnalyzer()
     checks.append(("no car = FAIL",
