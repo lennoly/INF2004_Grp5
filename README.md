@@ -72,8 +72,9 @@ handle, so build inside WSL (Ubuntu):
 ### What `setup.sh` does
 Run it once after cloning (it skips anything already present). It downloads
 the course template (at the version our patch was made against) into
-`template/` and Pico SDK **2.2.0** into `sdk/`. It applies our template edits
-and links `template/app_program` to our `app_program/`. Both folders are
+`template/` and Pico SDK **2.2.0** into `sdk/`. It applies our template edits,
+removes the template's ports for other boards (only the Pico W / RP2040
+port is kept) and links `template/app_program` to our `app_program/`. Both folders are
 git-ignored, so edit code in `app_program/` only. Set `PICO_SDK_PATH` first to
 use an SDK you already have.
 
