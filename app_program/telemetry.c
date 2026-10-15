@@ -37,6 +37,14 @@
 #define LINE_GAINS         (3u)
 #define TERMINATOR         ('\0')
 
+/* The WiFi test build also prints the heartbeat on the USB console, so the
+   link can be watched there even while MQTT is down. */
+#if APP_MODE == APP_MODE_TEST_TELEMETRY
+#define HEARTBEAT_ON_CONSOLE (true)
+#else
+#define HEARTBEAT_ON_CONSOLE (false)
+#endif
+
 /* JSON output buffer; used only by the telemetry task. */
 static char g_buf[MQTT_BRIDGE_PAYLOAD_MAX];
 
@@ -236,18 +244,19 @@ handle_command_text (char const * p_text)
     {
         b_ok = execute(&cmd);
         (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"cmd\",\"cmd\":\"%s\","
-                                       "\"ok\":%d%s}",
-                          safe, b_ok ? 1 : 0,
+                          (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
+                                       "\"cmd\":\"%s\",\"ok\":%d%s}",
+                          as_uint(cmd.req_id), safe, b_ok ? 1 : 0,
                           b_ok ? ""
                                : ",\"err\":\"not available in this build\"");
     }
     else
     {
         (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"cmd\",\"cmd\":\"%s\","
-                                       "\"ok\":0,\"err\":\"%s\"}",
-                          safe, command_error());
+                          (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
+                                       "\"cmd\":\"%s\",\"ok\":0,"
+                                       "\"err\":\"%s\"}",
+                          as_uint(cmd.req_id), safe, command_error());
     }
 
     emit(TOPIC_EVENT, true);
@@ -459,17 +468,13 @@ send_heartbeat (void)
         gp_out,
         (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
                      "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
-                     "\"imu\":%d,\"i2cerr\":%u}",
+                     "\"rejoin\":%u,\"imu\":%d,\"i2cerr\":%u}",
         as_uint(now.lo / MS_PER_S), as_uint(g_hb_seq),
         vehicle_state_name(veh.state), link_name(link_stats.link),
         as_uint(link_stats.published), as_uint(link_stats.dropped),
         as_uint(link_stats.commands), as_uint(link_stats.reconnects),
-        imu.b_ok ? 1 : 0, as_uint(imu.i2c_errors));
-
-    if (LINK_DISABLED != link_stats.link)
-    {
-        (void) mqtt_bridge_publish(TOPIC_HEARTBEAT, g_buf);
-    }
+        as_uint(link_stats.rejoins), imu.b_ok ? 1 : 0, as_uint(imu.i2c_errors));
+    emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 
 /*!
@@ -494,7 +499,8 @@ check_events (void)
         (void) tm_sprintf(gp_out,
                           (UB const *) "{\"type\":\"state\",\"st\":\"%s\","
                                        "\"why\":\"%s\"}",
-                          vehicle_state_name(veh.state), veh.p_reason);
+                          vehicle_state_name(veh.state),
+                          (NULL != veh.p_reason) ? veh.p_reason : "");
         emit(TOPIC_EVENT, false);
     }
 

@@ -4,7 +4,8 @@
  *        the USB / UART serial console (pure C, host-testable).
  *
  * Grammar (keywords are case-insensitive, spaces around '=' and ',' are
- * ignored, one command per line):
+ * ignored, one command per line).  A command may start with a request id,
+ * "#<id> " (1..999999999), which the reply repeats, e.g. "#17 gains":
  *
  *   start | stop | calibrate | gains | help
  *   speed=<mm/s>                 cruise speed for line following
@@ -52,6 +53,7 @@ typedef struct
     command_id_t kind;
     uint32_t     n_args;
     float32_t    arg[COMMAND_MAX_ARGS];
+    uint32_t     req_id; /* "#<id>" prefix, 0 if none */
 } command_t;
 
 /* Line assembler for byte streams (serial console). */

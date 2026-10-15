@@ -125,6 +125,7 @@ mqtt_bridge_get_stats (mqtt_bridge_stats_t * p_out)
     p_out->dropped    = g_stats.dropped;
     p_out->commands   = g_stats.commands;
     p_out->reconnects = g_stats.reconnects;
+    p_out->rejoins    = g_stats.rejoins;
 }
 
 /*!
@@ -227,6 +228,15 @@ void
 mqtt_bridge_count_reconnect (void)
 {
     g_stats.reconnects++;
+}
+
+/*!
+ * @brief Count one WiFi re-join attempt (network side).
+ */
+void
+mqtt_bridge_count_rejoin (void)
+{
+    g_stats.rejoins++;
 }
 
 /*** end of file ***/

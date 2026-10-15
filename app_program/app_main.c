@@ -70,7 +70,17 @@ usermain (void)
                                   "(APP_MODE %d) ===\n",
                      APP_MODE);
 
-#if (APP_MODE == APP_MODE_MISSION) || (APP_MODE == APP_MODE_TEST_TELEMETRY)
+#if APP_MODE == APP_MODE_TEST_TELEMETRY
+    /* Buddy 1 WiFi / MQTT test: telemetry only, no robot hardware, so it
+       runs on a bare Pico W.  The heartbeat is also printed here. */
+    report_init("telemetry", telemetry_init(true));
+#if !(defined(TM_WIFI_MQTT) && TM_WIFI_MQTT)
+    /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
+    (void) tm_printf((UB const *) "[wifi] built without WiFi: add WIFI=cyw43 "
+                                  "WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 "
+                                  "WIFI_DNS=1 WIFI_MQTT=1\n");
+#endif
+#elif APP_MODE == APP_MODE_MISSION
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */
     report_init("encoder", encoder_init());
     report_init("motion", motion_init());

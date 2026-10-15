@@ -22,7 +22,7 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
 | `app_program/command, console_in` | text commands over USB/UART/MQTT (live tuning) |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 89/89 pass |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 98/98 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
@@ -128,11 +128,25 @@ mosquitto.org on Windows, and allow it through Windows Firewall).
 gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=usb_cdc WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
 # flash template/build_make/mtk3pico_smp0_usb_cdc_wifi_dns.uf2
 python tools/dashboard/picocar_dashboard.py --mqtt <broker IP>
-# or: mosquitto_pub -h <broker IP> -t picocar/car1/cmd -m start
+# or: mosquitto_pub -h <broker IP> -t picocar/car1/cmd -m gains
 ```
-Use `APP_MODE=MISSION` for the full mission with WiFi. If the car does not
-connect, the USB serial console shows the boot `[init]` lines and the link
-state.
+`TEST_TELEMETRY` runs only WiFi, MQTT and telemetry (no robot hardware), so
+**a bare Pico W is enough**; keep the USB cable in: the console prints the
+heartbeat every second (`link`, `pub`, `drop`, `recon`, `rejoin`). Sensor
+values in the telemetry read 0 in this build. Use `APP_MODE=MISSION` for the
+full mission with WiFi on the car.
+
+**4. Test the link** (with the board from step 3):
+```
+python tools/dashboard/wifi_test.py --mqtt <broker IP> --minutes 10
+```
+It times command round trips (`#<id> gains`; the reply repeats the id),
+counts telemetry and heartbeats, and lists every outage with its recovery
+time, then prints PASS / FAIL and saves `logs/<date_time>/wifi_*`. During the
+run, stop mosquitto for about 60 s (the board reconnects: `recon` goes up),
+then switch the hotspot off for about 30 s (the board re-joins the WiFi
+3 s after losing it, then retries after 5 s, 10 s and every 20 s: `rejoin`
+goes up).
 
 ## Bring-up order
 motor → motion → IR (calibrate) → barcode → IMU → ultrasonic → telemetry → mission.
