@@ -24,7 +24,7 @@ convention: one folder per student under `app_program/`, `TEAM.md`,
 | `app_program/subsystem5/` | Buddy 5: `servo`, `ultrasonic`, `obstacle`, `avoidance` |
 | `app_program/vehicle` | integration state machine (shared) |
 | `app_program/hal*` | Pico C SDK HAL + µT-Kernel interrupt binding (shared) |
-| `app_program/app_main, app_tests` | entry point + per-buddy test programs (shared) |
+| `app_program/app_main, app_tests` | entry point + test runner (shared); each buddy's test program is `subsystemN/subsystemN_test.c` |
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
 | `testing/` | test cases and results per subsystem, integration and system (`testing/README.md`) |
 | `videos/` | index of unlisted YouTube videos of tests and demos |
