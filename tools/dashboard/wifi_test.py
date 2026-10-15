@@ -164,6 +164,7 @@ class WifiAnalyzer:
             "reboots": self.reboots,
             "outages": [dict(o) for o in self.outages],
             "open_outage": open_outage,
+            "seen": self.first is not None,
         }
 
     def verdicts(self, r):
@@ -300,7 +301,10 @@ def run_live(args):
 def print_progress(an, elapsed, now):
     r = an.results(now)
     rtt = "-" if r["rtt_med"] is None else "%.0f ms" % r["rtt_med"]
-    down = "DOWN" if r["open_outage"] else "up"
+    if not r["seen"]:
+        down = "WAITING (nothing from the car yet)"
+    else:
+        down = "DOWN" if r["open_outage"] else "up"
     print("[%4.0f s] link %s  tel %.1f Hz  rtt %s  lost %d  drop %d  "
           "recon %d  rejoin %d  outages %d"
           % (elapsed, down, r["tel_hz"], rtt, r["lost"],
@@ -431,6 +435,8 @@ def self_test():
     empty = WifiAnalyzer()
     checks.append(("no car = FAIL",
                    empty.verdicts(empty.results(10.0))[0][1] == "FAIL"))
+    checks.append(("no car is not shown as up",
+                   not empty.results(10.0)["seen"]))
 
     for name, passed in checks:
         print("%s  %s" % ("ok  " if passed else "FAIL", name))
