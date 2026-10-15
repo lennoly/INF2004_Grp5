@@ -1,0 +1,15 @@
+/** @file subsystem3_test.h
+ *
+ * @brief Buddy 3 test programs (make APP_MODE=TEST_IR / TEST_BARCODE),
+ *        run by app_tests.c each time START is pressed.
+ */
+
+#ifndef SUBSYSTEM3_TEST_H
+#define SUBSYSTEM3_TEST_H
+
+void subsystem3_test_ir(void);
+void subsystem3_test_barcode(void);
+
+#endif /* SUBSYSTEM3_TEST_H */
+
+/*** end of file ***/

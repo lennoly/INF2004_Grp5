@@ -23,12 +23,12 @@ Shared files (`app_program/*.c|h` outside the subsystem folders, this file,
 
 | Subsystem | Files |
 |---|---|
-| 1 | `mqtt_bridge`, `mqtt_lwip`, `telemetry`, `command`, `console_in` |
-| 2 | `motor`, `encoder`, `pid`, `motion` |
-| 3 | `ir_sensor`, `line_follow`, `barcode`, `barcode_decode` |
-| 4 | `imu`, `terrain` |
-| 5 | `ultrasonic`, `servo`, `obstacle`, `avoidance` |
-| shared | `app_main`, `app_tests`, `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`; `demo_tasks`, `usb_console_compat.h` (from the template) |
+| 1 | `mqtt_bridge`, `mqtt_lwip`, `telemetry`, `command`, `console_in` (TEST_TELEMETRY runs from `app_main.c`) |
+| 2 | `motor`, `encoder`, `pid`, `motion`; tests `subsystem2_test` (TEST_MOTOR, TEST_MOTION) |
+| 3 | `ir_sensor`, `line_follow`, `barcode`, `barcode_decode`; tests `subsystem3_test` (TEST_IR, TEST_BARCODE) |
+| 4 | `imu`, `terrain`; tests `subsystem4_test` (TEST_IMU) |
+| 5 | `ultrasonic`, `servo`, `obstacle`, `avoidance`; tests `subsystem5_test` (TEST_ULTRASONIC) |
+| shared | `app_main`, `app_tests` (test runner: START button, per-mode set-up), `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`; `demo_tasks`, `usb_console_compat.h` (from the template) |
 
 All pins and tunables are in `app_program/car_config.h`.
 
