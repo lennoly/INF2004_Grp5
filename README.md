@@ -22,7 +22,7 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
 | `app_program/command, console_in` | text commands over USB/UART/MQTT (live tuning) |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 106/106 pass |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 107/107 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
@@ -144,6 +144,7 @@ Use `APP_MODE=MISSION` for the full mission with WiFi on the car.
 | Heartbeat field | Meaning |
 |---|---|
 | `link` | `WAIT_NET` (no WiFi yet), `CONNECTING`, `CONNECTED`, `BACKOFF` (refused, retrying) |
+| `wifi` | WiFi state in words: `joined`, `joining`, `hotspot not found ...`, `wrong WiFi password`, `joined, waiting for an IP address` |
 | `ip`, `broker` | the board's own address, and the broker address it was built with |
 | `tries`, `recon`, `rejoin` | broker attempts, reconnects after a loss, WiFi re-joins |
 | `pub`, `drop` | messages sent, and dropped while offline |
@@ -156,7 +157,7 @@ If `link` never reaches `CONNECTED`, `why` says where to look:
 | `no answer from broker (firewall? address?)` | firewall rule above; `broker` must be the laptop's current IP |
 | `closed by broker or network (TCP reset)` | nothing accepted the connection: antivirus/VPN firewall, or wrong port |
 | `refused: not authorised ...` | mosquitto started without `allow_anonymous true` (use `-c`) |
-| `ip` is `0.0.0.0` | not on the WiFi: check SSID/password, 2.4 GHz, and that the hotspot is on. The board keeps retrying (first after 40 s, then every 20 s at most) |
+| `link` `WAIT_NET` | not on the WiFi yet: `wifi` says why. The board keeps retrying (first after 40 s, then every 20 s at most) |
 
 An iPhone hotspot hides itself from new devices after a while: keep
 Settings → Personal Hotspot open (with "Maximise Compatibility" on) while

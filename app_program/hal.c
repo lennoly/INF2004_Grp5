@@ -574,6 +574,59 @@ hal_wifi_rejoin (void)
 }
 
 /*!
+ * @brief The WiFi connection state in words (heartbeat "wifi").  Call only
+ *        from the CYW43 service task, like hal_wifi_rejoin().
+ *
+ * @return A string literal.
+ */
+char const *
+hal_wifi_state (void)
+{
+    char const * p_text = "-";
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+#if defined(TM_WIFI_NETIF) && TM_WIFI_NETIF
+    int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+#else
+    int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+#endif
+
+    switch (status)
+    {
+        case CYW43_LINK_UP:
+            p_text = "joined";
+        break;
+
+        case CYW43_LINK_NOIP:
+            p_text = "joined, waiting for an IP address";
+        break;
+
+        case CYW43_LINK_JOIN:
+            p_text = "joining";
+        break;
+
+        case CYW43_LINK_NONET:
+            p_text = "hotspot not found (2.4 GHz? name?)";
+        break;
+
+        case CYW43_LINK_BADAUTH:
+            p_text = "wrong WiFi password";
+        break;
+
+        case CYW43_LINK_FAIL:
+            p_text = "join failed";
+        break;
+
+        default:
+            p_text = "not joined";
+        break;
+    }
+#endif
+
+    return (p_text);
+}
+
+/*!
  * @brief Data memory barrier (DMB) plus compiler barrier.
  *
  * Used by the lock-free rings shared between tasks and the USB / lwIP

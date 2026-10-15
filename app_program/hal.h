@@ -61,7 +61,8 @@ void hal_alarm_start(uint32_t period_us);
 void hal_alarm_ack_rearm(uint32_t period_us);
 
 /* WiFi: start re-joining the access point (CYW43 service task only). */
-bool hal_wifi_rejoin(void);
+bool         hal_wifi_rejoin(void);
+char const * hal_wifi_state(void);
 
 /* Memory barrier for data shared between tasks and cores. */
 void hal_memory_barrier(void);

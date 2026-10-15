@@ -791,6 +791,8 @@ test_mqtt_client (void)
     g_fake_now_ms = NET_UP_MS;
     cyw43_utk_app_poll(&netif);
     check(0u == g_fake_connects, "no attempt without a network");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_wifi, "host"), "the WiFi state is reported");
     g_fake_now_ms += BOOT_JOIN_MS - 1u;
     cyw43_utk_app_poll(&netif);
     check(0u == rejoins(), "the first join at power-up is left to finish");

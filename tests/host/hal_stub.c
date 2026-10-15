@@ -29,4 +29,15 @@ hal_wifi_rejoin (void)
     return (false);
 }
 
+/*!
+ * @brief WiFi state text for the host tests.
+ *
+ * @return A fixed string literal, checked by the tests.
+ */
+char const *
+hal_wifi_state (void)
+{
+    return ("host");
+}
+
 /*** end of file ***/
