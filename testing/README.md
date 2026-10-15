@@ -29,7 +29,7 @@ Test IDs never change and are never reused, even if a test is dropped.
 | Kind | How | Output |
 |---|---|---|
 | **host** (automatic, no hardware) | `make -C tests/host` | `N passed, 0 failed` |
-| **board** (test program on the car) | build with `APP_MODE=TEST_xxx` (README "Build and flash"), flash, press **GP20 START** | CSV / text on the USB console |
+| **board** (test program on the car, in `app_program/subsystemN/subsystemN_test.c`) | build with `APP_MODE=TEST_xxx` (README "Build and flash"), flash, press **GP20 START** | CSV / text on the USB console |
 | **link** (WiFi) | `python tools/dashboard/wifi_test.py --mqtt <broker IP>` (on the `buddy1-wifi` branch until it is merged) | PASS / FAIL + `logs/<date_time>/wifi_*` |
 | **manual** | a person measures (tape, protractor, ruler, scope) | numbers written in the result row |
 
