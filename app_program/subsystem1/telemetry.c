@@ -160,6 +160,7 @@ telemetry_task (INT stacd, void * p_exinf)
     uint32_t            last_hb    = 0u;
     uint32_t            last_event = 0u;
     mqtt_bridge_stats_t link_stats;
+    vehicle_status_t    veh;
 
     (void) stacd;
     (void) p_exinf;
@@ -199,6 +200,11 @@ telemetry_task (INT stacd, void * p_exinf)
             emit(TOPIC_TELEMETRY, false);
         }
 
+        /* A WiFi chip restart stalls the cyw43 task (above motion), so it
+           is allowed only while the car is not driving. */
+        vehicle_get_status(&veh);
+        mqtt_bridge_set_restart_ok((VS_IDLE == veh.state)
+                                   || (VS_STOPPED == veh.state));
         mqtt_bridge_get_stats(&link_stats);
 
         if ((LINK_DISABLED != link_stats.link)
@@ -496,7 +502,7 @@ send_heartbeat (void)
         gp_out,
         (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
                      "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
-                     "\"rejoin\":%u,\"wifi\":\"%s\","
+                     "\"rejoin\":%u,\"wreset\":%u,\"wifi\":\"%s\","
                      "\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
                      "\"tries\":%u,\"why\":\"%s\",\"imu\":%d,"
                      "\"i2cerr\":%u}",
@@ -504,11 +510,12 @@ send_heartbeat (void)
         vehicle_state_name(veh.state), link_name(link_stats.link),
         as_uint(link_stats.published), as_uint(link_stats.dropped),
         as_uint(link_stats.commands), as_uint(link_stats.reconnects),
-        as_uint(link_stats.rejoins), link_stats.p_wifi,
-        ip_byte(link_stats.address, 0u), ip_byte(link_stats.address, 1u),
-        ip_byte(link_stats.address, 2u), ip_byte(link_stats.address, 3u),
-        BROKER_TEXT, as_uint(link_stats.attempts), link_stats.p_why,
-        imu.b_ok ? 1 : 0, as_uint(imu.i2c_errors));
+        as_uint(link_stats.rejoins), as_uint(link_stats.wifi_restarts),
+        link_stats.p_wifi, ip_byte(link_stats.address, 0u),
+        ip_byte(link_stats.address, 1u), ip_byte(link_stats.address, 2u),
+        ip_byte(link_stats.address, 3u), BROKER_TEXT,
+        as_uint(link_stats.attempts), link_stats.p_why, imu.b_ok ? 1 : 0,
+        as_uint(imu.i2c_errors));
     emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 

@@ -6,6 +6,8 @@
 
 #include "hal_stub.h"
 
+bool gb_stub_join_failed = false;
+
 /*!
  * @brief Compiler-only barrier: the host tests are single-threaded.
  */
@@ -27,6 +29,29 @@ bool
 hal_wifi_rejoin (void)
 {
     return (false);
+}
+
+/*!
+ * @brief No WiFi chip in the host tests: the restart does nothing (the
+ *        test counts restarts with the bridge's counter).
+ *
+ * @return false.
+ */
+bool
+hal_wifi_restart (void)
+{
+    return (false);
+}
+
+/*!
+ * @brief Join result for the host tests.
+ *
+ * @return gb_stub_join_failed.
+ */
+bool
+hal_wifi_join_failed (void)
+{
+    return (gb_stub_join_failed);
 }
 
 /*!
