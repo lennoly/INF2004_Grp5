@@ -114,7 +114,7 @@ Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic ana
 | IR left | VCC / GND / **A0** | 3V3 / GND / **GP26 (ADC0)** | use analog output, D0 unused |
 | IR right | VCC / GND / **A0** | 3V3 / GND / **GP27 (ADC1)** | |
 | IR barcode | VCC / GND / **A0** | 3V3 / GND / **GP28 (ADC2)** | |
-| GY-511 IMU | VIN / GND / SDA / SCL | 3V3 / GND / **GP4 / GP5** | I2C0 at 400 kHz; chip X axis forward, Z up |
+| LSM303D IMU | VIN / GND / SDA / SCL | 3V3 / GND / **GP4 / GP5** | I2C0 at 400 kHz; chip X axis forward, Z up |
 | HC-SR04 | VCC / GND / TRIG / ECHO | 3V3 / GND / **GP6 / GP7** | per course slide; a 5 V module needs a divider on ECHO |
 | Servo | signal / V+ / GND | **Servo port GP12** | 90° = straight ahead |
 | Buttons | — | GP20 START, GP21 STOP | on-board |
@@ -347,14 +347,14 @@ Hardware test: `APP_MODE=TEST_BARCODE` (drive or push the car over each barcode 
 
 ## 4.4 Buddy 4 — IMU-Based Motion and Terrain Monitoring
 
-**IMU processing** (`imu.c`). The LSM303DLHC is configured as follows (values from its datasheet):
+**IMU processing** (`imu.c`). The LSM303D (I2C address 0x1D, WHO_AM_I 0x49) is configured as follows (values from its datasheet):
 
-- Accelerometer: 100 Hz, ±2 g, high-resolution mode, 1 mg/LSB.
-- Magnetometer: 75 Hz, ±1.3 gauss.
+- Accelerometer: 100 Hz, ±2 g, block data update, 0.061 mg/LSB.
+- Magnetometer: 50 Hz, high resolution, ±4 gauss, continuous conversion.
 
 At start-up, 100 samples taken while the car is still give the accelerometer biases. The magnetometer's hard-iron offsets come from the min/max recorded during the 360° calibration spin.
 
-**No gyroscope.** The GY-511 has no gyro, so:
+**No gyroscope.** The LSM303D has no gyro, so:
 
 - Pitch = atan2(ax, √(ay²+az²)), with the car's own acceleration (d(speed)/dt from the encoders) removed from ax first, so that braking is not mistaken for a slope.
 - Turn rate is reported from the encoders ((vR − vL)/track) and from the magnetometer heading derivative.
