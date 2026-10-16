@@ -14,6 +14,7 @@
 #include "car_math.h"
 #include "car_types.h"
 #include "command.h"
+#include "hal_stub.h"
 #include "line_follow.h"
 #include "lwip/apps/mqtt.h"
 #include "mqtt_bridge.h"
@@ -106,9 +107,11 @@
 #define NET_UP_MS       (5000u)  /* the network comes up after boot  */
 #define FIRST_WINDOW_MS (2000u)  /* the first attempt's time limit   */
 #define SESSION_MS      (60000u) /* a session that ran for a while   */
-#define BOOT_JOIN_MS    (40000u) /* first join at power-up may take   */
 #define REJOIN_AFTER_MS (3000u)  /* first re-join after the link drops */
-#define REJOIN_STEPS    (4u)     /* retries checked after the first     */
+#define REJOIN_EVERY_MS (5000u)  /* then a re-join every 5 s           */
+#define RESTART_MS      (10000u) /* still down: WiFi chip restart      */
+#define NOIP_REJOIN_MS  (15000u) /* joined without an IP: retry period  */
+#define FAILED_STEPS    (3u)     /* failed-join retries checked         */
 
 typedef struct
 {
@@ -126,10 +129,6 @@ static c39_pattern_t const g_c39[] = {{'A', "100001001"},
                                       {'C', "101001000"},
                                       {'D', "000011001"},
                                       {'*', "010010100"}};
-
-/* WiFi re-join retry intervals after the first attempt. */
-static uint32_t const g_rejoin_waits[REJOIN_STEPS] = {5000u, 10000u, 20000u,
-                                                      20000u};
 
 static uint32_t g_pass = 0u;
 static uint32_t g_fail = 0u;
@@ -156,7 +155,10 @@ static void      test_obstacle(void);
 static void      test_bridge(void);
 static void      test_mqtt_client(void);
 static void      test_rejoin(struct netif * p_netif);
+static void      test_noip_rejoin(struct netif * p_netif);
+static void      test_failed_join(struct netif * p_netif);
 static uint32_t  rejoins(void);
+static uint32_t  restarts(void);
 static uint32_t  feed_text(command_line_t * p_line, char const * p_text,
                            char * p_out);
 static void      test_command(void);
@@ -795,12 +797,14 @@ test_mqtt_client (void)
     check(0u == g_fake_connects, "no attempt without a network");
     mqtt_bridge_get_stats(&stats);
     check(0 == strcmp(stats.p_wifi, "host"), "the WiFi state is reported");
-    g_fake_now_ms += BOOT_JOIN_MS - 1u;
+    g_fake_now_ms += RESTART_MS - 1u;
     cyw43_utk_app_poll(&netif);
-    check(0u == rejoins(), "the first join at power-up is left to finish");
+    check((0u == rejoins()) && (0u == restarts()),
+          "the first join at power-up is left to run");
     g_fake_now_ms++;
     cyw43_utk_app_poll(&netif);
-    check(1u == rejoins(), "a failed first join is retried");
+    check((0u == rejoins()) && (1u == restarts()),
+          "no link 10 s after power-up: WiFi chip restarted");
     netif.b_up    = 1u;
     netif.ip.addr = 1u;
     cyw43_utk_app_poll(&netif);
@@ -867,47 +871,135 @@ test_mqtt_client (void)
 }
 
 /*!
- * @brief WiFi re-join: 3 s after the link drops, then after 5 s, 10 s and
- *        every 20 s; a new outage starts again at 3 s. One re-join was
- *        already counted for the failed first join.
+ * @brief WiFi re-join: 3 s after the link drops, then every 5 s; a chip
+ *        restart 10 s into the outage and every 10 s after it, but never
+ *        while the car is driving; a new outage starts again at 3 s. One
+ *        chip restart was already counted at power-up.
  *
  * @param[in,out] p_netif The fake network interface (link up on entry).
  */
 static void
 test_rejoin (struct netif * p_netif)
 {
-    uint32_t idx     = 0u;
-    bool     b_early = false;
-
-    check(1u == rejoins(), "no re-join while linked");
+    check((0u == rejoins()) && (1u == restarts()), "no re-join while linked");
     p_netif->b_up = 0u;
     fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
     cyw43_utk_app_poll(p_netif);
     g_fake_now_ms += REJOIN_AFTER_MS - 1u;
     cyw43_utk_app_poll(p_netif);
-    check(1u == rejoins(), "no re-join before 3 s");
+    check(0u == rejoins(), "no re-join before 3 s");
     g_fake_now_ms++;
     cyw43_utk_app_poll(p_netif);
-    check(2u == rejoins(), "re-join after 3 s");
+    check(1u == rejoins(), "re-join after 3 s");
+    g_fake_now_ms += REJOIN_EVERY_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == rejoins(), "the next re-join waits 5 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(2u == rejoins(), "re-join again after 5 s");
 
-    for (idx = 0u; idx < REJOIN_STEPS; idx++)
-    {
-        g_fake_now_ms += g_rejoin_waits[idx] - 1u;
-        cyw43_utk_app_poll(p_netif);
-        b_early = b_early || ((idx + 2u) != rejoins());
-        g_fake_now_ms++;
-        cyw43_utk_app_poll(p_netif);
-    }
+    /* 8 s into the outage: the chip restart is due at 10 s. */
+    g_fake_now_ms += (RESTART_MS - REJOIN_AFTER_MS - REJOIN_EVERY_MS) - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == restarts(), "no chip restart before 10 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check((2u == restarts()) && (2u == rejoins()),
+          "still down after 10 s: WiFi chip restarted");
+    g_fake_now_ms += REJOIN_EVERY_MS;
+    cyw43_utk_app_poll(p_netif);
+    check(3u == rejoins(), "re-join 5 s after the restart");
 
-    check((!b_early) && ((REJOIN_STEPS + 2u) == rejoins()),
-          "retries after 5 s, 10 s, then every 20 s");
+    mqtt_bridge_set_restart_ok(false);
+    g_fake_now_ms += REJOIN_EVERY_MS;
+    cyw43_utk_app_poll(p_netif);
+    check((2u == restarts()) && (4u == rejoins()),
+          "driving: no chip restart, re-joins go on");
+    mqtt_bridge_set_restart_ok(true);
+
     p_netif->b_up = 1u;
     cyw43_utk_app_poll(p_netif);
     p_netif->b_up = 0u;
     cyw43_utk_app_poll(p_netif);
     g_fake_now_ms += REJOIN_AFTER_MS;
     cyw43_utk_app_poll(p_netif);
-    check((REJOIN_STEPS + 3u) == rejoins(), "a new outage starts again at 3 s");
+    check(5u == rejoins(), "a new outage starts again at 3 s");
+    test_noip_rejoin(p_netif);
+}
+
+/*!
+ * @brief Joined but no IP address (DHCP silent): DHCP restart and re-join
+ *        every 15 s until an address arrives, then quiet again.
+ *
+ * @param[in,out] p_netif The fake network interface (link down on entry).
+ */
+static void
+test_noip_rejoin (struct netif * p_netif)
+{
+    uint32_t before = 0u;
+
+    p_netif->b_up    = 1u;
+    p_netif->ip.addr = 1u;
+    cyw43_utk_app_poll(p_netif);
+    before = rejoins();
+    check(0u == g_fake_dhcp_starts, "a link-down outage does not restart DHCP");
+
+    p_netif->ip.addr = 0u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += NOIP_REJOIN_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(before == rejoins(), "joined without an IP: DHCP gets 15 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(((before + 1u) == rejoins()) && (1u == g_fake_dhcp_starts),
+          "still no IP after 15 s: DHCP restarted and re-joined");
+    g_fake_now_ms += NOIP_REJOIN_MS;
+    cyw43_utk_app_poll(p_netif);
+    check(((before + 2u) == rejoins()) && (2u == g_fake_dhcp_starts),
+          "and again every 15 s");
+
+    p_netif->ip.addr = 1u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += NOIP_REJOIN_MS;
+    cyw43_utk_app_poll(p_netif);
+    check((before + 2u) == rejoins(), "an address ends the retries");
+    test_failed_join(p_netif);
+}
+
+/*!
+ * @brief A join that has failed (hotspot not found) is retried every 5 s
+ *        from the start, without the 3 s first wait (chip restarts are
+ *        held off here to see the re-joins alone).
+ *
+ * @param[in,out] p_netif The fake network interface (linked on entry).
+ */
+static void
+test_failed_join (struct netif * p_netif)
+{
+    uint32_t before  = rejoins();
+    uint32_t idx     = 0u;
+    bool     b_early = false;
+
+    mqtt_bridge_set_restart_ok(false);
+    p_netif->b_up       = 0u;
+    gb_stub_join_failed = true;
+    cyw43_utk_app_poll(p_netif);
+
+    for (idx = 0u; idx < FAILED_STEPS; idx++)
+    {
+        g_fake_now_ms += REJOIN_EVERY_MS - 1u;
+        cyw43_utk_app_poll(p_netif);
+        b_early = b_early || ((before + idx) != rejoins());
+        g_fake_now_ms++;
+        cyw43_utk_app_poll(p_netif);
+    }
+
+    check((!b_early) && ((before + FAILED_STEPS) == rejoins()),
+          "a failed join is retried every 5 s");
+    gb_stub_join_failed = false;
+    p_netif->b_up       = 1u;
+    cyw43_utk_app_poll(p_netif);
+    mqtt_bridge_set_restart_ok(true);
 }
 
 /*!
@@ -923,6 +1015,21 @@ rejoins (void)
     mqtt_bridge_get_stats(&stats);
 
     return (stats.rejoins);
+}
+
+/*!
+ * @brief WiFi chip restarts counted by the bridge.
+ *
+ * @return The count.
+ */
+static uint32_t
+restarts (void)
+{
+    mqtt_bridge_stats_t stats;
+
+    mqtt_bridge_get_stats(&stats);
+
+    return (stats.wifi_restarts);
 }
 
 /*!
