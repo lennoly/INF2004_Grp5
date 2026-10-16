@@ -34,6 +34,7 @@ static volatile char                g_rx[RX_SLOTS][MQTT_BRIDGE_CMD_MAX];
 static volatile uint32_t            g_rx_head = 0u;
 static volatile uint32_t            g_rx_tail = 0u;
 static volatile mqtt_bridge_stats_t g_stats;
+static volatile bool                gb_restart_ok = true; /* car not driving */
 
 /*!
  * @brief Queue a message for publishing (application side).
@@ -120,16 +121,17 @@ mqtt_bridge_get_command (char * p_out, uint32_t size)
 void
 mqtt_bridge_get_stats (mqtt_bridge_stats_t * p_out)
 {
-    p_out->link       = g_stats.link;
-    p_out->published  = g_stats.published;
-    p_out->dropped    = g_stats.dropped;
-    p_out->commands   = g_stats.commands;
-    p_out->reconnects = g_stats.reconnects;
-    p_out->rejoins    = g_stats.rejoins;
-    p_out->attempts   = g_stats.attempts;
-    p_out->address    = g_stats.address;
-    p_out->p_why      = (NULL != g_stats.p_why) ? g_stats.p_why : "-";
-    p_out->p_wifi     = (NULL != g_stats.p_wifi) ? g_stats.p_wifi : "-";
+    p_out->link          = g_stats.link;
+    p_out->published     = g_stats.published;
+    p_out->dropped       = g_stats.dropped;
+    p_out->commands      = g_stats.commands;
+    p_out->reconnects    = g_stats.reconnects;
+    p_out->rejoins       = g_stats.rejoins;
+    p_out->wifi_restarts = g_stats.wifi_restarts;
+    p_out->attempts      = g_stats.attempts;
+    p_out->address       = g_stats.address;
+    p_out->p_why         = (NULL != g_stats.p_why) ? g_stats.p_why : "-";
+    p_out->p_wifi        = (NULL != g_stats.p_wifi) ? g_stats.p_wifi : "-";
 }
 
 /*!
@@ -241,6 +243,38 @@ void
 mqtt_bridge_count_rejoin (void)
 {
     g_stats.rejoins++;
+}
+
+/*!
+ * @brief Count one WiFi chip power-cycle (network side).
+ */
+void
+mqtt_bridge_count_wifi_restart (void)
+{
+    g_stats.wifi_restarts++;
+}
+
+/*!
+ * @brief Allow or forbid WiFi chip restarts, which block the CYW43 task
+ *        (above motion) while the firmware loads (application side).
+ *
+ * @param[in] b_ok true while the car is not driving.
+ */
+void
+mqtt_bridge_set_restart_ok (bool b_ok)
+{
+    gb_restart_ok = b_ok;
+}
+
+/*!
+ * @brief Whether a WiFi chip restart is allowed now (network side).
+ *
+ * @return true while the car is not driving.
+ */
+bool
+mqtt_bridge_restart_ok (void)
+{
+    return (gb_restart_ok);
 }
 
 /*!

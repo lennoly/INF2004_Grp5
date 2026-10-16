@@ -6,6 +6,7 @@
 
 u32_t    g_fake_now_ms      = 0u;
 uint32_t g_fake_connects    = 0u;
+uint32_t g_fake_dhcp_starts = 0u;
 err_t    g_fake_publish_err = ERR_OK;
 char     g_fake_topic[FAKE_TOPIC_MAX];
 u8_t     g_fake_retain = 0u;
@@ -25,6 +26,13 @@ static void copy_topic(char * p_dst, char const * p_src)
 u32_t sys_now(void)
 {
     return g_fake_now_ms;
+}
+
+err_t dhcp_start(struct netif * netif)
+{
+    (void) netif;
+    g_fake_dhcp_starts++;
+    return ERR_OK;
 }
 
 int ipaddr_aton(char const * cp, ip_addr_t * addr)
