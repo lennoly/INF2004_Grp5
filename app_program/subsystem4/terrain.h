@@ -3,7 +3,7 @@
  * @brief Buddy 4 - hump detection / height estimation and motion-event
  *        classification (pure C, host-testable).
  *
- * Hump height: the LSM303DLHC has no gyro, and double-integrating
+ * Hump height: the LSM303D has no gyro, and double-integrating
  * acceleration drifts badly, so the height is the path integral
  *      h = sum(ds * sin(pitch))
  * using pitch from the (acceleration-compensated) accelerometer and ds

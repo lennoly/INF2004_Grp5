@@ -1,13 +1,14 @@
 /** @file imu.c
  *
- * @brief Buddy 4 - LSM303DLHC driver and terrain monitoring task.
+ * @brief Buddy 4 - LSM303D driver and terrain monitoring task.
  *
- * Register values from the LSM303DLHC datasheet (DocID018771):
- *   CTRL_REG1_A 0x20 = 0x57 : 100 Hz, normal mode, X/Y/Z enabled
- *   CTRL_REG4_A 0x23 = 0x88 : BDU, +-2 g, high resolution (1 mg/LSB)
- *   CRA_REG_M   0x00 = 0x18 : 75 Hz magnetometer
- *   CRB_REG_M   0x01 = 0x20 : +-1.3 gauss
- *   MR_REG_M    0x02 = 0x00 : continuous conversion
+ * One I2C address (0x1D, SA0 high) for both sensors.  Register values from
+ * the LSM303D datasheet (DocID023312):
+ *   CTRL1 0x20 = 0x6F : 100 Hz accelerometer, BDU, X/Y/Z enabled
+ *   CTRL2 0x21 = 0x00 : +-2 g (0.061 mg/LSB)
+ *   CTRL5 0x24 = 0x70 : magnetometer high resolution, 50 Hz
+ *   CTRL6 0x25 = 0x20 : +-4 gauss
+ *   CTRL7 0x26 = 0x00 : magnetometer continuous conversion
  */
 
 #include <stdint.h>
@@ -22,22 +23,21 @@
 
 #define TASK_PRIORITY  (8)
 #define TASK_STACK     (3072)
-#define ADDR_ACCEL     (0x19u)
-#define ADDR_MAG       (0x1Eu)
-#define REG_CTRL1_A    (0x20u)
-#define REG_CTRL4_A    (0x23u)
+#define ADDR_IMU       (0x1Du)
+#define REG_CTRL1      (0x20u)
+#define REG_CTRL2      (0x21u)
+#define REG_CTRL5      (0x24u)
+#define REG_CTRL6      (0x25u)
+#define REG_CTRL7      (0x26u)
 #define REG_OUT_X_L_A  (0x28u)
-#define REG_CRA_M      (0x00u)
-#define REG_CRB_M      (0x01u)
-#define REG_MR_M       (0x02u)
-#define REG_OUT_X_H_M  (0x03u)
+#define REG_OUT_X_L_M  (0x08u)
 #define AUTO_INCREMENT (0x80u)
-#define VAL_CTRL1_A    (0x57u)
-#define VAL_CTRL4_A    (0x88u)
-#define VAL_CRA_M      (0x18u)
-#define VAL_CRB_M      (0x20u)
-#define VAL_MR_M       (0x00u)
-#define HR_DIVISOR     (16) /* 12-bit left-justified data          */
+#define VAL_CTRL1      (0x6Fu)
+#define VAL_CTRL2      (0x00u)
+#define VAL_CTRL5      (0x70u)
+#define VAL_CTRL6      (0x20u)
+#define VAL_CTRL7      (0x00u)
+#define MG_PER_LSB     (0.061f) /* accelerometer at +-2 g            */
 #define SIGN_BIT_16    (0x8000u)
 #define WRAP_16        (0x10000)
 #define IMU_AXES       (3u)
@@ -93,7 +93,6 @@ static bool      reg_read(uint8_t addr, uint8_t reg, uint8_t * p_dst,
                           uint32_t count);
 static int32_t   to_signed16(uint32_t raw16);
 static int32_t   pair_le(uint8_t const * p_bytes);
-static int32_t   pair_be(uint8_t const * p_bytes);
 static bool      read_sensors(float32_t * p_acc, float32_t * p_mag);
 static void      calibrate_accel(void);
 static void      mag_track(float32_t const * p_mag);
@@ -124,11 +123,11 @@ imu_init (void)
 
     g_st.az_mg = ONE_G_MG;
     (void) hal_i2c_init(PIN_IMU_SDA, PIN_IMU_SCL, IMU_I2C_HZ);
-    b_ok = (reg_write(ADDR_ACCEL, REG_CTRL1_A, VAL_CTRL1_A))
-           && (reg_write(ADDR_ACCEL, REG_CTRL4_A, VAL_CTRL4_A))
-           && (reg_write(ADDR_MAG, REG_CRA_M, VAL_CRA_M))
-           && (reg_write(ADDR_MAG, REG_CRB_M, VAL_CRB_M))
-           && (reg_write(ADDR_MAG, REG_MR_M, VAL_MR_M));
+    b_ok = (reg_write(ADDR_IMU, REG_CTRL1, VAL_CTRL1))
+           && (reg_write(ADDR_IMU, REG_CTRL2, VAL_CTRL2))
+           && (reg_write(ADDR_IMU, REG_CTRL5, VAL_CTRL5))
+           && (reg_write(ADDR_IMU, REG_CTRL6, VAL_CTRL6))
+           && (reg_write(ADDR_IMU, REG_CTRL7, VAL_CTRL7));
     g_st.b_ok = b_ok;
 
     ctsk.tskatr = TA_HLNG | TA_RNG3;
@@ -298,7 +297,7 @@ to_signed16 (uint32_t raw16)
 }
 
 /*!
- * @brief Little-endian byte pair (accelerometer) to a signed value.
+ * @brief Little-endian byte pair to a signed value.
  *
  * @param[in] p_bytes Low byte, then high byte.
  *
@@ -311,21 +310,6 @@ pair_le (uint8_t const * p_bytes)
        promoted signed int out of the bitwise operations. */
     return (to_signed16(((uint32_t) p_bytes[1] << BYTE_SHIFT)
                         | (uint32_t) p_bytes[0]));
-}
-
-/*!
- * @brief Big-endian byte pair (magnetometer) to a signed value.
- *
- * @param[in] p_bytes High byte, then low byte.
- *
- * @return The value in -32768..32767.
- */
-static int32_t
-pair_be (uint8_t const * p_bytes)
-{
-    /* Casts: as in pair_le(). */
-    return (to_signed16(((uint32_t) p_bytes[0] << BYTE_SHIFT)
-                        | (uint32_t) p_bytes[1]));
 }
 
 /*!
@@ -342,24 +326,25 @@ read_sensors (float32_t * p_acc, float32_t * p_mag)
     uint8_t raw[REG_BYTES];
     bool    b_ok = false;
 
-    b_ok = reg_read(ADDR_ACCEL, REG_OUT_X_L_A | AUTO_INCREMENT, raw, REG_BYTES);
+    b_ok = reg_read(ADDR_IMU, REG_OUT_X_L_A | AUTO_INCREMENT, raw, REG_BYTES);
 
     if (b_ok)
     {
-        /* Casts: |value| <= 2048, exactly representable in float32_t. */
-        p_acc[AXIS_X] = (float32_t) (pair_le(&raw[0]) / HR_DIVISOR);
-        p_acc[AXIS_Y] = (float32_t) (pair_le(&raw[2]) / HR_DIVISOR);
-        p_acc[AXIS_Z] = (float32_t) (pair_le(&raw[4]) / HR_DIVISOR);
-        b_ok          = reg_read(ADDR_MAG, REG_OUT_X_H_M, raw, REG_BYTES);
+        /* Casts: |value| <= 32768, exactly representable in float32_t. */
+        p_acc[AXIS_X] = (float32_t) pair_le(&raw[0]) * MG_PER_LSB;
+        p_acc[AXIS_Y] = (float32_t) pair_le(&raw[2]) * MG_PER_LSB;
+        p_acc[AXIS_Z] = (float32_t) pair_le(&raw[4]) * MG_PER_LSB;
+        b_ok          = reg_read(ADDR_IMU, REG_OUT_X_L_M | AUTO_INCREMENT, raw,
+                                 REG_BYTES);
     }
 
     if (b_ok)
     {
-        /* The magnetometer order is X, Z, Y, big-endian.
+        /* Magnetometer: X, Y, Z, little-endian.
            Casts: |value| <= 32768, exactly representable in float32_t. */
-        p_mag[AXIS_X] = (float32_t) pair_be(&raw[0]);
-        p_mag[AXIS_Z] = (float32_t) pair_be(&raw[2]);
-        p_mag[AXIS_Y] = (float32_t) pair_be(&raw[4]);
+        p_mag[AXIS_X] = (float32_t) pair_le(&raw[0]);
+        p_mag[AXIS_Y] = (float32_t) pair_le(&raw[2]);
+        p_mag[AXIS_Z] = (float32_t) pair_le(&raw[4]);
     }
 
     return (b_ok);
@@ -677,6 +662,12 @@ imu_task (INT stacd, void * p_exinf)
     terrain_hump_init(&g_hump);
     calibrate_accel();
     publish();
+
+    /* Start the jerk detector from the calibrated still reading, not from
+       an ideal 1 g, or the first step can count as an impact. */
+    history.accel[AXIS_X] = g_bias[AXIS_X];
+    history.accel[AXIS_Y] = g_bias[AXIS_Y];
+    history.accel[AXIS_Z] = g_bias[AXIS_Z] + ONE_G_MG;
 
     for (;;)
     {

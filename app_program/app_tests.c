@@ -73,7 +73,7 @@ app_tests_start (void)
 #elif APP_MODE == APP_MODE_TEST_IMU
     (void) encoder_init();
     (void) motion_init();
-    (void) imu_init();
+    (void) subsystem4_test_init(); /* I2C scan, then imu_init() */
 #elif APP_MODE == APP_MODE_TEST_ULTRASONIC
     (void) obstacle_init();
 #else
