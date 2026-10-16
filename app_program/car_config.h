@@ -44,7 +44,7 @@
 #define PIN_ENCODER_L               (2u)
 #define PIN_ENCODER_R               (3u)
 
-/* IMU GY-511 (LSM303DLHC) on I2C0 - Grove port 3.                          */
+/* IMU LSM303D (0x1D) on I2C0 - Grove port 3.                               */
 #define PIN_IMU_SDA                 (4u)
 #define PIN_IMU_SCL                 (5u)
 

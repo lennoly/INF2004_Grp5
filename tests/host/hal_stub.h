@@ -7,7 +7,11 @@
 #ifndef HAL_STUB_H
 #define HAL_STUB_H
 
+#include <stdbool.h>
 #include "hal.h"
+
+/* What hal_wifi_join_failed() reports; set by the tests. */
+extern bool gb_stub_join_failed;
 
 #endif /* HAL_STUB_H */
 

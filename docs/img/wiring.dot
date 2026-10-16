@@ -7,7 +7,7 @@ graph W {
   ml [label="Left DC motor",  fillcolor="#e5e7eb"]; mr [label="Right DC motor", fillcolor="#e5e7eb"];
   el [label="Left wheel encoder\n(LM393 slot, D0)", fillcolor="#dcfce7"]; er [label="Right wheel encoder\n(LM393 slot, D0)", fillcolor="#dcfce7"];
   irl [label="IR left (A0)", fillcolor="#fef3c7"]; irr [label="IR right (A0)", fillcolor="#fef3c7"]; irb [label="IR barcode (A0)", fillcolor="#fef3c7"];
-  imu [label="GY-511 LSM303DLHC\n(X forward, Z up)", fillcolor="#ede9fe"];
+  imu [label="LSM303D IMU\n(X forward, Z up)", fillcolor="#ede9fe"];
   us  [label="HC-SR04 ultrasonic\n(on servo horn)", fillcolor="#fee2e2"];
   sv  [label="Pan servo\n90 deg = ahead", fillcolor="#fee2e2"];
   bat -- pico [label="VIN / GND", color="#b45309"];

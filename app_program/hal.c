@@ -28,6 +28,7 @@
 #include "hardware/structs/uart.h"
 #if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
 #include "cyw43.h"
+#include "cyw43_country.h"
 #include "wifi_credentials.h"
 #endif
 #include "hal.h"
@@ -610,6 +611,55 @@ hal_wifi_rejoin (void)
 #endif
 
     return (b_ok);
+}
+
+/*!
+ * @brief Power-cycle the WiFi chip, reload its firmware and start a new
+ *        join: for a chip that stopped answering (e.g. after a supply dip
+ *        when the USB cable is pulled).  Blocks the CYW43 service task
+ *        while the firmware loads, so the caller only does this while the
+ *        car is not driving.  Call only from the CYW43 service task, like
+ *        hal_wifi_rejoin().
+ *
+ * @return true if the new join request was accepted; false without WiFi.
+ */
+bool
+hal_wifi_restart (void)
+{
+    bool b_ok = false;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+    /* Powers the chip off and removes its network interface; set_up
+       powers it on, loads the firmware and adds the interface again
+       (with DHCP), as the template does at boot. */
+    cyw43_deinit(&cyw43_state);
+    cyw43_wifi_set_up(&cyw43_state, CYW43_ITF_STA, true,
+                      CYW43_COUNTRY_WORLDWIDE);
+    b_ok = hal_wifi_rejoin();
+#endif
+
+    return (b_ok);
+}
+
+/*!
+ * @brief Whether the last join has ended in failure (hotspot not found,
+ *        wrong password or refused), so a new one can start at once.
+ *        Call only from the CYW43 service task, like hal_wifi_rejoin().
+ *
+ * @return true after a failed join; false while joining, joined or
+ *         without WiFi.
+ */
+bool
+hal_wifi_join_failed (void)
+{
+    bool b_failed = false;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+    b_failed =
+        (cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) < CYW43_LINK_DOWN);
+#endif
+
+    return (b_failed);
 }
 
 /*!
