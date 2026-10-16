@@ -179,7 +179,7 @@ only, except `status` (plain text) and `cmd` (a text command).
 | `act`, `nobs` | string, uint | last avoidance action; obstacles passed |
 
 **Heartbeat**:
-`{"up","seq","st","link","pub","drop","rx","recon","rejoin","wifi","ip","broker","tries","why","imu","i2cerr"}`
+`{"up","seq","st","link","pub","drop","rx","recon","rejoin","wreset","wifi","ip","broker","tries","why","imu","i2cerr"}`
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -188,7 +188,7 @@ only, except `status` (plain text) and `cmd` (a text command).
 | `st` | string | vehicle state, as in telemetry |
 | `link` | string | `WAIT_NET`, `CONNECTING`, `CONNECTED`, `BACKOFF` |
 | `pub`, `drop`, `rx` | uint | messages published, dropped while offline, commands received |
-| `recon`, `rejoin`, `tries` | uint | broker reconnects, Wi-Fi re-joins, broker attempts |
+| `recon`, `rejoin`, `wreset`, `tries` | uint | broker reconnects, Wi-Fi re-joins, Wi-Fi chip restarts, broker attempts |
 | `wifi` | string | Wi-Fi state in words (`joined`, `hotspot not found …`, `waiting for an IP address`, …) |
 | `ip`, `broker` | string | the car's address; the broker address it was built with |
 | `why` | string | how the last broker attempt ended, in words |
@@ -584,7 +584,7 @@ cd template/config
 cp wifi_credentials.example.h wifi_credentials.h                # edit
 cp mqtt_config.example.h mqtt_config.h                          # edit
 cd ../..
-gmake -C template/build_make -j8 CONSOLE=usb_cdc WIFI=cyw43 WIFI_JOIN=1 \
+gmake -C template/build_make -j8 CONSOLE=uart WIFI=cyw43 WIFI_JOIN=1 \
      WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1           # full mission
 ```
 

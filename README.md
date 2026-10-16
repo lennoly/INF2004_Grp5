@@ -148,14 +148,21 @@ New-NetFirewallRule -DisplayName "MQTT 1883" -Direction Inbound -Protocol TCP -L
 
 **3. Build, flash and watch:**
 ```
-gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=usb_cdc WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
-# flash template/build_make/mtk3pico_smp0_usb_cdc_wifi_dns.uf2
+gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=uart WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
+# flash template/build_make/mtk3pico_smp0_uart_wifi_dns.uf2
 python tools/dashboard/picocar_dashboard.py --mqtt <broker IP>
 # or: mosquitto_pub -h <broker IP> -t picocar/car1/cmd -m gains
 ```
 `TEST_TELEMETRY` runs only WiFi, MQTT and telemetry (no robot hardware), so
-**a bare Pico W is enough**; keep the USB cable in: the console prints the
-heartbeat every second. Sensor values in the telemetry read 0 in this build.
+**a bare Pico W is enough**. Sensor values in the telemetry read 0 in this
+build.
+
+**WiFi builds use `CONSOLE=uart` (no USB console).** With the USB console,
+the board joined the WiFi only while a computer was on the USB port: on a
+power bank or phone charger it never connected. Without it, it connects on
+any supply. So watch a WiFi build over MQTT (dashboard, `mosquitto_sub`, or
+the mosquitto window), not over the USB cable; the console is on GP0/GP1
+(UART0, 115200 baud) if you need it.
 Use `APP_MODE=MISSION` for the full mission with WiFi on the car.
 
 | Heartbeat field | Meaning |
@@ -164,6 +171,7 @@ Use `APP_MODE=MISSION` for the full mission with WiFi on the car.
 | `wifi` | WiFi state in words: `joined`, `joining`, `hotspot not found ...`, `wrong WiFi password`, `joined, waiting for an IP address` |
 | `ip`, `broker` | the board's own address, and the broker address it was built with |
 | `tries`, `recon`, `rejoin` | broker attempts, reconnects after a loss, WiFi re-joins |
+| `wreset` | WiFi chip restarts (no link for 10 s while the car is not driving) |
 | `pub`, `drop` | messages sent, and dropped while offline |
 | `why` | how the last broker attempt ended, in words (below) |
 
@@ -174,7 +182,7 @@ If `link` never reaches `CONNECTED`, `why` says where to look:
 | `no answer from broker (firewall? address?)` | firewall rule above; `broker` must be the laptop's current IP |
 | `closed by broker or network (TCP reset)` | nothing accepted the connection: antivirus/VPN firewall, or wrong port |
 | `refused: not authorised ...` | mosquitto started without `allow_anonymous true` (use `-c`) |
-| `link` `WAIT_NET` | not on the WiFi yet: `wifi` says why. The board keeps retrying (first after 40 s, then every 20 s at most) |
+| `link` `WAIT_NET` | not on the WiFi yet: `wifi` says why. The board re-joins every 5 s and restarts the WiFi chip every 10 s until it is back |
 
 An iPhone hotspot hides itself from new devices after a while: keep
 Settings → Personal Hotspot open (with "Maximise Compatibility" on) while
@@ -192,8 +200,8 @@ counts telemetry and heartbeats, and lists every outage with its recovery
 time, then prints PASS / FAIL and saves `logs/<date_time>/wifi_*`. During the
 run, stop mosquitto for about 60 s (the board reconnects: `recon` goes up),
 then switch the hotspot off for about 30 s (the board re-joins the WiFi
-3 s after losing it, then retries after 5 s, 10 s and every 20 s: `rejoin`
-goes up).
+3 s after losing it, then every 5 s, and restarts the WiFi chip if it is
+still off after 10 s: `rejoin` and `wreset` go up).
 
 The USB cable carries only power and the console, never MQTT: everything
 `wifi_test.py` measures went over WiFi. To show it, power the board from a
