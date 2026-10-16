@@ -9,6 +9,7 @@
 
 void subsystem2_test_motor(void);
 void subsystem2_test_motion(void);
+void subsystem2_test_wheels(void);
 
 #endif /* SUBSYSTEM2_TEST_H */
 

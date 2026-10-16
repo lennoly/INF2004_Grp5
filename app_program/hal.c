@@ -201,6 +201,11 @@ hal_gpio_irq_take (uint32_t pin)
 /*!
  * @brief Route a pin to its PWM slice and start it at level 0.
  *
+ * The template releases the PWM block from reset only when USE_PTMR is
+ * set (config.h), so it is released here, as hal_adc_init() does for the
+ * ADC; otherwise the slices ignore every write and the pins stay low.
+ * Releasing an already running block changes nothing.
+ *
  * Period = (wrap + 1) * clkdiv / clk_sys.
  *
  * @param[in] pin    GPIO number.
@@ -212,6 +217,9 @@ hal_pwm_setup (uint32_t pin, uint32_t clkdiv, uint32_t wrap)
 {
     uint32_t slice = pwm_gpio_to_slice_num(pin);
 
+    /* Release only: reset_unreset_...() would first reset the whole block
+       and wipe the slices that earlier calls set up. */
+    unreset_block_num_wait_blocking(RESET_PWM);
     gpio_route(pin, GPIO_FUNC_PWM);
 
     /* Casts: the documented ranges of clkdiv (1..255) and wrap
@@ -233,6 +241,37 @@ hal_pwm_set_level (uint32_t pin, uint32_t level)
 {
     /* Cast: level <= wrap + 1, and every wrap used is below 65535. */
     pwm_set_gpio_level(pin, (uint16_t) level);
+}
+
+/*!
+ * @brief Read back the hardware state of one PWM pin, and sample the pin
+ *        level 1000 times over about one millisecond (10 PWM periods).
+ *
+ * @param[in]  pin   GPIO number.
+ * @param[out] p_out Register values and the measured high percentage.
+ */
+void
+hal_pwm_inspect (uint32_t pin, hal_pwm_info_t * p_out)
+{
+    uint32_t slice = pwm_gpio_to_slice_num(pin);
+    uint32_t idx   = 0u;
+    uint32_t highs = 0u;
+
+    p_out->funcsel = (io_bank0_hw->io[pin].ctrl & IO_BANK0_GPIO0_CTRL_FUNCSEL_BITS)
+                     >> IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB;
+    p_out->pad     = pads_bank0_hw->io[pin];
+    p_out->csr     = pwm_hw->slice[slice].csr;
+    p_out->top     = pwm_hw->slice[slice].top;
+    p_out->cc      = pwm_hw->slice[slice].cc;
+    p_out->b_reset = (0u != (resets_hw->reset & (1u << RESET_PWM)));
+
+    for (idx = 0u; idx < 1000u; idx++)
+    {
+        highs += gpio_get(pin) ? 1u : 0u;
+        hal_delay_us(1u);
+    }
+
+    p_out->high_pct = highs / 10u;
 }
 
 /*!

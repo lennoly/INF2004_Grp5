@@ -63,6 +63,9 @@ app_tests_start (void)
 #elif APP_MODE == APP_MODE_TEST_MOTION
     (void) encoder_init();
     (void) motion_init();
+#elif APP_MODE == APP_MODE_TEST_WHEELS
+    /* No motion task: it would rewrite the motor pins every cycle. */
+    (void) encoder_init();
 #elif APP_MODE == APP_MODE_TEST_IR
     (void) ir_sensor_init();
 #elif APP_MODE == APP_MODE_TEST_BARCODE
@@ -167,6 +170,8 @@ run_test (void)
     subsystem2_test_motor();
 #elif APP_MODE == APP_MODE_TEST_MOTION
     subsystem2_test_motion();
+#elif APP_MODE == APP_MODE_TEST_WHEELS
+    subsystem2_test_wheels();
 #elif APP_MODE == APP_MODE_TEST_IR
     subsystem3_test_ir();
 #elif APP_MODE == APP_MODE_TEST_BARCODE
