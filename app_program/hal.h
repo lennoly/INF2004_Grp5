@@ -42,6 +42,20 @@ uint32_t hal_gpio_irq_take(uint32_t pin);
 void hal_pwm_setup(uint32_t pin, uint32_t clkdiv, uint32_t wrap);
 void hal_pwm_set_level(uint32_t pin, uint32_t level);
 
+/* Read-back of one PWM pin's hardware state (TEST_WHEELS diagnostics). */
+typedef struct
+{
+    uint32_t funcsel;  /* IO_BANK0 function (4 = PWM, 5 = SIO)      */
+    uint32_t pad;      /* PADS_BANK0 register                        */
+    uint32_t csr;      /* slice CSR (bit 0 = enabled)                */
+    uint32_t top;      /* slice TOP                                  */
+    uint32_t cc;       /* slice CC (A low half, B high half)         */
+    uint32_t high_pct; /* % of 1000 pin samples that read high       */
+    bool     b_reset;  /* PWM block still held in reset              */
+} hal_pwm_info_t;
+
+void hal_pwm_inspect(uint32_t pin, hal_pwm_info_t * p_out);
+
 /* ADC. */
 void     hal_adc_init(void);
 void     hal_adc_pin_init(uint32_t pin);
