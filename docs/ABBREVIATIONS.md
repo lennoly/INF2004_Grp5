@@ -30,7 +30,7 @@ here is spelled out in full. Units are written as suffixes (`_mm`, `_ms`,
 | `dmb` | Data Memory Barrier (Arm instruction) |
 | `gpio` | general-purpose input/output |
 | `i2c` | Inter-Integrated Circuit bus |
-| `imu` | inertial measurement unit (the LSM303DLHC on the GY-511 board) |
+| `imu` | inertial measurement unit (the LSM303D accelerometer + magnetometer) |
 | `ir` | infrared (reflectance sensors) |
 | `irq`, `isr` | interrupt request, interrupt service routine |
 | `lwip` | lightweight IP, the TCP/IP stack used by the template |

@@ -11,7 +11,7 @@
 | IR left | VCC / GND / **A0** | 3V3 / GND / **GP26 (ADC0)** | use analog output, D0 unused |
 | IR right | VCC / GND / **A0** | 3V3 / GND / **GP27 (ADC1)** | |
 | IR barcode | VCC / GND / **A0** | 3V3 / GND / **GP28 (ADC2)** | |
-| GY-511 IMU | VIN / GND / SDA / SCL | 3V3 / GND / **GP4 / GP5** | I2C0 at 400 kHz; chip X axis forward, Z up |
+| LSM303D IMU | VIN / GND / SDA / SCL | 3V3 / GND / **GP4 / GP5** | I2C0 at 400 kHz; chip X axis forward, Z up |
 | HC-SR04 | VCC / GND / TRIG / ECHO | 3V3 / GND / **GP6 / GP7** | per course slide; a 5 V module needs a divider on ECHO |
 | Servo | signal / V+ / GND | **Servo port GP12** | 90° = straight ahead |
 | Buttons | — | GP20 START, GP21 STOP | on-board |
