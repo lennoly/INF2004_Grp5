@@ -78,7 +78,7 @@
 
 /* Set to 1 if a motor spins backwards for a "forward" command.             */
 #define MOTOR_L_INVERT              (0)
-#define MOTOR_R_INVERT              (0)
+#define MOTOR_R_INVERT              (1)
 
 /* ------------------------------------------------------------------------ */
 /* Motion control (Buddy 2)                                                 */
