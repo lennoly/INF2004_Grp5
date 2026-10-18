@@ -7,6 +7,7 @@
  *                   |  +--2 front pings < OBST_DETECT_MM or impact--> OBSTACLE
  *                   |       OBSTACLE: scan, plan, bypass, reacquire line
  * any --stop / blocked / line not found--> STOPPED --start--> LINE_FOLLOW
+ * LINE_FOLLOW --sonar fault / no fresh front reading--> STOPPED
  * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (360 degree spin)
  *
  * Manoeuvres are sequences of blocking motion moves executed in this task;
@@ -122,6 +123,7 @@ static void            poll_buttons(void);
 static void            poll_messages(void);
 static void            poll_inputs(void);
 static bool            stop_requested(void);
+static void            wait_polled(uint32_t wait_ms);
 static bool            run_move(void);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
@@ -136,6 +138,7 @@ static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
 static bool            nav_due(float32_t odo_mm);
+static char const *    sonar_problem(void);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
 static void            handle_line_search(void);
@@ -517,6 +520,25 @@ stop_requested (void)
 }
 
 /*!
+ * @brief Wait in LOOP_MS steps, servicing the buttons, queued commands and
+ *        watchdog after each; returns early on a stop request.
+ *
+ * @param[in] wait_ms Time to wait.
+ */
+static void
+wait_polled (uint32_t wait_ms)
+{
+    uint32_t waited_ms = 0u;
+
+    while ((!gb_abort) && (waited_ms < wait_ms))
+    {
+        (void) tk_dly_tsk(LOOP_MS);
+        poll_inputs();
+        waited_ms += LOOP_MS;
+    }
+}
+
+/*!
  * @brief Wait for the issued motion move; abortable by STOP.
  *
  * @return true if the move completed normally.
@@ -767,7 +789,7 @@ pass_obstacle (float32_t side, float32_t offset)
 
     while (b_ok && (!b_past) && (travel < OBST_PASS_MAX_MM))
     {
-        dist_mm = obstacle_look_mm(look);
+        dist_mm = obstacle_look_mm(look, stop_requested);
 
         /* Cast: distances are at most US_MAX_MM, exact in float32_t. */
         b_near = (ULTRASONIC_NO_ECHO != dist_mm)
@@ -775,10 +797,18 @@ pass_obstacle (float32_t side, float32_t offset)
         b_past = b_seen && (!b_near);
         b_seen = b_seen || b_near;
 
-        if (!b_past)
+        if (gb_abort)
+        {
+            b_ok = false;
+        }
+        else if (!b_past)
         {
             b_ok = forward(PASS_STEP_MM, SPEED_SLOW_MM_S);
             travel += PASS_STEP_MM;
+        }
+        else
+        {
+            /* Past the obstacle: leave the loop. */
         }
     }
 
@@ -946,7 +976,7 @@ handle_obstacle (void)
     avoidance_profile_t prof;
 
     motion_stop();
-    (void) tk_dly_tsk(STOP_SETTLE_MS);
+    wait_polled(STOP_SETTLE_MS);
 
     /* After an impact the obstacle can be closer than US_MIN_MM, where the
        sonar gets no echo and the scan would report a clear path. */
@@ -1008,6 +1038,34 @@ nav_due (float32_t odo_mm)
 }
 
 /*!
+ * @brief Front sensor health (Week 6 obstacle statechart): OBST_FAULT_LIMIT
+ *        FAULT pings in a row, or no fresh front reading for OBST_STALE_MS,
+ *        mean obstacles can no longer be seen.
+ *
+ * @return The stop reason, or NULL while the sensor is healthy.
+ */
+static char const *
+sonar_problem (void)
+{
+    char const * p_reason = NULL;
+
+    if (obstacle_sensor_fault())
+    {
+        p_reason = "sonar fault";
+    }
+    else if (obstacle_front_stale())
+    {
+        p_reason = "sonar stale";
+    }
+    else
+    {
+        /* Healthy. */
+    }
+
+    return (p_reason);
+}
+
+/*!
  * @brief Whether an obstacle is ahead (front sonar, confirmed by
  *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
  *        Both triggers are ignored while the IMU reports the car on a hump:
@@ -1052,8 +1110,9 @@ handle_line_follow (void)
 {
     ir_sensor_snapshot_t ir_snap;
     motion_status_t      motion;
-    float32_t            steer = 0.0f;
-    float32_t            speed = 0.0f;
+    float32_t            steer     = 0.0f;
+    float32_t            speed     = 0.0f;
+    char const *         p_problem = sonar_problem();
 
     ir_sensor_read(&ir_snap);
     motion_get_status(&motion);
@@ -1063,7 +1122,13 @@ handle_line_follow (void)
     g_prev_odo      = motion.odo_mm;
     take_barcode(motion.odo_mm);
 
-    if (nav_due(motion.odo_mm))
+    if (NULL != p_problem)
+    {
+        /* Obstacles can no longer be seen: stop (obstacle statechart). */
+        motion_stop();
+        set_state(VS_STOPPED, p_problem);
+    }
+    else if (nav_due(motion.odo_mm))
     {
         motion_stop();
         set_state(VS_NAV_TURN, barcode_decode_command_name(g_st.pending_nav));

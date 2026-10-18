@@ -185,6 +185,7 @@ static void             test_vehicle_buttons(void);
 static void             test_vehicle_obstacle(void);
 static void             test_vehicle_scan_stop(void);
 static void             test_vehicle_manoeuvre_stop(void);
+static void             test_vehicle_sonar_health(void);
 static void             test_vehicle_barcode_watchdog(void);
 
 /*!
@@ -205,6 +206,7 @@ main (void)
     test_vehicle_obstacle();
     test_vehicle_scan_stop();
     test_vehicle_manoeuvre_stop();
+    test_vehicle_sonar_health();
     test_vehicle_barcode_watchdog();
     test_bridge();
     test_mqtt_client();
@@ -1373,7 +1375,7 @@ test_vehicle_obstacle (void)
     vehicle_sim_run(40u);
     check(0u == vehicle_sim_count("-> OBSTACLE"),
           "vehicle: one close echo is ignored");
-    vehicle_sim_front(NEARER_MM);
+    vehicle_close_echo();
     vehicle_sim_step();
     check(vehicle_is(VS_OBSTACLE, NULL), "vehicle: two close echoes stop");
 
@@ -1381,7 +1383,9 @@ test_vehicle_obstacle (void)
     pings = vehicle_sim_pings();
     vehicle_sim_step();
     check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
-    check((vehicle_sim_pings() - pings) >= 12u,
+    /* (5 coarse + 9 fine looks) x 3 pings, then the bypass's side looks. */
+    check(((vehicle_sim_pings() - pings) >= 42u)
+              && (1u == vehicle_sim_count("{[scan] pts=9 found=1")),
           "vehicle: coarse then fine scan");
     check((9u == obstacle_get_points(points, SCAN_MAX_POINTS))
               && (70 == points[0].angle_deg) && (200 == points[1].dist_mm),
@@ -1431,9 +1435,9 @@ test_vehicle_scan_stop (void)
     pings = vehicle_sim_pings();
     vehicle_sim_press(PIN_BTN_STOP, 420u, 30u); /* in the first servo step */
     vehicle_sim_step();
-    check((1u == (vehicle_sim_pings() - pings))
+    check((0u == (vehicle_sim_pings() - pings))
               && (1u == vehicle_sim_count("{[scan] stopped}")),
-          "vehicle: STOP ends the scan at the next step");
+          "vehicle: STOP while the servo moves ends the scan, no more pings");
     check((0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("fwd")),
           "vehicle: no move after a stopped scan");
     check(CENTRE_US == vehicle_sim_servo_us(), "vehicle: sonar re-centred");
@@ -1448,9 +1452,9 @@ test_vehicle_scan_stop (void)
     vehicle_sim_stop_command_at(900u); /* during the second servo step */
     vehicle_sim_step();
     vehicle_sim_step();
-    check((2u == (vehicle_sim_pings() - pings))
+    check((3u == (vehicle_sim_pings() - pings))
               && (vehicle_is(VS_STOPPED, "stop command")),
-          "vehicle: stop command ends the scan at the next step");
+          "vehicle: stop command ends the scan within 20 ms");
 }
 
 /*!
@@ -1494,7 +1498,45 @@ test_vehicle_manoeuvre_stop (void)
               && (vehicle_is(VS_STOPPED, "stop command"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
           "vehicle: STOP in a bypass reported once");
+
+    /* STOP during a side look while passing: no further move. */
+    vehicle_start(DRIVE_MS);
+    vehicle_close_echo();
+    vehicle_sim_step();
+    vehicle_sim_clear_log();
+    vehicle_sim_stop_on_side_look();
+    vehicle_sim_step();
+    vehicle_sim_step();
+    check((0u == vehicle_sim_count("fwd50;"))
+              && (vehicle_is(VS_STOPPED, "stop command")),
+          "vehicle: STOP during a side look: no further move");
     vehicle_sim_box(false);
+}
+
+/*!
+ * @brief Vehicle task: a failing or silent front sensor stops the car
+ *        (Week 6 obstacle statechart).
+ */
+static void
+test_vehicle_sonar_health (void)
+{
+    vehicle_start(DRIVE_MS);
+    vehicle_sim_front_fault();
+    vehicle_sim_step();
+    check(vehicle_is(VS_LINE_FOLLOW, NULL),
+          "vehicle: one FAULT ping is tolerated");
+    vehicle_sim_front_fault();
+    vehicle_sim_front_fault();
+    vehicle_sim_step();
+    check(vehicle_is(VS_STOPPED, "sonar fault"),
+          "vehicle: two FAULT pings in a row stop the car");
+
+    vehicle_start(DRIVE_MS);
+    vehicle_sim_monitor_starve(true);
+    vehicle_sim_run(OBST_STALE_MS + 100u);
+    check(vehicle_is(VS_STOPPED, "sonar stale"),
+          "vehicle: no front reading for 300 ms stops the car");
+    vehicle_sim_monitor_starve(false);
 }
 
 /*!

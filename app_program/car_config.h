@@ -156,10 +156,13 @@
 #define SERVO_INVERT                (0)
 #define SERVO_SETTLE_MS             (120u)
 #define US_TIMEOUT_MS               (40u)
+#define US_SEM_TIMEOUT_MS           (100u)    /* NFR9: sensor wait limit    */
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
 #define OBST_DETECT_MM              (300)     /* start profiling below this */
 #define OBST_CONFIRM_READINGS       (2u)      /* close front pings in a row */
+#define OBST_FAULT_LIMIT            (2u)      /* FAULT pings in a row: stop */
+#define OBST_STALE_MS               (300u)    /* no front reading: stop     */
 #define OBST_TOO_CLOSE_MM           (90)      /* reverse below this         */
 #define OBST_CLUSTER_DEPTH_MM       (150)
 #define OBST_MARGIN_MM              (60.0f)
@@ -173,7 +176,7 @@
 /* ------------------------------------------------------------------------ */
 /* Vehicle controller (Buddy 5)                                             */
 /* ------------------------------------------------------------------------ */
-#define WATCHDOG_TIMEOUT_MS         (3000u)   /* loop stall => reset, 0 off */
+#define WATCHDOG_TIMEOUT_MS         (250u)    /* Week 6; 0 = off            */
 
 /* ------------------------------------------------------------------------ */
 /* Telemetry (Buddy 1)                                                      */

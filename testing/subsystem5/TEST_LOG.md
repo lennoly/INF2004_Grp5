@@ -17,10 +17,11 @@ Define a test here before running it. Test IDs never change.
 | S5-U05 | vehicle task and scanner in simulation: START/STOP rules, two-echo trigger, scan, box bypass, reverse after impact, hump guard, STOP during scan / line search / U-turn / bypass, stale barcodes, watchdog | FR7, FR8, FR12, NFR3, NFR9 | host | `make -C tests/host` | 0 failed |
 | S5-U06 | servo direction | A9 | board | `APP_MODE=TEST_ULTRASONIC`, box 250 mm ahead and 60 mm to the right | `closest echo on the RIGHT`; otherwise set `SERVO_INVERT` to 1 |
 | S5-U07 | profile accuracy against tape | FR7, A9 | board | `TEST_ULTRASONIC`, 3 scans per position (centred 150 / 250 mm, 60 mm right, 60 mm left); `python3 tools/scan_plot.py <log> --box X,Y,W` | edges and width within the beam-widening margin; fill the table in REPORT.md 4.5 |
-| S5-U08 | STOP during a scan | FR12, NFR3 | board | `MISSION`, obstacle ahead; tap STOP while the sonar sweeps | scan ends within one servo step, servo centred, `STOPPED (stop command)` |
+| S5-U08 | STOP during a scan | FR12, NFR3, A14 | board | `MISSION`, obstacle ahead; tap STOP while the sonar sweeps (logic analyser on GP21 and the servo signal if available) | scan ends within about one ping (0.1 s), servo re-centred, `STOPPED (stop command)` |
 | S5-U09 | reverse after an impact | FR8 | board | `MISSION`, push the car gently into a box | car reverses 120 mm, then scans |
 | S5-U10 | no obstacle stop on the hump | A12 | board | `MISSION` over the course hump; watch `front` in telemetry | no OBSTACLE while on the hump; front range above 300 mm on the approach |
 | S5-U11 | watchdog stays quiet | NFR9 | board | `MISSION`: a scan, a bypass and a calibration spin | no `watchdog reset` reason after any of them |
+| S5-U12 | front sensor failure stops the car | FR7, A9, NFR9 | board | `MISSION`, line following: unplug ECHO (then TRIG) on the sonar | `STOPPED (sonar fault)` within about 0.2 s; reconnect and START again |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`
 build on the car; **link** = `wifi_test.py`; **manual** = a person measures.

@@ -31,6 +31,7 @@ static volatile uint32_t g_rise_us      = 0u;
 static volatile uint32_t g_width_us     = 0u;
 static volatile uint32_t g_last_ping_us = 0u;
 
+static void ping_locked(ultrasonic_ping_t * p_out);
 static void sort_readings(int32_t * p_values, uint32_t count);
 static void echo_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
 
@@ -71,67 +72,25 @@ ultrasonic_init (void)
 /*!
  * @brief One ping, classified (FR7, assumption A9): VALID with a
  *        distance, OUT_OF_RANGE (the echo pulse is longer than US_MAX_MM
- *        or still high at the timeout) or FAULT (no echo pulse at all).
- *        Holds the sensor semaphore and keeps PING_GAP_US between pings.
+ *        or still high at the timeout), FAULT (no echo pulse at all, or
+ *        ECHO already high before the trigger) or BUSY (another task held
+ *        the sensor for US_SEM_TIMEOUT_MS, NFR9: no ping was sent).
+ *        Keeps PING_GAP_US between pings.
  *
  * @param[out] p_out Class, distance (VALID only) and raw pulse width.
  */
 void
 ultrasonic_ping (ultrasonic_ping_t * p_out)
 {
-    UINT     pattern = 0u;
-    ER       ercd    = E_OK;
-    int32_t  dist_mm = ULTRASONIC_NO_ECHO;
-    uint32_t since   = 0u;
-
-    (void) tk_wai_sem(gh_sensor_sem, 1, TMO_FEVR);
-
-    /* Respect the minimum cycle time since the previous ping. */
-    since = hal_time_us() - g_last_ping_us;
-
-    if (since < PING_GAP_US)
-    {
-        (void) tk_dly_tsk(((PING_GAP_US - since) / US_PER_MS) + 1u);
-    }
-
-    (void) tk_clr_flg(gh_echo_flag, ~FLG_ECHO);
-    g_rise_us = 0u;
-
-    hal_gpio_put(PIN_US_TRIG, true);
-    hal_delay_us(TRIG_PULSE_US);
-    hal_gpio_put(PIN_US_TRIG, false);
-    g_last_ping_us = hal_time_us();
-
-    ercd = tk_wai_flg(gh_echo_flag, FLG_ECHO, TWF_ORW | TWF_CLR, &pattern,
-                      US_TIMEOUT_MS);
-
-    p_out->result   = ULTRASONIC_FAULT;
+    p_out->result   = ULTRASONIC_BUSY;
     p_out->dist_mm  = ULTRASONIC_NO_ECHO;
     p_out->width_us = 0u;
 
-    if (E_OK == ercd)
+    if (E_OK == tk_wai_sem(gh_sensor_sem, 1, US_SEM_TIMEOUT_MS))
     {
-        /* Casts: the echo lasts at most the timeout (tens of ms), which
-           float32_t holds exactly; the product is at most a few metres in
-           mm, so the truncation to int32_t cannot overflow. */
-        dist_mm         = (int32_t) ((float32_t) g_width_us * MM_PER_US);
-        p_out->width_us = g_width_us;
-        p_out->result =
-            (dist_mm > US_MAX_MM) ? ULTRASONIC_OUT_OF_RANGE : ULTRASONIC_VALID;
-        p_out->dist_mm = (dist_mm > US_MAX_MM) ? ULTRASONIC_NO_ECHO : dist_mm;
+        ping_locked(p_out);
+        (void) tk_sig_sem(gh_sensor_sem, 1);
     }
-    else if (0u != g_rise_us)
-    {
-        /* The pulse started but had not ended at the timeout. */
-        p_out->result   = ULTRASONIC_OUT_OF_RANGE;
-        p_out->width_us = hal_time_us() - g_rise_us;
-    }
-    else
-    {
-        /* No echo pulse at all: FAULT. */
-    }
-
-    (void) tk_sig_sem(gh_sensor_sem, 1);
 }
 
 /*!
@@ -139,7 +98,7 @@ ultrasonic_ping (ultrasonic_ping_t * p_out)
  *
  * @param[in] result Class.
  *
- * @return "VALID", "OUT_OF_RANGE" or "FAULT".
+ * @return "VALID", "OUT_OF_RANGE", "FAULT" or "BUSY".
  */
 char const *
 ultrasonic_class_name (ultrasonic_class_t result)
@@ -153,6 +112,10 @@ ultrasonic_class_name (ultrasonic_class_t result)
     else if (ULTRASONIC_OUT_OF_RANGE == result)
     {
         p_name = "OUT_OF_RANGE";
+    }
+    else if (ULTRASONIC_BUSY == result)
+    {
+        p_name = "BUSY";
     }
     else
     {
@@ -248,6 +211,68 @@ sort_readings (int32_t * p_values, uint32_t count)
         }
 
         p_values[pos] = value;
+    }
+}
+
+/*!
+ * @brief One ping with the sensor semaphore held: keep PING_GAP_US since
+ *        the previous ping, check that ECHO is low, trigger and classify.
+ *
+ * @param[out] p_out Ping result; FAULT unless an echo pulse is seen.
+ */
+static void
+ping_locked (ultrasonic_ping_t * p_out)
+{
+    UINT     pattern = 0u;
+    ER       ercd    = E_OK;
+    int32_t  dist_mm = ULTRASONIC_NO_ECHO;
+    uint32_t since   = hal_time_us() - g_last_ping_us;
+
+    /* Respect the minimum cycle time since the previous ping. */
+    if (since < PING_GAP_US)
+    {
+        (void) tk_dly_tsk(((PING_GAP_US - since) / US_PER_MS) + 1u);
+    }
+
+    p_out->result = ULTRASONIC_FAULT;
+
+    /* ECHO must be low before a trigger.  A line stuck high would
+       otherwise time out like a no-target pulse and read as free space. */
+    if (!hal_gpio_get(PIN_US_ECHO))
+    {
+        (void) tk_clr_flg(gh_echo_flag, ~FLG_ECHO);
+        g_rise_us = 0u;
+
+        hal_gpio_put(PIN_US_TRIG, true);
+        hal_delay_us(TRIG_PULSE_US);
+        hal_gpio_put(PIN_US_TRIG, false);
+        g_last_ping_us = hal_time_us();
+
+        ercd = tk_wai_flg(gh_echo_flag, FLG_ECHO, TWF_ORW | TWF_CLR, &pattern,
+                          US_TIMEOUT_MS);
+
+        if (E_OK == ercd)
+        {
+            /* Casts: the echo lasts at most the timeout (tens of ms), which
+               float32_t holds exactly; the product is at most a few metres
+               in mm, so the truncation to int32_t cannot overflow. */
+            dist_mm         = (int32_t) ((float32_t) g_width_us * MM_PER_US);
+            p_out->width_us = g_width_us;
+            p_out->result   = (dist_mm > US_MAX_MM) ? ULTRASONIC_OUT_OF_RANGE
+                                                    : ULTRASONIC_VALID;
+            p_out->dist_mm =
+                (dist_mm > US_MAX_MM) ? ULTRASONIC_NO_ECHO : dist_mm;
+        }
+        else if (0u != g_rise_us)
+        {
+            /* The pulse started but had not ended at the timeout. */
+            p_out->result   = ULTRASONIC_OUT_OF_RANGE;
+            p_out->width_us = hal_time_us() - g_rise_us;
+        }
+        else
+        {
+            /* No echo pulse at all: FAULT. */
+        }
     }
 }
 

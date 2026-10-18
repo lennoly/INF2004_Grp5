@@ -15,7 +15,8 @@
 
 #define SIM_START_MS    (1000u)
 #define SIM_MOVE_MS     (400)  /* every simulated move takes this long */
-#define SIM_PING_MS     (61u)  /* HC-SR04 cycle incl. the 60 ms gap     */
+#define SIM_PING_MS     (101u) /* worst ping: 60 ms gap + 40 ms timeout */
+#define SIM_MONITOR_MS  (70u)  /* obstacle.c MONITOR_PERIOD_MS          */
 #define SIM_BOX_MM      (200)  /* box ahead, seen between these angles  */
 #define SIM_BOX_FROM    (75)
 #define SIM_BOX_TO      (105)
@@ -43,6 +44,7 @@ static hal_irq_gpio_cb_t    gs_stop_isr;
 static bool                 gs_b_cmd_pending;
 static uint32_t             gs_cmd_at;
 static bool                 gs_b_stop_on_turn;
+static bool                 gs_b_stop_on_side;
 static char                 gs_log[SIM_LOG_SIZE];
 static uint32_t             gs_pings;
 static bool                 gs_b_box;
@@ -53,7 +55,13 @@ static int32_t              gs_move_left_ms;
 static float32_t            gs_odo;
 static float32_t            gs_vel;
 static uint32_t             gs_servo_us;
-static int32_t              gs_front = ULTRASONIC_NO_ECHO;
+static int32_t              gs_front_once = ULTRASONIC_NO_ECHO; /* one reading */
+static ultrasonic_class_t   gs_once_class = ULTRASONIC_VALID;
+static bool                 gs_b_front_once;
+static ultrasonic_class_t   gs_ambient    = ULTRASONIC_OUT_OF_RANGE;
+static int32_t              gs_ambient_mm = ULTRASONIC_NO_ECHO;
+static bool                 gs_b_starve;  /* monitor task gets no CPU */
+static uint32_t             gs_next_monitor = SIM_START_MS + SIM_MONITOR_MS;
 static FP                   gs_tasks[SIM_MAX_TASKS];
 static uint32_t             gs_tasks_made;
 static jmp_buf              gs_jump;
@@ -78,6 +86,8 @@ static void sim_log(char const * p_format, ...)
     (void) vsnprintf(gs_log + used, sizeof(gs_log) - used, p_format, args);
     va_end(args);
 }
+
+static void sim_monitor_once(void);
 
 static void sim_advance(uint32_t ms)
 {
@@ -104,6 +114,17 @@ static void sim_advance(uint32_t ms)
 
     gs_odo += gs_vel * ((float32_t) ms / 1000.0f);
     gs_now = t1;
+
+    /* The front monitor task runs every SIM_MONITOR_MS (it pre-empts
+       nothing here: its ping takes no simulated time). */
+    while (gs_now >= gs_next_monitor)
+    {
+        gs_next_monitor += SIM_MONITOR_MS;
+        if ((!gs_b_in_monitor) && (!gs_b_starve))
+        {
+            sim_monitor_once();
+        }
+    }
 
     /* Time since the watchdog was last reloaded, while it is armed. */
     if (gs_b_wd_armed && ((gs_now - gs_wd_last) > gs_wd_gap))
@@ -396,17 +417,37 @@ int32_t ultrasonic_init(void)
     return (E_OK);
 }
 
-int32_t ultrasonic_measure_mm(void)
+void ultrasonic_ping(ultrasonic_ping_t * p_out)
 {
-    return (gs_front);
-}
-
-int32_t ultrasonic_median_mm(uint32_t samples)
-{
-    gs_pings++;
-    sim_log("u%d;", (int) servo_get_angle());
-    sim_advance(SIM_PING_MS * (samples + 1u)); /* worst case incl. the wait */
-    return (sim_distance(servo_get_angle()));
+    p_out->width_us = 0u;
+    if (gs_b_in_monitor)
+    {
+        /* Front monitor: a one-off reading if one was injected, else the
+           ambient one; no simulated time (it runs beside the vehicle). */
+        p_out->result  = gs_ambient;
+        p_out->dist_mm = gs_ambient_mm;
+        if (gs_b_front_once)
+        {
+            gs_b_front_once = false;
+            p_out->result  = gs_once_class;
+            p_out->dist_mm = gs_front_once;
+        }
+    }
+    else
+    {
+        /* A scan or side look in the vehicle task: the box, if any. */
+        gs_pings++;
+        sim_log("u%d;", (int) servo_get_angle());
+        if (gs_b_stop_on_side && ((OBST_SIDE_SERVO_DEG == servo_get_angle())
+                                  || ((180 - OBST_SIDE_SERVO_DEG) == servo_get_angle())))
+        {
+            gs_b_stop_on_side = false;
+            vehicle_sim_press(PIN_BTN_STOP, 1u, SIM_STOP_HOLD);
+        }
+        sim_advance(SIM_PING_MS);
+        p_out->dist_mm = sim_distance(servo_get_angle());
+        p_out->result  = (ULTRASONIC_NO_ECHO == p_out->dist_mm) ? ULTRASONIC_OUT_OF_RANGE : ULTRASONIC_VALID;
+    }
 }
 
 /* ---- simulation API ---- */
@@ -474,15 +515,46 @@ void vehicle_sim_stop_on_next_turn(void)
     gs_b_stop_on_turn = true;
 }
 
-void vehicle_sim_front(int32_t mm)
+void vehicle_sim_stop_on_side_look(void)
 {
-    gs_front        = mm;
+    gs_b_stop_on_side = true;
+}
+
+static void sim_monitor_once(void)
+{
     gs_b_in_monitor = true;
     if (0 == setjmp(gs_jump))
     {
         gs_tasks[0](0, NULL); /* returns through tk_dly_tsk()'s longjmp */
     }
     gs_b_in_monitor = false;
+}
+
+void vehicle_sim_front(int32_t mm)
+{
+    gs_once_class   = (ULTRASONIC_NO_ECHO == mm) ? ULTRASONIC_OUT_OF_RANGE : ULTRASONIC_VALID;
+    gs_front_once   = mm;
+    gs_b_front_once = true;
+    sim_monitor_once();
+}
+
+void vehicle_sim_front_fault(void)
+{
+    gs_once_class   = ULTRASONIC_FAULT;
+    gs_front_once   = ULTRASONIC_NO_ECHO;
+    gs_b_front_once = true;
+    sim_monitor_once();
+}
+
+void vehicle_sim_front_ambient(ultrasonic_class_t result, int32_t mm)
+{
+    gs_ambient    = result;
+    gs_ambient_mm = mm;
+}
+
+void vehicle_sim_monitor_starve(bool b_starve)
+{
+    gs_b_starve = b_starve;
 }
 
 void vehicle_sim_box(bool b_present)

@@ -17,7 +17,10 @@ typedef enum
     ULTRASONIC_VALID = 0,    /* an echo pulse within range            */
     ULTRASONIC_OUT_OF_RANGE, /* a pulse longer than US_MAX_MM (4 m),
                                 or one still high at the timeout       */
-    ULTRASONIC_FAULT         /* no echo pulse at all                   */
+    ULTRASONIC_FAULT,        /* no echo pulse at all, or ECHO already
+                                high before the trigger (stuck line)   */
+    ULTRASONIC_BUSY          /* sensor still in use after
+                                US_SEM_TIMEOUT_MS: no ping was sent    */
 } ultrasonic_class_t;
 
 typedef struct
