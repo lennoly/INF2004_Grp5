@@ -69,12 +69,15 @@ ultrasonic_init (void)
 }
 
 /*!
- * @brief One ranging cycle (blocks for up to about 100 ms).
+ * @brief One ping, classified (FR7, assumption A9): VALID with a
+ *        distance, OUT_OF_RANGE (the echo pulse is longer than US_MAX_MM
+ *        or still high at the timeout) or FAULT (no echo pulse at all).
+ *        Holds the sensor semaphore and keeps PING_GAP_US between pings.
  *
- * @return Distance in mm, or ULTRASONIC_NO_ECHO.
+ * @param[out] p_out Class, distance (VALID only) and raw pulse width.
  */
-int32_t
-ultrasonic_measure_mm (void)
+void
+ultrasonic_ping (ultrasonic_ping_t * p_out)
 {
     UINT     pattern = 0u;
     ER       ercd    = E_OK;
@@ -102,18 +105,81 @@ ultrasonic_measure_mm (void)
     ercd = tk_wai_flg(gh_echo_flag, FLG_ECHO, TWF_ORW | TWF_CLR, &pattern,
                       US_TIMEOUT_MS);
 
+    p_out->result   = ULTRASONIC_FAULT;
+    p_out->dist_mm  = ULTRASONIC_NO_ECHO;
+    p_out->width_us = 0u;
+
     if (E_OK == ercd)
     {
         /* Casts: the echo lasts at most the timeout (tens of ms), which
            float32_t holds exactly; the product is at most a few metres in
            mm, so the truncation to int32_t cannot overflow. */
-        dist_mm = (int32_t) ((float32_t) g_width_us * MM_PER_US);
-        dist_mm = ((dist_mm < US_MIN_MM) || (dist_mm > US_MAX_MM))
-                      ? ULTRASONIC_NO_ECHO
-                      : dist_mm;
+        dist_mm         = (int32_t) ((float32_t) g_width_us * MM_PER_US);
+        p_out->width_us = g_width_us;
+        p_out->result =
+            (dist_mm > US_MAX_MM) ? ULTRASONIC_OUT_OF_RANGE : ULTRASONIC_VALID;
+        p_out->dist_mm = (dist_mm > US_MAX_MM) ? ULTRASONIC_NO_ECHO : dist_mm;
+    }
+    else if (0u != g_rise_us)
+    {
+        /* The pulse started but had not ended at the timeout. */
+        p_out->result   = ULTRASONIC_OUT_OF_RANGE;
+        p_out->width_us = hal_time_us() - g_rise_us;
+    }
+    else
+    {
+        /* No echo pulse at all: FAULT. */
     }
 
     (void) tk_sig_sem(gh_sensor_sem, 1);
+}
+
+/*!
+ * @brief Short name of a ping class, for test output and telemetry.
+ *
+ * @param[in] result Class.
+ *
+ * @return "VALID", "OUT_OF_RANGE" or "FAULT".
+ */
+char const *
+ultrasonic_class_name (ultrasonic_class_t result)
+{
+    char const * p_name = "FAULT";
+
+    if (ULTRASONIC_VALID == result)
+    {
+        p_name = "VALID";
+    }
+    else if (ULTRASONIC_OUT_OF_RANGE == result)
+    {
+        p_name = "OUT_OF_RANGE";
+    }
+    else
+    {
+        /* FAULT. */
+    }
+
+    return (p_name);
+}
+
+/*!
+ * @brief Distance from one ping (unchanged behaviour: anything but a
+ *        VALID reading from US_MIN_MM to US_MAX_MM is "no echo").
+ *
+ * @return Distance in mm, or ULTRASONIC_NO_ECHO.
+ */
+int32_t
+ultrasonic_measure_mm (void)
+{
+    ultrasonic_ping_t ping;
+    int32_t           dist_mm = ULTRASONIC_NO_ECHO;
+
+    ultrasonic_ping(&ping);
+
+    if ((ULTRASONIC_VALID == ping.result) && (ping.dist_mm >= US_MIN_MM))
+    {
+        dist_mm = ping.dist_mm;
+    }
 
     return (dist_mm);
 }

@@ -44,7 +44,10 @@ The tuning boxes fill in from the car. Edit and press **Apply**:
 | `speed=mm/s` | cruise speed (60..300) | `SPEED_CRUISE_MM_S` 180 |
 | `rate=ms` | telemetry period, 0 = off | 200 (MQTT), 1000 (USB) |
 
-Other commands: `start`, `stop`, `calibrate`, `gains`, `help`.
+Other commands: `start`, `stop`, `calibrate`, `gains`, `help`, `timing`
+(task times, control jitter and CPU load).
+Tuning (`pid=`, `ff=`, `line=`, `speed=`) is accepted only while the car is
+IDLE or STOPPED; while it drives, the reply says so.
 The car answers every command with an event (`cmd ... ok` or the reason it
 failed) and then reports the gains now in use.
 
@@ -57,8 +60,8 @@ Suggested workflow for speed PID (with `APP_MODE=TEST_MOTOR`):
 2. Press **Fast 20 Hz** to watch the step response in the speed plot.
 3. Change `pid=` / `ff=`, press START again (only the steps repeat), compare.
 
-Line PID: build `MISSION`, press **Start**, and adjust `line=` while the car
-follows the line; watch the line-error plot settle.
+Line PID: build `MISSION`, press **Start** and watch the line-error plot;
+press **Stop**, change `line=`, press **Start** again and compare.
 
 ## Logs (for the report)
 Each run creates `logs/<date_time>/`:
@@ -71,6 +74,25 @@ Each run creates `logs/<date_time>/`:
 | `commands.log` | every command you sent, timestamped |
 | `console.log` | raw serial console (includes the TEST_xxx CSV output) |
 | `dashboard_*.png` | saved with **Save PNG** |
+
+## WiFi link test (bare Pico W is enough)
+Flash `APP_MODE=TEST_TELEMETRY` with the WiFi flags (main README), start
+mosquitto, then:
+```
+python wifi_test.py --mqtt <broker-ip> [--car car1] [--minutes 10]
+```
+
+| Check | Target |
+|---|---|
+| telemetry rate while connected | ≥ 4.5 Hz (5 Hz) |
+| heartbeat | 1 Hz, none missed while connected |
+| command round trip (`#<id> gains`) | median < 100 ms, no reply lost while connected |
+| messages dropped by the board | 0 while connected |
+| outages (stop mosquitto ~60 s, then the hotspot ~30 s) | every one recovered; recovery time listed |
+
+Results: `logs/<date_time>/wifi_summary.txt`, `wifi_pings.csv`,
+`wifi_outages.csv`. `python wifi_test.py --self-test` checks the script
+itself with a simulated board; it also runs against `sim_car.py`.
 
 ## Try it without the car
 ```

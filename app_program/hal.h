@@ -42,6 +42,20 @@ uint32_t hal_gpio_irq_take(uint32_t pin);
 void hal_pwm_setup(uint32_t pin, uint32_t clkdiv, uint32_t wrap);
 void hal_pwm_set_level(uint32_t pin, uint32_t level);
 
+/* Read-back of one PWM pin's hardware state (TEST_WHEELS diagnostics). */
+typedef struct
+{
+    uint32_t funcsel;  /* IO_BANK0 function (4 = PWM, 5 = SIO)      */
+    uint32_t pad;      /* PADS_BANK0 register                        */
+    uint32_t csr;      /* slice CSR (bit 0 = enabled)                */
+    uint32_t top;      /* slice TOP                                  */
+    uint32_t cc;       /* slice CC (A low half, B high half)         */
+    uint32_t high_pct; /* % of 1000 pin samples that read high       */
+    bool     b_reset;  /* PWM block still held in reset              */
+} hal_pwm_info_t;
+
+void hal_pwm_inspect(uint32_t pin, hal_pwm_info_t * p_out);
+
 /* ADC. */
 void     hal_adc_init(void);
 void     hal_adc_pin_init(uint32_t pin);
@@ -60,11 +74,18 @@ bool hal_uart0_getc(uint8_t * p_byte);
 void hal_alarm_start(uint32_t period_us);
 void hal_alarm_ack_rearm(uint32_t period_us);
 
+/* WiFi: start re-joining the access point (CYW43 service task only). */
+bool         hal_wifi_rejoin(void);
+bool         hal_wifi_restart(void);
+bool         hal_wifi_join_failed(void);
+char const * hal_wifi_state(void);
+
 /* Memory barrier for data shared between tasks and cores. */
 void hal_memory_barrier(void);
 
 /* Hardware watchdog: resets the chip unless fed in time. */
 void hal_watchdog_start(uint32_t timeout_ms);
+void hal_watchdog_stop(void);
 void hal_watchdog_feed(void);
 bool hal_watchdog_caused_reset(void);
 

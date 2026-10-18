@@ -1,0 +1,14 @@
+/** @file subsystem5_test.h
+ *
+ * @brief Buddy 5 test program (make APP_MODE=TEST_ULTRASONIC), run by
+ *        app_tests.c each time START is pressed.
+ */
+
+#ifndef SUBSYSTEM5_TEST_H
+#define SUBSYSTEM5_TEST_H
+
+void subsystem5_test_ultrasonic(void);
+
+#endif /* SUBSYSTEM5_TEST_H */
+
+/*** end of file ***/

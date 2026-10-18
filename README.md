@@ -8,27 +8,36 @@ MQTT documentation, tuning/evaluation procedures and wiring:
 `docs/img/wiring.png`.
 
 ## Layout
+Follows the course's
+[INF2004_ProjectTemplate](https://github.com/sirfonzie/INF2004_ProjectTemplate)
+convention: one folder per student under `app_program/`, `TEAM.md`,
+`testing/` and `videos/`.
+
 | Path | Content |
 |---|---|
+| `TEAM.md` | **who owns what**: subsystems, pins, peripherals, task priorities, interfaces, kernel objects |
 | `app_program/car_config.h` | **all pins and tunables** (edit [CALIBRATE] values) |
-| `app_program/motor, encoder, pid, motion` | Buddy 2 motion control |
-| `app_program/ir_sensor, line_follow, barcode*` | Buddy 3 line + barcode |
-| `app_program/imu, terrain` | Buddy 4 IMU / humps |
-| `app_program/servo, ultrasonic, obstacle, avoidance` | Buddy 5 scanning / avoidance |
-| `app_program/mqtt_*, telemetry` | Buddy 1 WiFi / MQTT / telemetry |
-| `app_program/vehicle` | integration state machine |
-| `app_program/hal*` | Pico C SDK HAL + µT-Kernel interrupt binding |
-| `app_program/app_main, app_tests` | entry point + per-buddy test programs |
+| `app_program/subsystem1/` | Buddy 1: WiFi / MQTT (`mqtt_*`), telemetry, commands (`command`, `console_in`) |
+| `app_program/subsystem2/` | Buddy 2: `motor`, `encoder`, `pid`, `motion` |
+| `app_program/subsystem3/` | Buddy 3: `ir_sensor`, `line_follow`, `barcode*` |
+| `app_program/subsystem4/` | Buddy 4: `imu`, `terrain` |
+| `app_program/subsystem5/` | Buddy 5: `servo`, `ultrasonic`, `obstacle`, `avoidance` |
+| `app_program/vehicle` | integration state machine (shared) |
+| `app_program/hal*` | Pico C SDK HAL + µT-Kernel interrupt binding (shared) |
+| `app_program/timing` | task times, control jitter and CPU load: send `timing` (shared) |
+| `app_program/app_main, app_tests` | entry point + test runner (shared); each buddy's test program is `subsystemN/subsystemN_test.c` |
 | `app_program/demo_tasks.*, usb_console_compat.h` | from the template, unchanged (used by `app_main.c`) |
-| `app_program/command, console_in` | text commands over USB/UART/MQTT (live tuning) |
+| `testing/` | test cases and results per subsystem, integration and system (`testing/README.md`) |
+| `videos/` | index of unlisted YouTube videos of tests and demos |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
 | `tools/scan_plot.py` | plots `TEST_ULTRASONIC` scans against the real box and prints the error table (Buddy 5 evidence) |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 124/124 pass |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 159/159 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
 | `tools/barr_*`, `app_program/.clang-format` | BARR-C:2018 formatter and checker (see below) |
 | `docs/ABBREVIATIONS.md`, `docs/templates/` | BARR-C abbreviations table and module templates |
+| `docs/BUDDY2_DATA_SHEET.md` | bench sheet for the PID tuning and motion accuracy measurements |
 
 ## First-time setup
 You need git, GNU make, a C compiler (to build the `elf2uf2` tool) and the
@@ -66,10 +75,19 @@ handle, so build inside WSL (Ubuntu):
 ### What `setup.sh` does
 Run it once after cloning (it skips anything already present). It downloads
 the course template (at the version our patch was made against) into
-`template/` and Pico SDK **2.2.0** into `sdk/`. It applies our template edits
-and links `template/app_program` to our `app_program/`. Both folders are
+`template/` and Pico SDK **2.2.0** into `sdk/`. It applies our template edits,
+removes the template's ports for other boards (only the Pico W / RP2040
+port is kept) and links `template/app_program` to our `app_program/`. Both folders are
 git-ignored, so edit code in `app_program/` only. Set `PICO_SDK_PATH` first to
 use an SDK you already have.
+
+**Already have a `template/` from before the subsystem folders?** Its build
+rule only looks in `app_program/` itself, so the build stops with
+`motion.h: No such file or directory`. Refresh that one file once:
+```
+git -C template checkout -- build_make/mtkernel_3/app_program/subdir.mk
+git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../docs/template_changes.patch
+```
 
 ## Build and flash
 1. `gmake -C template/build_make -j8 APP_MODE=TEST_MOTOR CONSOLE=usb_cdc`
@@ -113,7 +131,8 @@ cd ../..
   mosquitto, on that same WiFi, then `MQTT_CONFIG_SET` to `(1)`.
   Find the IP with `ipconfig getifaddr en0` (macOS) or `ipconfig` in
   PowerShell (Windows: the "IPv4 Address" of the WiFi adapter).
-  Leave the port (1883) and the rest as they are.
+  Leave the port (1883, the same as `listener` in `mosquitto.conf`) and the
+  rest as they are.
 
 Until both `SET` values are 1 the build stops with an error naming the file.
 
@@ -124,18 +143,73 @@ allow_anonymous true
 ```
 then run `mosquitto -c mosquitto.conf -v`
 (install: `brew install mosquitto` on macOS; the installer from
-mosquitto.org on Windows, and allow it through Windows Firewall).
+mosquitto.org on Windows). On Windows, stop the installer's background
+service first (`net stop mosquitto`) and let port 1883 in, in an
+administrator PowerShell:
+```
+New-NetFirewallRule -DisplayName "MQTT 1883" -Direction Inbound -Protocol TCP -LocalPort 1883 -Action Allow -Profile Any
+```
 
 **3. Build, flash and watch:**
 ```
-gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=usb_cdc WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
-# flash template/build_make/mtk3pico_smp0_usb_cdc_wifi_dns.uf2
+gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=uart WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
+# flash template/build_make/mtk3pico_smp0_uart_wifi_dns.uf2
 python tools/dashboard/picocar_dashboard.py --mqtt <broker IP>
-# or: mosquitto_pub -h <broker IP> -t picocar/car1/cmd -m start
+# or: mosquitto_pub -h <broker IP> -t picocar/car1/cmd -m gains
 ```
-Use `APP_MODE=MISSION` for the full mission with WiFi. If the car does not
-connect, the USB serial console shows the boot `[init]` lines and the link
-state.
+`TEST_TELEMETRY` runs only WiFi, MQTT and telemetry (no robot hardware), so
+**a bare Pico W is enough**. Sensor values in the telemetry read 0 in this
+build.
+
+**WiFi builds use `CONSOLE=uart` (no USB console).** With the USB console,
+the board joined the WiFi only while a computer was on the USB port: on a
+power bank or phone charger it never connected. Without it, it connects on
+any supply. So watch a WiFi build over MQTT (dashboard, `mosquitto_sub`, or
+the mosquitto window), not over the USB cable; the console is on GP0/GP1
+(UART0, 115200 baud) if you need it.
+Use `APP_MODE=MISSION` for the full mission with WiFi on the car.
+
+| Heartbeat field | Meaning |
+|---|---|
+| `link` | `WAIT_NET` (no WiFi yet), `CONNECTING`, `CONNECTED`, `BACKOFF` (refused, retrying) |
+| `wifi` | WiFi state in words: `joined`, `joining`, `hotspot not found ...`, `wrong WiFi password`, `joined, waiting for an IP address` |
+| `ip`, `broker` | the board's own address, and the broker address it was built with |
+| `tries`, `recon`, `rejoin` | broker attempts, reconnects after a loss, WiFi re-joins |
+| `wreset` | WiFi chip restarts (no link for 10 s while the car is not driving) |
+| `pub`, `drop` | messages sent, and dropped while offline |
+| `why` | how the last broker attempt ended, in words (below) |
+
+If `link` never reaches `CONNECTED`, `why` says where to look:
+
+| `why` | Fix |
+|---|---|
+| `no answer from broker (firewall? address?)` | firewall rule above; `broker` must be the laptop's current IP |
+| `closed by broker or network (TCP reset)` | nothing accepted the connection: antivirus/VPN firewall, or wrong port |
+| `refused: not authorised ...` | mosquitto started without `allow_anonymous true` (use `-c`) |
+| `link` `WAIT_NET` | not on the WiFi yet: `wifi` says why. The board re-joins every 5 s and restarts the WiFi chip every 10 s until it is back |
+
+An iPhone hotspot hides itself from new devices after a while: keep
+Settings → Personal Hotspot open (with "Maximise Compatibility" on) while
+the board powers up.
+
+The mosquitto window shows `New client connected from <board ip>` when the
+board gets through.
+
+**4. Test the link** (with the board from step 3):
+```
+python tools/dashboard/wifi_test.py --mqtt <broker IP> --minutes 10
+```
+It times command round trips (`#<id> gains`; the reply repeats the id),
+counts telemetry and heartbeats, and lists every outage with its recovery
+time, then prints PASS / FAIL and saves `logs/<date_time>/wifi_*`. During the
+run, stop mosquitto for about 60 s (the board reconnects: `recon` goes up),
+then switch the hotspot off for about 30 s (the board re-joins the WiFi
+3 s after losing it, then every 5 s, and restarts the WiFi chip if it is
+still off after 10 s: `rejoin` and `wreset` go up).
+
+The USB cable carries only power and the console, never MQTT: everything
+`wifi_test.py` measures went over WiFi. To show it, power the board from a
+phone charger instead of the laptop and run the test again.
 
 ## Bring-up order
 motor → motion → IR (calibrate) → barcode → IMU → ultrasonic → telemetry → mission.
@@ -149,7 +223,7 @@ how it is checked and the few deviations the kernel and SDK force.
 Before committing:
 ```
 sh tools/barr_format.sh                                   # layout (clang-format 18 + barr_layout.py)
-python3 tools/barr_check.py app_program/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
+python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
 make -C tests/host                                        # unit tests, -Werror
 ```
 New modules start from `docs/templates/module.c` and `module.h`.

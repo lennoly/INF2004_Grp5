@@ -15,6 +15,25 @@
  * once.  Last will: picocar/<id>/status = "offline" (retained); on
  * connect the client publishes "online" (retained) and subscribes to
  * picocar/<id>/cmd.
+ *
+ * WiFi re-join: the template joins the access point once at boot.  If the
+ * link has been up and then stays down for REJOIN_AFTER_MS, a non-blocking
+ * join (hal_wifi_rejoin()) is started from this hook, which runs in the
+ * same task and under the same driver lock as the template's own join,
+ * then retried every REJOIN_EVERY_MS until the link is back (a join that
+ * has failed, e.g. hotspot not found, is retried at that rate even before
+ * the first link).  If the link is still down WIFI_RESTART_MS after the
+ * outage began (or after the last restart), the WiFi chip itself is
+ * power-cycled and joins again (hal_wifi_restart()), for a chip that
+ * stopped answering, e.g. after a supply dip when the USB cable is
+ * pulled.  That blocks this task while the firmware loads, so it is done
+ * only while the application allows it (mqtt_bridge_restart_ok(): the car
+ * is not driving).  Restarts are counted in the heartbeat ("wreset").
+ * Joined but still without an IP address after NOIP_REJOIN_MS (the
+ * hotspot's DHCP did not answer, seen after power-up) also counts as an
+ * outage: DHCP is restarted and the access point re-joined, every
+ * NOIP_REJOIN_MS until an address arrives.
+ * Attempts are counted in the heartbeat ("rejoin").
  */
 
 #include <stdint.h>
@@ -26,16 +45,24 @@
 #include <string.h>
 #include "lwip/netif.h"
 #include "lwip/sys.h"
+#include "lwip/dhcp.h"
 #include "lwip/apps/mqtt.h"
 #include "lwip/apps/mqtt_priv.h" /* static client, as lwIP documents */
 #include "mqtt_config.h"
 #include "mqtt_bridge.h"
+#include "hal.h"
+#include "timing.h"
 
 #define TOPIC_ROOT          "picocar/" MQTT_CAR_ID "/"
 #define TOPIC_CMD           TOPIC_ROOT "cmd"
 #define TOPIC_STATUS        TOPIC_ROOT "status"
 #define RETRY_BASE_MS       (1000u)
-#define RETRY_DOUBLINGS_MAX (3u) /* attempt windows 2, 4, then 8 s */
+#define RETRY_DOUBLINGS_MAX (3u)     /* attempt windows 2, 4, then 8 s */
+#define BOOT_JOIN_MS        (40000u) /* template's first join: scan + 30 s */
+#define REJOIN_AFTER_MS     (3000u)  /* link down this long: re-join */
+#define REJOIN_EVERY_MS     (5000u)  /* then retry every 5 s         */
+#define WIFI_RESTART_MS     (10000u) /* still down: restart the chip */
+#define NOIP_REJOIN_MS      (15000u) /* joined, no IP this long: retry */
 #define QOS_0               (0u)
 #define RETAIN              (1u)
 #define NO_RETAIN           (0u)
@@ -57,11 +84,19 @@ static bool          gb_cmd_topic   = false; /* incoming publish is a command */
 static uint8_t       g_cmd[MQTT_BRIDGE_CMD_MAX];
 static uint32_t      g_cmd_len = 0u;
 static char          g_msg[MQTT_BRIDGE_PAYLOAD_MAX];
+static bool          gb_ever_linked = false; /* the link was up once     */
+static bool          gb_link_down   = false; /* link down, or no IP     */
+static uint32_t      g_down_ms      = 0u;    /* outage start or last try */
+static uint32_t      g_restart_ms   = 0u;    /* outage start or last restart */
+static uint32_t      g_rejoin_tries = 0u;    /* attempts in this outage  */
+static bool          gb_answered    = true;  /* broker answered the last try */
 
-static void start_connect(uint32_t now);
-static void flush_tx(void);
-static void on_connection(mqtt_client_t * p_client, void * p_arg,
-                          mqtt_connection_status_t status);
+static void         watch_link(struct netif * p_netif, uint32_t now);
+static void         start_connect(uint32_t now);
+static void         flush_tx(void);
+static void         on_connection(mqtt_client_t * p_client, void * p_arg,
+                                  mqtt_connection_status_t status);
+static char const * status_text(mqtt_connection_status_t status);
 static void on_publish(void * p_arg, char const * p_topic, u32_t tot_len);
 static void on_data(void * p_arg, u8_t const * p_data, u16_t len, u8_t flags);
 
@@ -73,9 +108,19 @@ static void on_data(void * p_arg, u8_t const * p_data, u16_t len, u8_t flags);
 void
 cyw43_utk_app_poll (struct netif * p_netif)
 {
-    uint32_t now   = sys_now();
-    bool     b_net = (netif_is_up(p_netif)) && (netif_is_link_up(p_netif))
+    uint32_t start_us = timing_start();
+    uint32_t now      = sys_now();
+    bool     b_net    = (netif_is_up(p_netif)) && (netif_is_link_up(p_netif))
                  && (!ip4_addr_isany_val(*netif_ip4_addr(p_netif)));
+
+    watch_link(p_netif, now);
+
+    mqtt_bridge_set_wifi(hal_wifi_state());
+
+    if (b_net)
+    {
+        mqtt_bridge_set_address(netif_ip4_addr(p_netif)->addr);
+    }
 
     if (0u != mqtt_client_is_connected(&g_client))
     {
@@ -92,6 +137,90 @@ cyw43_utk_app_poll (struct netif * p_netif)
     else
     {
         /* An attempt is running, or the car is backing off. */
+    }
+
+    timing_stop(TIMING_NET, start_us);
+}
+
+/*!
+ * @brief Re-join the access point after an outage (see the file header).
+ *
+ * @param[in] p_netif The WiFi network interface.
+ * @param[in] now     Current time in ms.
+ */
+static void
+watch_link (struct netif * p_netif, uint32_t now)
+{
+    /* Before the first link the template's own join runs (one scan, one
+       try): it is left to finish before re-joining, unless it fails. */
+    uint32_t wait_ms  = gb_ever_linked ? REJOIN_AFTER_MS : BOOT_JOIN_MS;
+    uint32_t start_us = 0u;
+    bool     b_joined = (0u != netif_is_link_up(p_netif));
+    bool b_no_ip = b_joined && (ip4_addr_isany_val(*netif_ip4_addr(p_netif)));
+
+    if (b_no_ip)
+    {
+        /* Joined: give DHCP its full time on every try. */
+        wait_ms = NOIP_REJOIN_MS;
+    }
+    else if ((g_rejoin_tries > 0u) || (hal_wifi_join_failed()))
+    {
+        wait_ms = REJOIN_EVERY_MS;
+    }
+    else
+    {
+        /* First attempt of this outage. */
+    }
+
+    if (b_joined)
+    {
+        gb_ever_linked = true;
+    }
+
+    if (b_joined && (!b_no_ip))
+    {
+        gb_link_down   = false;
+        g_rejoin_tries = 0u;
+    }
+    else if (!gb_link_down)
+    {
+        gb_link_down = true;
+        g_down_ms    = now;
+        g_restart_ms = now;
+    }
+    else if ((!b_joined) && ((now - g_restart_ms) >= WIFI_RESTART_MS)
+             && (mqtt_bridge_restart_ok()))
+    {
+        /* The chip may have stopped answering: power-cycle it. */
+        g_restart_ms = now;
+        g_down_ms    = now;
+        mqtt_bridge_count_wifi_restart();
+        start_us = timing_start();
+        (void) hal_wifi_restart();
+        timing_stop(TIMING_REJOIN, start_us);
+    }
+    else if (gb_link_down && ((now - g_down_ms) >= wait_ms))
+    {
+        g_down_ms = now;
+        g_rejoin_tries++;
+        mqtt_bridge_count_rejoin();
+
+        /* CSC05: this runs in the cyw43 task, above motion, so its time
+           is measured (TIMING_REJOIN) during an access-point loss. */
+        start_us = timing_start();
+#if LWIP_DHCP
+        if (b_no_ip)
+        {
+            /* A re-join only restarts DHCP if the link drops first. */
+            (void) dhcp_start(p_netif);
+        }
+#endif
+        (void) hal_wifi_rejoin();
+        timing_stop(TIMING_REJOIN, start_us);
+    }
+    else
+    {
+        /* Waiting for the next re-join. */
     }
 }
 
@@ -117,12 +246,33 @@ start_connect (uint32_t now)
     g_attempt_ms = now;
     g_tries      = (g_tries < RETRY_DOUBLINGS_MAX) ? (g_tries + 1u) : g_tries;
     mqtt_disconnect(&g_client); /* does nothing when already idle */
-    mqtt_set_inpub_callback(&g_client, on_publish, on_data, NULL);
+    mqtt_bridge_count_attempt();
+
+    /* The previous attempt ran out of time without any answer: usually a
+       firewall on the broker's computer, or a wrong broker address. */
+    if (!gb_answered)
+    {
+        mqtt_bridge_set_why("no answer from broker (firewall? address?)");
+    }
+
+    gb_answered = false;
 
     if (0 != ipaddr_aton(MQTT_BROKER_IP, &broker))
     {
         err = mqtt_client_connect(&g_client, &broker, MQTT_BROKER_PORT,
                                   on_connection, NULL, &info);
+    }
+
+    /* mqtt_client_connect() clears the whole client, so the receive
+       callbacks are set after it, or commands would never arrive. */
+    if (ERR_OK == err)
+    {
+        mqtt_set_inpub_callback(&g_client, on_publish, on_data, NULL);
+    }
+    else
+    {
+        gb_answered = true; /* nothing was sent: no answer to wait for */
+        mqtt_bridge_set_why("could not start (bad broker address?)");
     }
 
     mqtt_bridge_set_link((ERR_OK == err) ? LINK_CONNECTING : LINK_BACKOFF);
@@ -165,6 +315,8 @@ on_connection (mqtt_client_t * p_client, void * p_arg,
                mqtt_connection_status_t status)
 {
     (void) p_arg;
+    gb_answered = true;
+    mqtt_bridge_set_why(status_text(status));
 
     if (MQTT_CONNECT_ACCEPTED == status)
     {
@@ -188,6 +340,57 @@ on_connection (mqtt_client_t * p_client, void * p_arg,
     {
         mqtt_bridge_set_link(LINK_BACKOFF);
     }
+}
+
+/*!
+ * @brief Plain-words reason for a connection result (shown in the
+ *        heartbeat as "why").
+ *
+ * @param[in] status Result from lwIP's MQTT client.
+ *
+ * @return A string literal.
+ */
+static char const *
+status_text (mqtt_connection_status_t status)
+{
+    char const * p_text = "closed by broker or network (TCP reset)";
+
+    switch (status)
+    {
+        case MQTT_CONNECT_ACCEPTED:
+            p_text = "connected";
+        break;
+
+        case MQTT_CONNECT_REFUSED_PROTOCOL_VERSION:
+            p_text = "refused: protocol version";
+        break;
+
+        case MQTT_CONNECT_REFUSED_IDENTIFIER:
+            p_text = "refused: client id";
+        break;
+
+        case MQTT_CONNECT_REFUSED_SERVER:
+            p_text = "refused: broker unavailable";
+        break;
+
+        case MQTT_CONNECT_REFUSED_USERNAME_PASS:
+            p_text = "refused: bad username or password";
+        break;
+
+        case MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_:
+            p_text = "refused: not authorised (allow_anonymous true?)";
+        break;
+
+        case MQTT_CONNECT_TIMEOUT:
+            p_text = "broker did not reply to CONNECT";
+        break;
+
+        default:
+            /* MQTT_CONNECT_DISCONNECTED: the default text. */
+        break;
+    }
+
+    return (p_text);
 }
 
 /*!

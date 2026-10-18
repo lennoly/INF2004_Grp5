@@ -4,16 +4,19 @@
  *        the USB / UART serial console (pure C, host-testable).
  *
  * Grammar (keywords are case-insensitive, spaces around '=' and ',' are
- * ignored, one command per line):
+ * ignored, one command per line).  A command may start with a request id,
+ * "#<id> " (1..999999999), which the reply repeats, e.g. "#17 gains":
  *
- *   start | stop | calibrate | gains | help
- *   speed=<mm/s>                 cruise speed for line following
+ *   start | stop | calibrate | gains | help | timing
+ *   speed=<mm/s>                 cruise speed for line following, 60..300
  *   pid=<kp>,<ki>,<kd>           wheel speed PID
  *   ff=<kf>,<offset_pct>         speed feed-forward + static-friction offset
  *   line=<kp>,<ki>,<kd>          line-following PID
  *   rate=<ms>                    telemetry period, 0 = off, 50..5000
  *
  * Numbers are plain decimals ("0.08", "-1.5", "12"), without exponents.
+ * The tuning commands (speed=, pid=, ff=, line=) are accepted only while
+ * the car is IDLE or STOPPED (command_allowed()).
  */
 
 #ifndef COMMAND_H
@@ -44,6 +47,7 @@ typedef enum
     COMMAND_FF,
     COMMAND_LINE,
     COMMAND_RATE,
+    COMMAND_TIMING,
     COMMAND_INVALID
 } command_id_t;
 
@@ -52,6 +56,7 @@ typedef struct
     command_id_t kind;
     uint32_t     n_args;
     float32_t    arg[COMMAND_MAX_ARGS];
+    uint32_t     req_id; /* "#<id>" prefix, 0 if none */
 } command_t;
 
 /* Line assembler for byte streams (serial console). */
@@ -64,6 +69,7 @@ typedef struct
 
 bool         command_parse(char const * p_text, command_t * p_cmd);
 char const * command_error(void);
+bool         command_allowed(command_id_t kind, bool b_stationary);
 void         command_line_init(command_line_t * p_line);
 bool command_line_feed(command_line_t * p_line, uint8_t rx_byte, char * p_out,
                        uint32_t out_size);

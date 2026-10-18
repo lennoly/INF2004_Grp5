@@ -23,6 +23,7 @@
 #include "usb_console_compat.h"
 #include "demo_tasks.h"
 #include "car_config.h"
+#include "hal.h"
 #include "encoder.h"
 #include "motion.h"
 #include "ir_sensor.h"
@@ -32,6 +33,7 @@
 #include "telemetry.h"
 #include "vehicle.h"
 #include "app_tests.h"
+#include "timing.h"
 #include "app_main.h"
 
 /* Status snapshots shared between tasks are copied with interrupts disabled
@@ -62,6 +64,9 @@ usermain (void)
 {
     INT attempt = 0;
 
+    /* The watchdog runs only while the car can move (vehicle.c); make sure
+       it is off during start-up, whatever reset brought us here. */
+    hal_watchdog_stop();
     start_blink();
 
     /* Let USB-CDC enumerate so that the boot messages are not lost. */
@@ -78,7 +83,20 @@ usermain (void)
                                   "(APP_MODE %d) ===\n",
                      APP_MODE);
 
-#if (APP_MODE == APP_MODE_MISSION) || (APP_MODE == APP_MODE_TEST_TELEMETRY)
+    /* Task times, control jitter and CPU load: "timing" command. */
+    report_init("timing", timing_init());
+
+#if APP_MODE == APP_MODE_TEST_TELEMETRY
+    /* Buddy 1 WiFi / MQTT test: telemetry only, no robot hardware, so it
+       runs on a bare Pico W.  The heartbeat is also printed here. */
+    report_init("telemetry", telemetry_init(true));
+#if !(defined(TM_WIFI_MQTT) && TM_WIFI_MQTT)
+    /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
+    (void) tm_printf((UB const *) "[wifi] built without WiFi: add WIFI=cyw43 "
+                                  "WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 "
+                                  "WIFI_DNS=1 WIFI_MQTT=1\n");
+#endif
+#elif APP_MODE == APP_MODE_MISSION
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */
     report_init("encoder", encoder_init());
     report_init("motion", motion_init());
