@@ -31,8 +31,9 @@ static volatile uint32_t g_rise_us      = 0u;
 static volatile uint32_t g_width_us     = 0u;
 static volatile uint32_t g_last_ping_us = 0u;
 
-static void ping_locked(ultrasonic_ping_t * p_out);
-static void sort_readings(int32_t * p_values, uint32_t count);
+static void               ping_locked(ultrasonic_ping_t * p_out);
+static ultrasonic_class_t echo_class(int32_t dist_mm);
+static void               sort_readings(int32_t * p_values, uint32_t count);
 static void echo_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
 
 /*!
@@ -258,10 +259,10 @@ ping_locked (ultrasonic_ping_t * p_out)
                in mm, so the truncation to int32_t cannot overflow. */
             dist_mm         = (int32_t) ((float32_t) g_width_us * MM_PER_US);
             p_out->width_us = g_width_us;
-            p_out->result   = (dist_mm > US_MAX_MM) ? ULTRASONIC_OUT_OF_RANGE
-                                                    : ULTRASONIC_VALID;
-            p_out->dist_mm =
-                (dist_mm > US_MAX_MM) ? ULTRASONIC_NO_ECHO : dist_mm;
+            p_out->result   = echo_class(dist_mm);
+            p_out->dist_mm  = (ULTRASONIC_VALID == p_out->result)
+                                  ? dist_mm
+                                  : ULTRASONIC_NO_ECHO;
         }
         else if (0u != g_rise_us)
         {
@@ -274,6 +275,36 @@ ping_locked (ultrasonic_ping_t * p_out)
             /* No echo pulse at all: FAULT. */
         }
     }
+}
+
+/*!
+ * @brief Class of a completed echo pulse by its distance.
+ *
+ * @param[in] dist_mm Distance from the pulse width.
+ *
+ * @return OUT_OF_RANGE beyond US_MAX_MM; FAULT below US_MIN_MM (closer than
+ *         the HC-SR04 can measure: seen on the car when a loose wire let
+ *         the trigger pulse couple onto ECHO); otherwise VALID.
+ */
+static ultrasonic_class_t
+echo_class (int32_t dist_mm)
+{
+    ultrasonic_class_t result = ULTRASONIC_VALID;
+
+    if (dist_mm > US_MAX_MM)
+    {
+        result = ULTRASONIC_OUT_OF_RANGE;
+    }
+    else if (dist_mm < US_MIN_MM)
+    {
+        result = ULTRASONIC_FAULT;
+    }
+    else
+    {
+        /* Within the sensor's range. */
+    }
+
+    return (result);
 }
 
 /*!
