@@ -2,11 +2,48 @@
 /template/
 /sdk/
 
-# Build outputs and caches
-tests/host/picocar_tests
-__pycache__/
-*.pyc
-.DS_Store
+# Credentials live in the fetched template and are yours alone.
+# Belt and braces: never commit them even if the tree moves.
+wifi_credentials.h
+mqtt_config.h
+!config/mqtt_config.example.h
+!tests/host/mqtt_config.h
 
-# Dashboard session logs
-logs/
+# Host unit tests (tests/host).
+/tests/host/picocar_tests
+/tests/host/picocar_tests.exe
+
+# Firmware build output.
+*.uf2
+!firmware/*.uf2
+*.elf
+*.bin
+*.map
+*.dis
+
+# Dashboard session logs (testing/*/logs/ IS committed: test evidence)
+/logs/
+/tools/dashboard/logs/
+*.csv
+!docs/**/*.csv
+!testing/**/*.csv
+
+# Videos are shared as unlisted YouTube links (videos/README.md), never committed
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+# Python tooling.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS and editor noise.
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

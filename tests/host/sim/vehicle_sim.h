@@ -30,5 +30,6 @@ uint32_t vehicle_sim_servo_us(void);
 uint32_t vehicle_sim_queued_barcodes(void);
 uint32_t vehicle_sim_watchdog_gap_ms(void);
 uint32_t vehicle_sim_watchdog_timeout_ms(void);
+bool     vehicle_sim_watchdog_armed(void);
 
 #endif /* VEHICLE_SIM_H */

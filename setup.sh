@@ -4,11 +4,13 @@
 #   template/      the course template (sirfonzie/mtk3smp-rp2040) at the
 #                  commit docs/template_changes.patch was made against, with
 #                  that patch applied and template/app_program linked to our
-#                  app_program/
+#                  app_program/, with the other boards' ports removed
 #   sdk/pico-sdk   Pico SDK 2.2.0 and the three submodules the template uses
 #                  (skipped when PICO_SDK_PATH is set)
 #
-# Run once; running it again skips what is already there.  Needs git, and
+# Run once after cloning, and again after a pull: on an existing template/
+# it refreshes our build rule and removes other boards' ports again (your
+# config files stay).  Needs git, and
 # a system with symbolic links (macOS, Linux or WSL).
 set -e
 cd "$(dirname "$0")"
@@ -24,7 +26,24 @@ if [ ! -d template ]; then
     cp config/mqtt_config.example.h template/config/
     rm -r template/app_program
     ln -s ../app_program template/app_program
+else
+    # An existing template/: bring our app build rule up to date (it changes
+    # with the project, e.g. for the subsystem folders).  Your config files
+    # and everything else in template/ are left as they are.
+    RULE=build_make/mtkernel_3/app_program/subdir.mk
+    git -C template checkout -q -- "$RULE"
+    git -C template apply --include="$RULE" ../docs/template_changes.patch
 fi
+
+# Keep only the Pico W port (RP2040, Cortex-M0+ = armv6m): the template
+# also carries other boards' ports, which this project never builds.
+find template -path template/.git -prune -o -type d \( \
+    -name acm3 -o -name armv7a -o -name armv7m -o -name rxv2 \
+    -o -name 'iote_*' -o -name 'nucleo_*' -o -name 'rsk_*' \
+    -o -name 'rtb_*' -o -name rx231 -o -name rx65n -o -name rza2m \
+    -o -name stm32h7 -o -name stm32l4 -o -name tx03_m367 \) \
+    -prune -exec rm -r {} +
+rm -f template/build_make/iote_*.mk template/build_make/nucleo_*.mk
 
 if [ -z "$PICO_SDK_PATH" ] && [ ! -d sdk/pico-sdk ]; then
     git -c advice.detachedHead=false clone -q --depth 1 -b "$SDK_TAG" \

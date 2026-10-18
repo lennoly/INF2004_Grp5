@@ -1,5 +1,6 @@
 /* Host-test stand-in for the parts of lwIP that app_program/mqtt_lwip.c
- * uses (lwip/netif.h, lwip/sys.h, lwip/apps/mqtt.h, mqtt_priv.h), plus the
+ * uses (lwip/netif.h, lwip/sys.h, lwip/dhcp.h, lwip/apps/mqtt.h,
+ * mqtt_priv.h), plus the
  * controls the test drives them with (fake_lwip.c).  Names and types
  * mirror lwIP 2.2, so this file follows lwIP's naming, not BARR-C's. */
 #ifndef FAKE_LWIP_MQTT_H
@@ -24,6 +25,9 @@ struct netif { u8_t b_up; ip_addr_t ip; };
 #define netif_ip4_addr(p_netif)   (&(p_netif)->ip)
 #define ip4_addr_isany_val(ip)    (0u == (ip).addr)
 
+#define LWIP_DHCP (1)
+err_t dhcp_start(struct netif * netif);
+
 typedef struct mqtt_client_s { u8_t b_connected; } mqtt_client_t;
 
 struct mqtt_connect_client_info_t {
@@ -39,8 +43,14 @@ struct mqtt_connect_client_info_t {
 };
 
 typedef enum {
-    MQTT_CONNECT_ACCEPTED     = 0,
-    MQTT_CONNECT_DISCONNECTED = 256
+    MQTT_CONNECT_ACCEPTED                 = 0,
+    MQTT_CONNECT_REFUSED_PROTOCOL_VERSION = 1,
+    MQTT_CONNECT_REFUSED_IDENTIFIER       = 2,
+    MQTT_CONNECT_REFUSED_SERVER           = 3,
+    MQTT_CONNECT_REFUSED_USERNAME_PASS    = 4,
+    MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_  = 5,
+    MQTT_CONNECT_DISCONNECTED             = 256,
+    MQTT_CONNECT_TIMEOUT                  = 257
 } mqtt_connection_status_t;
 
 enum { MQTT_DATA_FLAG_LAST = 1 };
@@ -75,6 +85,7 @@ err_t mqtt_publish(mqtt_client_t * client, char const * topic,
 #define FAKE_TOPIC_MAX (64u)
 extern u32_t    g_fake_now_ms;
 extern uint32_t g_fake_connects;             /* mqtt_client_connect() calls */
+extern uint32_t g_fake_dhcp_starts;          /* dhcp_start() calls          */
 extern err_t    g_fake_publish_err;          /* what mqtt_publish() returns */
 extern char     g_fake_topic[FAKE_TOPIC_MAX]; /* last accepted publish      */
 extern u8_t     g_fake_retain;

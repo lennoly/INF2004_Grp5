@@ -18,6 +18,7 @@
 #include <tk/tkernel.h>
 #include "hal.h"
 #include "hal_irq.h"
+#include "timing.h"
 
 #define MAX_GPIO_CALLBACKS (6u)
 #define DEFAULT_PERIOD_US  (1000u)
@@ -176,6 +177,8 @@ sampler_isr (UINT intno)
     {
         callback(now);
     }
+
+    timing_stop(TIMING_IR_ISR, now); /* cost of the 1 kHz sampler */
 }
 
 /*** end of file ***/

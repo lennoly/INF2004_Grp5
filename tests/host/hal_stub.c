@@ -6,6 +6,8 @@
 
 #include "hal_stub.h"
 
+bool gb_stub_join_failed = false;
+
 /*!
  * @brief Compiler-only barrier: the host tests are single-threaded.
  */
@@ -15,6 +17,52 @@ hal_memory_barrier (void)
     /* WARNING: inline assembly (Rule 1.1.c), an empty statement that only
        stops the compiler from reordering memory accesses across it. */
     __asm__ volatile("" ::: "memory");
+}
+
+/*!
+ * @brief No WiFi driver in the host tests: the re-join request does
+ *        nothing (the test counts attempts with the bridge's counter).
+ *
+ * @return false.
+ */
+bool
+hal_wifi_rejoin (void)
+{
+    return (false);
+}
+
+/*!
+ * @brief No WiFi chip in the host tests: the restart does nothing (the
+ *        test counts restarts with the bridge's counter).
+ *
+ * @return false.
+ */
+bool
+hal_wifi_restart (void)
+{
+    return (false);
+}
+
+/*!
+ * @brief Join result for the host tests.
+ *
+ * @return gb_stub_join_failed.
+ */
+bool
+hal_wifi_join_failed (void)
+{
+    return (gb_stub_join_failed);
+}
+
+/*!
+ * @brief WiFi state text for the host tests.
+ *
+ * @return A fixed string literal, checked by the tests.
+ */
+char const *
+hal_wifi_state (void)
+{
+    return ("host");
 }
 
 /*** end of file ***/

@@ -23,7 +23,15 @@
 #include "command.h"
 #include "console_in.h"
 #include "line_follow.h"
+#include "timing.h"
 #include "telemetry.h"
+
+#if defined(TM_WIFI_MQTT) && TM_WIFI_MQTT
+#include "mqtt_config.h"
+#define BROKER_TEXT MQTT_BROKER_IP
+#else
+#define BROKER_TEXT "-"
+#endif
 
 #define TASK_PRIORITY      (10)
 #define TASK_STACK         (3072)
@@ -31,11 +39,22 @@
 #define GAINS_REPORT_TICKS (3u)  /* 60 ms: the vehicle applies first    */
 #define TENTHS             (10.0f)
 #define PERMILLE           (1000.0f)
+#define PERCENT            (100u)
 #define MS_PER_S           (1000u)
 #define NO_STATE_SEEN      (0xFFFFFFFFu)
 #define GAIN_TEXTS         (8u) /* 3 PID + 2 feed-forward + 3 line     */
 #define LINE_GAINS         (3u)
 #define TERMINATOR         ('\0')
+#define BYTE_MASK          (0xFFu)
+#define BITS_PER_BYTE      (8u)
+
+/* The WiFi test build also prints the heartbeat on the USB console, so the
+   link can be watched there even while MQTT is down. */
+#if APP_MODE == APP_MODE_TEST_TELEMETRY
+#define HEARTBEAT_ON_CONSOLE (true)
+#else
+#define HEARTBEAT_ON_CONSOLE (false)
+#endif
 
 /* JSON output buffer; used only by the telemetry task. */
 static char g_buf[MQTT_BRIDGE_PAYLOAD_MAX];
@@ -68,7 +87,9 @@ static char const * const g_link_names[] = {
 static void         telemetry_task(INT stacd, void * p_exinf);
 static void         handle_commands(void);
 static void         handle_command_text(char const * p_text);
-static bool         execute(command_t const * p_cmd);
+static char const * execute(command_t const * p_cmd);
+static bool         stationary(void);
+static void         emit_timing(void);
 static void         json_safe(char * p_dst, char const * p_src, uint32_t size);
 static void         emit(mqtt_bridge_topic_t topic, bool b_console);
 static void         build_telemetry(void);
@@ -83,6 +104,7 @@ static INT          to_int(float32_t value);
 static INT          tenths(float32_t value);
 static INT          permille(float32_t value);
 static INT          as_int(int32_t value);
+static UINT         ip_byte(uint32_t address, uint32_t index);
 static UINT         as_uint(uint32_t value);
 
 /*!
@@ -138,6 +160,7 @@ telemetry_task (INT stacd, void * p_exinf)
     uint32_t            last_hb    = 0u;
     uint32_t            last_event = 0u;
     mqtt_bridge_stats_t link_stats;
+    vehicle_status_t    veh;
 
     (void) stacd;
     (void) p_exinf;
@@ -177,6 +200,11 @@ telemetry_task (INT stacd, void * p_exinf)
             emit(TOPIC_TELEMETRY, false);
         }
 
+        /* A WiFi chip restart stalls the cyw43 task (above motion), so it
+           is allowed only while the car is not driving. */
+        vehicle_get_status(&veh);
+        mqtt_bridge_set_restart_ok((VS_IDLE == veh.state)
+                                   || (VS_STOPPED == veh.state));
         mqtt_bridge_get_stats(&link_stats);
 
         if ((LINK_DISABLED != link_stats.link)
@@ -224,9 +252,9 @@ handle_commands (void)
 static void
 handle_command_text (char const * p_text)
 {
-    command_t cmd;
-    char      safe[COMMAND_LINE_MAX];
-    bool      b_ok = false;
+    command_t    cmd;
+    char         safe[COMMAND_LINE_MAX];
+    char const * p_err = NULL;
 
     json_safe(safe, p_text, sizeof(safe));
 
@@ -234,38 +262,44 @@ handle_command_text (char const * p_text)
        type; the formats are ASCII. */
     if (command_parse(p_text, &cmd))
     {
-        b_ok = execute(&cmd);
+        p_err = execute(&cmd);
         (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"cmd\",\"cmd\":\"%s\","
-                                       "\"ok\":%d%s}",
-                          safe, b_ok ? 1 : 0,
-                          b_ok ? ""
-                               : ",\"err\":\"not available in this build\"");
+                          (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
+                                       "\"cmd\":\"%s\",\"ok\":%d%s%s%s}",
+                          as_uint(cmd.req_id), safe, (NULL == p_err) ? 1 : 0,
+                          (NULL == p_err) ? "" : ",\"err\":\"",
+                          (NULL == p_err) ? "" : p_err,
+                          (NULL == p_err) ? "" : "\"");
     }
     else
     {
         (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"cmd\",\"cmd\":\"%s\","
-                                       "\"ok\":0,\"err\":\"%s\"}",
-                          safe, command_error());
+                          (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
+                                       "\"cmd\":\"%s\",\"ok\":0,"
+                                       "\"err\":\"%s\"}",
+                          as_uint(cmd.req_id), safe, command_error());
     }
 
     emit(TOPIC_EVENT, true);
 }
 
 /*!
- * @brief Carry out one parsed command.
+ * @brief Carry out one parsed command.  Tuning commands are refused while
+ *        the car is driving (CSC05 review, FR10).
  *
  * @param[in] p_cmd Valid command.
  *
- * @return false if the command had no effect in this build.
+ * @return NULL if it ran, otherwise the reason it did not.
  */
-static bool
+static char const *
 execute (command_t const * p_cmd)
 {
-    bool b_ok = true;
+    char const * p_err     = "only while IDLE or STOPPED";
+    bool         b_allowed = command_allowed(p_cmd->kind, stationary());
+    bool         b_ok      = b_allowed;
 
-    switch (p_cmd->kind)
+    /* A refused command runs nothing: COMMAND_INVALID is the default. */
+    switch (b_allowed ? p_cmd->kind : COMMAND_INVALID)
     {
         case COMMAND_START:
             b_ok = vehicle_command(VCMD_START, 0);
@@ -326,12 +360,21 @@ execute (command_t const * p_cmd)
             emit_help();
         break;
 
+        case COMMAND_TIMING:
+            emit_timing();
+        break;
+
         default:
-            b_ok = false;
+            /* Refused above: p_err keeps its reason. */
         break;
     }
 
-    return (b_ok);
+    if (b_allowed)
+    {
+        p_err = b_ok ? NULL : "not available in this build";
+    }
+
+    return (p_err);
 }
 
 /*!
@@ -459,17 +502,21 @@ send_heartbeat (void)
         gp_out,
         (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
                      "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
-                     "\"imu\":%d,\"i2cerr\":%u}",
+                     "\"rejoin\":%u,\"wreset\":%u,\"wifi\":\"%s\","
+                     "\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
+                     "\"tries\":%u,\"why\":\"%s\",\"imu\":%d,"
+                     "\"i2cerr\":%u}",
         as_uint(now.lo / MS_PER_S), as_uint(g_hb_seq),
         vehicle_state_name(veh.state), link_name(link_stats.link),
         as_uint(link_stats.published), as_uint(link_stats.dropped),
         as_uint(link_stats.commands), as_uint(link_stats.reconnects),
-        imu.b_ok ? 1 : 0, as_uint(imu.i2c_errors));
-
-    if (LINK_DISABLED != link_stats.link)
-    {
-        (void) mqtt_bridge_publish(TOPIC_HEARTBEAT, g_buf);
-    }
+        as_uint(link_stats.rejoins), as_uint(link_stats.wifi_restarts),
+        link_stats.p_wifi, ip_byte(link_stats.address, 0u),
+        ip_byte(link_stats.address, 1u), ip_byte(link_stats.address, 2u),
+        ip_byte(link_stats.address, 3u), BROKER_TEXT,
+        as_uint(link_stats.attempts), link_stats.p_why, imu.b_ok ? 1 : 0,
+        as_uint(imu.i2c_errors));
+    emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 
 /*!
@@ -494,7 +541,8 @@ check_events (void)
         (void) tm_sprintf(gp_out,
                           (UB const *) "{\"type\":\"state\",\"st\":\"%s\","
                                        "\"why\":\"%s\"}",
-                          vehicle_state_name(veh.state), veh.p_reason);
+                          vehicle_state_name(veh.state),
+                          (NULL != veh.p_reason) ? veh.p_reason : "");
         emit(TOPIC_EVENT, false);
     }
 
@@ -611,18 +659,86 @@ emit_help (void)
     /* Casts: tm_printf() and tm_sprintf() take the kernel's UB string
        type; the texts are ASCII. */
     (void) tm_printf(
-        (UB const *) "# commands: start | stop | calibrate | gains | help\n"
+        (UB const *) "# commands: start | stop | calibrate | gains | help "
+                     "| timing\n"
                      "#   speed=<mm/s>        cruise speed (60..300)\n"
                      "#   pid=<kp>,<ki>,<kd>  wheel speed PID\n"
                      "#   ff=<kf>,<offset>    feed-forward + friction "
                      "offset (pct)\n"
                      "#   line=<kp>,<ki>,<kd> line-following PID\n"
-                     "#   rate=<ms>           telemetry period, 0 = off\n");
+                     "#   rate=<ms>           telemetry period, 0 = off\n"
+                     "#   speed=, pid=, ff=, line= only while IDLE or "
+                     "STOPPED\n"
+                     "#   timing: task times, control jitter and CPU load "
+                     "since the last timing\n");
     (void) tm_sprintf(gp_out,
                       (UB const *) "{\"type\":\"help\",\"cmds\":\"start|stop|"
-                                   "calibrate|gains|help|speed=|pid=|ff=|"
-                                   "line=|rate=\"}");
+                                   "calibrate|gains|help|timing|speed=|"
+                                   "pid=|ff=|line=|rate=\"}");
     emit(TOPIC_EVENT, false);
+}
+
+/*!
+ * @brief Whether the car is standing still (IDLE or STOPPED); test builds
+ *        have no running vehicle task and report IDLE.
+ *
+ * @return true if tuning commands may run.
+ */
+static bool
+stationary (void)
+{
+    vehicle_status_t veh;
+
+    vehicle_get_status(&veh);
+
+    return ((VS_IDLE == veh.state) || (VS_STOPPED == veh.state));
+}
+
+/*!
+ * @brief Publish the timing window and start a new one (CSC05 review:
+ *        WCET, CPU load and the A2 control-jitter test).  Each section is
+ *        [max_us, avg_us, count]; load_pct includes every task, the
+ *        template's USB and Wi-Fi tasks and the kernel (idle probe).
+ */
+static void
+emit_timing (void)
+{
+    timing_report_t report;
+    timing_stat_t   stat;
+    uint32_t        idx   = 0u;
+    uint32_t        busy  = 0u;
+    uint32_t        load  = 0u;
+    INT             count = 0;
+
+    timing_take(&report);
+    busy = report.window_ms - report.idle_ms;
+    load =
+        (0u == report.window_ms) ? 0u : ((busy * PERCENT) / report.window_ms);
+
+    /* Casts in this function: tm_sprintf() takes the kernel's UB string
+       type; the formats are ASCII. */
+    count = tm_sprintf(gp_out,
+                       (UB const *) "{\"type\":\"timing\",\"win_ms\":%u,"
+                                    "\"load_pct\":%u,\"jit_max_us\":%u,"
+                                    "\"periods\":%u",
+                       as_uint(report.window_ms), as_uint(load),
+                       as_uint(report.jitter_max_us), as_uint(report.periods));
+
+    /* Cast: TIMING_COUNT is a small positive enumeration constant. */
+    for (idx = 0u; idx < (uint32_t) TIMING_COUNT; idx++)
+    {
+        stat = report.stat[idx];
+
+        /* Cast: idx is below TIMING_COUNT, a valid timing_id_t. */
+        count += tm_sprintf(
+            &gp_out[count], (UB const *) ",\"%s\":[%u,%u,%u]",
+            timing_name((timing_id_t) idx), as_uint(stat.max_us),
+            as_uint((0u == stat.count) ? 0u : (stat.sum_us / stat.count)),
+            as_uint(stat.count));
+    }
+
+    (void) tm_sprintf(&gp_out[count], (UB const *) "}");
+    emit(TOPIC_EVENT, true);
 }
 
 /*!
@@ -727,6 +843,23 @@ static INT
 as_int (int32_t value)
 {
     return (value);
+}
+
+/*!
+ * @brief One byte of an IPv4 address for printing.
+ *
+ * @param[in] address Address in network byte order, as lwIP stores it
+ *                    (the first byte in memory is the first number).
+ * @param[in] index   0 for the first number .. 3 for the last.
+ *
+ * @return The byte, 0..255.
+ */
+static UINT
+ip_byte (uint32_t address, uint32_t index)
+{
+    /* The RP2040 is little-endian, so the first byte in memory is the
+       least significant one. */
+    return ((address >> (index * BITS_PER_BYTE)) & BYTE_MASK);
 }
 
 /*!

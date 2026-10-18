@@ -28,6 +28,11 @@
 #include "hardware/structs/uart.h"
 #include "hardware/structs/watchdog.h"
 #include "hardware/structs/psm.h"
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+#include "cyw43.h"
+#include "cyw43_country.h"
+#include "wifi_credentials.h"
+#endif
 #include "hal.h"
 #include "hal_irq.h"
 
@@ -71,6 +76,10 @@ static volatile uint32_t g_alarm_target = 0u;
 
 /* Watchdog reload value; written and used only by the vehicle task. */
 static uint32_t g_watchdog_load = 0u;
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+static uint8_t const g_ssid[]     = UTK_WIFI_SSID;
+static uint8_t const g_password[] = UTK_WIFI_PASSWORD;
+#endif
 
 static void gpio_route(uint32_t pin, uint32_t func);
 static bool i2c_wait_bits(volatile uint32_t const * p_reg, uint32_t mask);
@@ -203,6 +212,11 @@ hal_gpio_irq_take (uint32_t pin)
 /*!
  * @brief Route a pin to its PWM slice and start it at level 0.
  *
+ * The template releases the PWM block from reset only when USE_PTMR is
+ * set (config.h), so it is released here, as hal_adc_init() does for the
+ * ADC; otherwise the slices ignore every write and the pins stay low.
+ * Releasing an already running block changes nothing.
+ *
  * Period = (wrap + 1) * clkdiv / clk_sys.
  *
  * @param[in] pin    GPIO number.
@@ -214,6 +228,9 @@ hal_pwm_setup (uint32_t pin, uint32_t clkdiv, uint32_t wrap)
 {
     uint32_t slice = pwm_gpio_to_slice_num(pin);
 
+    /* Release only: reset_unreset_...() would first reset the whole block
+       and wipe the slices that earlier calls set up. */
+    unreset_block_num_wait_blocking(RESET_PWM);
     gpio_route(pin, GPIO_FUNC_PWM);
 
     /* Casts: the documented ranges of clkdiv (1..255) and wrap
@@ -235,6 +252,38 @@ hal_pwm_set_level (uint32_t pin, uint32_t level)
 {
     /* Cast: level <= wrap + 1, and every wrap used is below 65535. */
     pwm_set_gpio_level(pin, (uint16_t) level);
+}
+
+/*!
+ * @brief Read back the hardware state of one PWM pin, and sample the pin
+ *        level 1000 times over about one millisecond (10 PWM periods).
+ *
+ * @param[in]  pin   GPIO number.
+ * @param[out] p_out Register values and the measured high percentage.
+ */
+void
+hal_pwm_inspect (uint32_t pin, hal_pwm_info_t * p_out)
+{
+    uint32_t slice = pwm_gpio_to_slice_num(pin);
+    uint32_t idx   = 0u;
+    uint32_t highs = 0u;
+
+    p_out->funcsel =
+        (io_bank0_hw->io[pin].ctrl & IO_BANK0_GPIO0_CTRL_FUNCSEL_BITS)
+        >> IO_BANK0_GPIO0_CTRL_FUNCSEL_LSB;
+    p_out->pad     = pads_bank0_hw->io[pin];
+    p_out->csr     = pwm_hw->slice[slice].csr;
+    p_out->top     = pwm_hw->slice[slice].top;
+    p_out->cc      = pwm_hw->slice[slice].cc;
+    p_out->b_reset = (0u != (resets_hw->reset & (1u << RESET_PWM)));
+
+    for (idx = 0u; idx < 1000u; idx++)
+    {
+        highs += gpio_get(pin) ? 1u : 0u;
+        hal_delay_us(1u);
+    }
+
+    p_out->high_pct = highs / 10u;
 }
 
 /*!
@@ -552,6 +601,132 @@ hal_alarm_ack_rearm (uint32_t period_us)
 }
 
 /*!
+ * @brief Start a non-blocking re-join of the access point with the
+ *        build's credentials (config/wifi_credentials.h).  Call only from
+ *        the CYW43 service task (the MQTT poll hook), which holds the
+ *        driver lock, as the template's own join does.  It lives here
+ *        because the CYW43 driver headers need C11 (see the file header).
+ *
+ * @return true if the join request was accepted; false without WiFi.
+ */
+bool
+hal_wifi_rejoin (void)
+{
+    bool b_ok = false;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+    b_ok = (0
+            == cyw43_wifi_join(&cyw43_state, sizeof(g_ssid) - 1u, g_ssid,
+                               sizeof(g_password) - 1u, g_password,
+                               UTK_WIFI_AUTH, NULL, CYW43_CHANNEL_NONE));
+#endif
+
+    return (b_ok);
+}
+
+/*!
+ * @brief Power-cycle the WiFi chip, reload its firmware and start a new
+ *        join: for a chip that stopped answering (e.g. after a supply dip
+ *        when the USB cable is pulled).  Blocks the CYW43 service task
+ *        while the firmware loads, so the caller only does this while the
+ *        car is not driving.  Call only from the CYW43 service task, like
+ *        hal_wifi_rejoin().
+ *
+ * @return true if the new join request was accepted; false without WiFi.
+ */
+bool
+hal_wifi_restart (void)
+{
+    bool b_ok = false;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+    /* Powers the chip off and removes its network interface; set_up
+       powers it on, loads the firmware and adds the interface again
+       (with DHCP), as the template does at boot. */
+    cyw43_deinit(&cyw43_state);
+    cyw43_wifi_set_up(&cyw43_state, CYW43_ITF_STA, true,
+                      CYW43_COUNTRY_WORLDWIDE);
+    b_ok = hal_wifi_rejoin();
+#endif
+
+    return (b_ok);
+}
+
+/*!
+ * @brief Whether the last join has ended in failure (hotspot not found,
+ *        wrong password or refused), so a new one can start at once.
+ *        Call only from the CYW43 service task, like hal_wifi_rejoin().
+ *
+ * @return true after a failed join; false while joining, joined or
+ *         without WiFi.
+ */
+bool
+hal_wifi_join_failed (void)
+{
+    bool b_failed = false;
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+    b_failed =
+        (cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) < CYW43_LINK_DOWN);
+#endif
+
+    return (b_failed);
+}
+
+/*!
+ * @brief The WiFi connection state in words (heartbeat "wifi").  Call only
+ *        from the CYW43 service task, like hal_wifi_rejoin().
+ *
+ * @return A string literal.
+ */
+char const *
+hal_wifi_state (void)
+{
+    char const * p_text = "-";
+
+#if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
+#if defined(TM_WIFI_NETIF) && TM_WIFI_NETIF
+    int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+#else
+    int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA);
+#endif
+
+    switch (status)
+    {
+        case CYW43_LINK_UP:
+            p_text = "joined";
+        break;
+
+        case CYW43_LINK_NOIP:
+            p_text = "joined, waiting for an IP address";
+        break;
+
+        case CYW43_LINK_JOIN:
+            p_text = "joining";
+        break;
+
+        case CYW43_LINK_NONET:
+            p_text = "hotspot not found (2.4 GHz? name?)";
+        break;
+
+        case CYW43_LINK_BADAUTH:
+            p_text = "wrong WiFi password";
+        break;
+
+        case CYW43_LINK_FAIL:
+            p_text = "join failed";
+        break;
+
+        default:
+            p_text = "not joined";
+        break;
+    }
+#endif
+
+    return (p_text);
+}
+
+/*!
  * @brief Data memory barrier (DMB) plus compiler barrier.
  *
  * Used by the lock-free rings shared between tasks and the USB / lwIP
@@ -603,6 +778,15 @@ hal_watchdog_start (uint32_t timeout_ms)
         watchdog_hw->load                      = load;
         hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
     }
+}
+
+/*!
+ * @brief Stop the watchdog (hal_watchdog_start() arms it again).
+ */
+void
+hal_watchdog_stop (void)
+{
+    hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
 }
 
 /*!

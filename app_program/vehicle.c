@@ -32,6 +32,7 @@
 #include "servo.h"
 #include "ultrasonic.h"
 #include "obstacle.h"
+#include "timing.h"
 #include "vehicle.h"
 
 #define TASK_PRIORITY      (6)
@@ -55,8 +56,8 @@
 #define SEEK_EXTRA_MM      (200.0f)
 #define FRONT_IGNORE_MM    (150.0f)
 #define STRAIGHT_EXTRA_MM  (20.0f)
-#define SPEED_MIN_CMD      (60)
-#define SPEED_MAX_CMD      (300) /* NFR2: >= 10 IR samples per 3 mm bar */
+#define SPEED_MIN_CMD      (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
+#define SPEED_MAX_CMD      (SPEED_CMD_MAX_MM_S)
 #define STOP_SETTLE_MS     (200u)
 #define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
 #define REACQ_SWEEPS       (5u)
@@ -314,6 +315,21 @@ set_state (vehicle_state_t state, char const * p_reason)
     g_st.state_seq++;
     g_st.p_reason = p_reason;
     EI(imask);
+
+    /* The watchdog guards motion: armed in every state that can move the
+       car, so a stalled loop (a hung or starved task) resets the chip and
+       stops the motors.  It is off in IDLE and STOPPED, the only states
+       in which the WiFi chip may be restarted, which stalls the cyw43
+
+       task above this one. */
+    if ((VS_IDLE == state) || (VS_STOPPED == state))
+    {
+        hal_watchdog_stop();
+    }
+    else
+    {
+        hal_watchdog_start(WATCHDOG_TIMEOUT_MS);
+    }
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
     (void) tm_printf((UB const *) "[vehicle] -> %s (%s)\n",
@@ -1232,21 +1248,32 @@ run_state (void)
 static void
 vehicle_task (INT stacd, void * p_exinf)
 {
+    uint32_t        start_us = 0u;
+    vehicle_state_t before   = VS_IDLE;
+
     (void) stacd;
     (void) p_exinf;
 
     /* The line follower is private to this task, so it is set up here. */
     line_follow_init(&g_lf);
 
-    /* From now on a stalled vehicle loop (a hung or starved task) resets
-       the chip, which stops the motors. */
-    hal_watchdog_start(WATCHDOG_TIMEOUT_MS);
-
     for (;;)
     {
+        start_us = timing_start();
+        before   = g_st.state;
         poll_inputs();
         handle_requests();
         run_state();
+
+        /* Only states that never wait inside the loop are timed, so the
+           figure is CPU time (WCET), not time spent waiting for a move. */
+        if ((g_st.state == before)
+            && ((VS_LINE_FOLLOW == before) || (VS_IDLE == before)
+                || (VS_STOPPED == before)))
+        {
+            timing_stop(TIMING_VEHICLE, start_us);
+        }
+
         (void) tk_dly_tsk(LOOP_MS);
     }
 }

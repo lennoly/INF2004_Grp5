@@ -14,6 +14,7 @@
 #include "car_math.h"
 #include "car_types.h"
 #include "command.h"
+#include "hal_stub.h"
 #include "line_follow.h"
 #include "lwip/apps/mqtt.h"
 #include "mqtt_bridge.h"
@@ -109,6 +110,11 @@
 #define NET_UP_MS       (5000u)  /* the network comes up after boot  */
 #define FIRST_WINDOW_MS (2000u)  /* the first attempt's time limit   */
 #define SESSION_MS      (60000u) /* a session that ran for a while   */
+#define REJOIN_AFTER_MS (3000u)  /* first re-join after the link drops */
+#define REJOIN_EVERY_MS (5000u)  /* then a re-join every 5 s           */
+#define RESTART_MS      (10000u) /* still down: WiFi chip restart      */
+#define NOIP_REJOIN_MS  (15000u) /* joined without an IP: retry period  */
+#define FAILED_STEPS    (3u)     /* failed-join retries checked         */
 
 /* Vehicle simulation (sim/): one press of START, a 1.5 s drive (past the
    150 mm front-ignore window after "path clear") and a close echo pair. */
@@ -161,9 +167,15 @@ static uint32_t  scan_box(avoidance_point_t * p_points, float32_t centre_x,
 static void      test_obstacle(void);
 static void      test_bridge(void);
 static void      test_mqtt_client(void);
+static void      test_rejoin(struct netif * p_netif);
+static void      test_noip_rejoin(struct netif * p_netif);
+static void      test_failed_join(struct netif * p_netif);
+static uint32_t  rejoins(void);
+static uint32_t  restarts(void);
 static uint32_t  feed_text(command_line_t * p_line, char const * p_text,
                            char * p_out);
 static void      test_command(void);
+static void      test_command_limits(void);
 static void      test_line_gains(void);
 static vehicle_status_t vehicle_status(void);
 static bool             vehicle_is(vehicle_state_t state, char const * p_why);
@@ -197,6 +209,7 @@ main (void)
     test_bridge();
     test_mqtt_client();
     test_command();
+    test_command_limits();
     test_line_gains();
     (void) printf("\n%" PRIu32 " passed, %" PRIu32 " failed\n", g_pass, g_fail);
 
@@ -809,19 +822,47 @@ test_mqtt_client (void)
     g_fake_now_ms = NET_UP_MS;
     cyw43_utk_app_poll(&netif);
     check(0u == g_fake_connects, "no attempt without a network");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_wifi, "host"), "the WiFi state is reported");
+    g_fake_now_ms += RESTART_MS - 1u;
+    cyw43_utk_app_poll(&netif);
+    check((0u == rejoins()) && (0u == restarts()),
+          "the first join at power-up is left to run");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(&netif);
+    check((0u == rejoins()) && (1u == restarts()),
+          "no link 10 s after power-up: WiFi chip restarted");
     netif.b_up    = 1u;
     netif.ip.addr = 1u;
     cyw43_utk_app_poll(&netif);
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "one attempt once the network is up");
+    mqtt_bridge_get_stats(&stats);
+    check((1u == stats.attempts) && (1u == stats.address),
+          "attempt counted, own address recorded");
     g_fake_now_ms += FIRST_WINDOW_MS - 1u;
     cyw43_utk_app_poll(&netif);
     check(1u == g_fake_connects, "the attempt gets 2 s");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_why, "-"), "no reason before an answer");
     g_fake_now_ms++;
     cyw43_utk_app_poll(&netif);
     check(2u == g_fake_connects, "then a new attempt");
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strncmp(stats.p_why, "no answer", 9u),
+          "an unanswered attempt is reported");
+    fake_mqtt_connection(MQTT_CONNECT_REFUSED_NOT_AUTHORIZED_);
+    mqtt_bridge_get_stats(&stats);
+    check((0 == strncmp(stats.p_why, "refused: not authorised", 23u))
+              && (LINK_BACKOFF == stats.link),
+          "a refusal is reported in words");
+    g_fake_now_ms += FIRST_WINDOW_MS * 2u;
+    cyw43_utk_app_poll(&netif);
+    check(3u == g_fake_connects, "a refused attempt is retried");
 
     fake_mqtt_connection(MQTT_CONNECT_ACCEPTED);
+    mqtt_bridge_get_stats(&stats);
+    check(0 == strcmp(stats.p_why, "connected"), "success is reported");
     check((0 == strcmp(g_fake_topic, "picocar/t/status"))
               && (1u == g_fake_retain)
               && (0 == strcmp(g_fake_subscribed, "picocar/t/cmd")),
@@ -848,11 +889,174 @@ test_mqtt_client (void)
     g_fake_now_ms += SESSION_MS;
     fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
     cyw43_utk_app_poll(&netif);
-    check(3u == g_fake_connects, "a lost session reconnects at once");
+    check(4u == g_fake_connects, "a lost session reconnects at once");
     fake_mqtt_connection(MQTT_CONNECT_ACCEPTED);
     mqtt_bridge_get_stats(&stats);
     check((LINK_CONNECTED == stats.link) && (1u == stats.reconnects),
           "reconnect counted");
+    test_rejoin(&netif);
+}
+
+/*!
+ * @brief WiFi re-join: 3 s after the link drops, then every 5 s; a chip
+ *        restart 10 s into the outage and every 10 s after it, but never
+ *        while the car is driving; a new outage starts again at 3 s. One
+ *        chip restart was already counted at power-up.
+ *
+ * @param[in,out] p_netif The fake network interface (link up on entry).
+ */
+static void
+test_rejoin (struct netif * p_netif)
+{
+    check((0u == rejoins()) && (1u == restarts()), "no re-join while linked");
+    p_netif->b_up = 0u;
+    fake_mqtt_connection(MQTT_CONNECT_DISCONNECTED);
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += REJOIN_AFTER_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(0u == rejoins(), "no re-join before 3 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == rejoins(), "re-join after 3 s");
+    g_fake_now_ms += REJOIN_EVERY_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == rejoins(), "the next re-join waits 5 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(2u == rejoins(), "re-join again after 5 s");
+
+    /* 8 s into the outage: the chip restart is due at 10 s. */
+    g_fake_now_ms += (RESTART_MS - REJOIN_AFTER_MS - REJOIN_EVERY_MS) - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(1u == restarts(), "no chip restart before 10 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check((2u == restarts()) && (2u == rejoins()),
+          "still down after 10 s: WiFi chip restarted");
+    g_fake_now_ms += REJOIN_EVERY_MS;
+    cyw43_utk_app_poll(p_netif);
+    check(3u == rejoins(), "re-join 5 s after the restart");
+
+    mqtt_bridge_set_restart_ok(false);
+    g_fake_now_ms += REJOIN_EVERY_MS;
+    cyw43_utk_app_poll(p_netif);
+    check((2u == restarts()) && (4u == rejoins()),
+          "driving: no chip restart, re-joins go on");
+    mqtt_bridge_set_restart_ok(true);
+
+    p_netif->b_up = 1u;
+    cyw43_utk_app_poll(p_netif);
+    p_netif->b_up = 0u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += REJOIN_AFTER_MS;
+    cyw43_utk_app_poll(p_netif);
+    check(5u == rejoins(), "a new outage starts again at 3 s");
+    test_noip_rejoin(p_netif);
+}
+
+/*!
+ * @brief Joined but no IP address (DHCP silent): DHCP restart and re-join
+ *        every 15 s until an address arrives, then quiet again.
+ *
+ * @param[in,out] p_netif The fake network interface (link down on entry).
+ */
+static void
+test_noip_rejoin (struct netif * p_netif)
+{
+    uint32_t before = 0u;
+
+    p_netif->b_up    = 1u;
+    p_netif->ip.addr = 1u;
+    cyw43_utk_app_poll(p_netif);
+    before = rejoins();
+    check(0u == g_fake_dhcp_starts, "a link-down outage does not restart DHCP");
+
+    p_netif->ip.addr = 0u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += NOIP_REJOIN_MS - 1u;
+    cyw43_utk_app_poll(p_netif);
+    check(before == rejoins(), "joined without an IP: DHCP gets 15 s");
+    g_fake_now_ms++;
+    cyw43_utk_app_poll(p_netif);
+    check(((before + 1u) == rejoins()) && (1u == g_fake_dhcp_starts),
+          "still no IP after 15 s: DHCP restarted and re-joined");
+    g_fake_now_ms += NOIP_REJOIN_MS;
+    cyw43_utk_app_poll(p_netif);
+    check(((before + 2u) == rejoins()) && (2u == g_fake_dhcp_starts),
+          "and again every 15 s");
+
+    p_netif->ip.addr = 1u;
+    cyw43_utk_app_poll(p_netif);
+    g_fake_now_ms += NOIP_REJOIN_MS;
+    cyw43_utk_app_poll(p_netif);
+    check((before + 2u) == rejoins(), "an address ends the retries");
+    test_failed_join(p_netif);
+}
+
+/*!
+ * @brief A join that has failed (hotspot not found) is retried every 5 s
+ *        from the start, without the 3 s first wait (chip restarts are
+ *        held off here to see the re-joins alone).
+ *
+ * @param[in,out] p_netif The fake network interface (linked on entry).
+ */
+static void
+test_failed_join (struct netif * p_netif)
+{
+    uint32_t before  = rejoins();
+    uint32_t idx     = 0u;
+    bool     b_early = false;
+
+    mqtt_bridge_set_restart_ok(false);
+    p_netif->b_up       = 0u;
+    gb_stub_join_failed = true;
+    cyw43_utk_app_poll(p_netif);
+
+    for (idx = 0u; idx < FAILED_STEPS; idx++)
+    {
+        g_fake_now_ms += REJOIN_EVERY_MS - 1u;
+        cyw43_utk_app_poll(p_netif);
+        b_early = b_early || ((before + idx) != rejoins());
+        g_fake_now_ms++;
+        cyw43_utk_app_poll(p_netif);
+    }
+
+    check((!b_early) && ((before + FAILED_STEPS) == rejoins()),
+          "a failed join is retried every 5 s");
+    gb_stub_join_failed = false;
+    p_netif->b_up       = 1u;
+    cyw43_utk_app_poll(p_netif);
+    mqtt_bridge_set_restart_ok(true);
+}
+
+/*!
+ * @brief WiFi re-join attempts counted by the bridge.
+ *
+ * @return The count.
+ */
+static uint32_t
+rejoins (void)
+{
+    mqtt_bridge_stats_t stats;
+
+    mqtt_bridge_get_stats(&stats);
+
+    return (stats.rejoins);
+}
+
+/*!
+ * @brief WiFi chip restarts counted by the bridge.
+ *
+ * @return The count.
+ */
+static uint32_t
+restarts (void)
+{
+    mqtt_bridge_stats_t stats;
+
+    mqtt_bridge_get_stats(&stats);
+
+    return (stats.wifi_restarts);
 }
 
 /*!
@@ -929,6 +1133,17 @@ test_command (void)
     check(!command_parse("stop now", &cmd), "trailing text rejected");
     check(!command_parse("gains=1", &cmd), "gains takes no value");
     check(!command_parse("", &cmd), "empty rejected");
+    check((command_parse("#17 gains", &cmd)) && (17u == cmd.req_id)
+              && (COMMAND_GAINS == cmd.kind),
+          "request id");
+    check((command_parse("speed=150", &cmd)) && (0u == cmd.req_id),
+          "no request id is 0");
+    check((!command_parse("#12gains", &cmd))
+              && (!command_parse("#0 gains", &cmd))
+              && (!command_parse("# gains", &cmd)),
+          "malformed request ids rejected");
+    check((!command_parse("#5 bogus", &cmd)) && (5u == cmd.req_id),
+          "the id survives a bad command (for the reply)");
 
     /* Line assembler: CRLF, backspace, control bytes and overflow. */
     command_line_init(&line);
@@ -965,6 +1180,41 @@ test_command (void)
     check(0 == strcmp(text, "0.000"), "-0.0004 gives 0.000");
     command_format_decimal(text, sqrtf(-1.0f));
     check(0 == strcmp(text, "0.000"), "NaN gives 0.000");
+}
+
+/*!
+ * @brief Command limits from the CSC05 review: speed= 60..300 (NFR2),
+ *        range-checked rate=, the timing command, and tuning only
+ *        while the car is stationary.
+ */
+static void
+test_command_limits (void)
+{
+    command_t cmd;
+
+    check((command_parse("speed=300", &cmd))
+              && (command_parse("speed=60", &cmd))
+              && (!command_parse("speed=301", &cmd))
+              && (!command_parse("speed=59", &cmd))
+              && (!command_parse("speed=99999999999", &cmd)),
+          "speed 60..300 only (NFR2)");
+    check((!command_parse("rate=99999999999", &cmd))
+              && (!command_parse("rate=-5", &cmd)),
+          "rate: huge or negative values rejected");
+    check((command_parse("timing", &cmd)) && (COMMAND_TIMING == cmd.kind),
+          "timing command");
+    check((!command_allowed(COMMAND_SPEED, false))
+              && (!command_allowed(COMMAND_PID, false))
+              && (!command_allowed(COMMAND_FF, false))
+              && (!command_allowed(COMMAND_LINE, false)),
+          "tuning refused while driving");
+    check((command_allowed(COMMAND_PID, true))
+              && (command_allowed(COMMAND_STOP, false))
+              && (command_allowed(COMMAND_START, false))
+              && (command_allowed(COMMAND_RATE, false))
+              && (command_allowed(COMMAND_GAINS, false))
+              && (command_allowed(COMMAND_TIMING, false)),
+          "tuning when stationary; other commands always");
 }
 
 /*!
@@ -1056,7 +1306,8 @@ static void
 test_vehicle_buttons (void)
 {
     vehicle_sim_init();
-    check(vehicle_is(VS_IDLE, "boot"), "vehicle: boots IDLE");
+    check((vehicle_is(VS_IDLE, "boot")) && (!vehicle_sim_watchdog_armed()),
+          "vehicle: boots IDLE, watchdog off");
     check(CENTRE_US == vehicle_sim_servo_us(), "vehicle: sonar centred");
 
     vehicle_sim_press(PIN_BTN_STOP, 50u, 200u);
@@ -1068,13 +1319,16 @@ test_vehicle_buttons (void)
     vehicle_sim_run(300u);
     check(vehicle_is(VS_IDLE, NULL), "vehicle: START held: no run yet");
     vehicle_sim_run(200u);
-    check(vehicle_is(VS_LINE_FOLLOW, "start"), "vehicle: START released: run");
+    check((vehicle_is(VS_LINE_FOLLOW, "start"))
+              && (vehicle_sim_watchdog_armed()),
+          "vehicle: START released: run, watchdog armed");
 
     /* 6 ms, between two 20 ms polls: only the interrupt latch sees it. */
     vehicle_sim_press(PIN_BTN_STOP, 3u, 6u);
     vehicle_sim_run(60u);
-    check(vehicle_is(VS_STOPPED, "stop command"),
-          "vehicle: short STOP press latched");
+    check((vehicle_is(VS_STOPPED, "stop command"))
+              && (!vehicle_sim_watchdog_armed()),
+          "vehicle: short STOP press latched, watchdog off");
 
     vehicle_sim_clear_log();
     vehicle_sim_press(PIN_BTN_START, 50u, 2500u);

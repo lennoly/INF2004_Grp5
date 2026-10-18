@@ -6,23 +6,28 @@
 # vehicle.c, obstacle.c and servo.c run in a simulation (sim/) on a fake
 # micro T-Kernel (tk/, tm/).
 APP    := ../../app_program
-SRCS   := test_main.c $(APP)/car_math.c $(APP)/pid.c $(APP)/line_follow.c \
-          $(APP)/barcode_decode.c $(APP)/terrain.c $(APP)/avoidance.c \
-          $(APP)/mqtt_bridge.c $(APP)/mqtt_lwip.c $(APP)/command.c \
-          $(APP)/obstacle.c $(APP)/servo.c hal_stub.c lwip/fake_lwip.c \
+S1     := $(APP)/subsystem1
+S5     := $(APP)/subsystem5
+SRCS   := test_main.c $(APP)/car_math.c $(APP)/subsystem2/pid.c \
+          $(APP)/subsystem3/line_follow.c $(APP)/subsystem3/barcode_decode.c \
+          $(APP)/subsystem4/terrain.c $(S5)/avoidance.c $(S5)/obstacle.c \
+          $(S5)/servo.c $(S1)/mqtt_bridge.c $(S1)/mqtt_lwip.c \
+          $(S1)/command.c hal_stub.c timing_stub.c lwip/fake_lwip.c \
           sim/vehicle_sim.c
 CFLAGS := -std=c99 -Wpedantic -Wall -Wextra -Wsign-conversion \
-          -Wfloat-equal -Wdouble-promotion -Wshadow -Werror -O1 -I$(APP) -I. \
+          -Wfloat-equal -Wdouble-promotion -Wshadow -Werror -O1 -I$(APP) \
+          $(addprefix -I,$(wildcard $(APP)/*/)) -I. \
           -DTM_WIFI_MQTT=1
 
 run: picocar_tests
 	./picocar_tests
 
-picocar_tests: $(SRCS) $(wildcard $(APP)/*.h) $(APP)/vehicle.c test_main.h \
-               hal_stub.h sim/vehicle_sim.h tk/tkernel.h tm/tmonitor.h \
+picocar_tests: $(SRCS) $(wildcard $(APP)/*.h $(APP)/*/*.h) $(APP)/vehicle.c \
+               test_main.h hal_stub.h timing_stub.h sim/vehicle_sim.h \
+               tk/tkernel.h tm/tmonitor.h \
                mqtt_config.h lwip/apps/mqtt.h
 	$(CC) $(CFLAGS) -o $@ $(SRCS) -lm
 
 clean:
-	rm -f picocar_tests
+	rm -f picocar_tests picocar_tests.exe
 .PHONY: run clean

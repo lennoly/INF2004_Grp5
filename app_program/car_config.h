@@ -25,6 +25,7 @@
 #define APP_MODE_TEST_IMU           (5)  /* Buddy 4: IMU / hump / events   */
 #define APP_MODE_TEST_ULTRASONIC    (6)  /* Buddy 5: scan + profile + plan */
 #define APP_MODE_TEST_TELEMETRY     (7)  /* Buddy 1: MQTT telemetry        */
+#define APP_MODE_TEST_WHEELS        (8)  /* Buddy 2: raw motor pin check   */
 
 #ifndef APP_MODE
 #define APP_MODE                    APP_MODE_MISSION
@@ -43,7 +44,7 @@
 #define PIN_ENCODER_L               (2u)
 #define PIN_ENCODER_R               (3u)
 
-/* IMU GY-511 (LSM303DLHC) on I2C0 - Grove port 3.                          */
+/* IMU LSM303D (0x1D) on I2C0 - Grove port 3.                               */
 #define PIN_IMU_SDA                 (4u)
 #define PIN_IMU_SCL                 (5u)
 
@@ -86,6 +87,9 @@
 #define MOTOR_PWM_FREQ_HZ           (10000u)  /* Robo Pico max is 20 kHz    */
 #define CONTROL_PERIOD_MS           (20u)     /* 50 Hz control loop         */
 #define ENCODER_GLITCH_US           (300u)    /* ignore faster edges        */
+/* [CALIBRATE] fastest wheel speed (TEST_MOTOR sweep at 100 % duty); the
+   glitch filter must stay below the shortest half-period at this speed.   */
+#define SPEED_WHEEL_MAX_MM_S        (600.0f)
 #define ENCODER_TIMEOUT_US          (200000u) /* no edge => wheel stopped   */
 
 #define SPEED_KP                    (0.08f)   /* [CALIBRATE] %duty/(mm/s)   */
@@ -98,6 +102,10 @@
 #define SPEED_CRUISE_MM_S           (180.0f)
 #define SPEED_SLOW_MM_S             (100.0f)
 #define SPEED_TURN_MM_S             (120.0f)
+/* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
+   sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
+#define SPEED_CMD_MIN_MM_S          (60)
+#define SPEED_CMD_MAX_MM_S          (300)
 #define MOTION_BRAKE_MARGIN_MM      (4.0f)
 
 /* ------------------------------------------------------------------------ */
