@@ -67,6 +67,7 @@ static uint32_t             gs_barcode_count;
 static uint32_t             gs_wd_timeout;
 static uint32_t             gs_wd_last;
 static uint32_t             gs_wd_gap;
+static bool                 gs_b_wd_armed;
 
 static void sim_log(char const * p_format, ...)
 {
@@ -103,6 +104,12 @@ static void sim_advance(uint32_t ms)
 
     gs_odo += gs_vel * ((float32_t) ms / 1000.0f);
     gs_now = t1;
+
+    /* Time since the watchdog was last reloaded, while it is armed. */
+    if (gs_b_wd_armed && ((gs_now - gs_wd_last) > gs_wd_gap))
+    {
+        gs_wd_gap = gs_now - gs_wd_last;
+    }
 }
 
 static int32_t sim_distance(int32_t angle_deg)
@@ -256,14 +263,17 @@ void hal_pwm_set_level(uint32_t pin, uint32_t level)
 void hal_watchdog_start(uint32_t timeout_ms)
 {
     gs_wd_timeout = timeout_ms;
-    gs_wd_last    = gs_now;
+    gs_wd_last    = gs_now; /* arming reloads the counter */
+    gs_b_wd_armed = true;
+}
+
+void hal_watchdog_stop(void)
+{
+    gs_b_wd_armed = false;
 }
 
 void hal_watchdog_feed(void)
 {
-    uint32_t gap = gs_now - gs_wd_last;
-
-    gs_wd_gap  = (gap > gs_wd_gap) ? gap : gs_wd_gap;
     gs_wd_last = gs_now;
 }
 
@@ -407,7 +417,6 @@ void vehicle_sim_init(void)
 
     /* The preamble of vehicle_task(). */
     line_follow_init(&g_lf);
-    hal_watchdog_start(WATCHDOG_TIMEOUT_MS);
 }
 
 void vehicle_sim_step(void)
@@ -545,9 +554,12 @@ uint32_t vehicle_sim_queued_barcodes(void)
 
 uint32_t vehicle_sim_watchdog_gap_ms(void)
 {
-    uint32_t tail = gs_now - gs_wd_last;
+    return (gs_wd_gap);
+}
 
-    return ((tail > gs_wd_gap) ? tail : gs_wd_gap);
+bool vehicle_sim_watchdog_armed(void)
+{
+    return (gs_b_wd_armed);
 }
 
 uint32_t vehicle_sim_watchdog_timeout_ms(void)

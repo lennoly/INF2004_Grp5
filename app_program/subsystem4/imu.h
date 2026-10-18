@@ -1,6 +1,6 @@
 /** @file imu.h
  *
- * @brief Buddy 4 - LSM303DLHC (GY-511) accelerometer and magnetometer
+ * @brief Buddy 4 - LSM303D accelerometer and magnetometer
  *        processing task: tilt, humps, impacts, turn rate and events.
  */
 

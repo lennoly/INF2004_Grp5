@@ -2,7 +2,7 @@
 """
 BARR-C:2018 layout rules that clang-format cannot express.
 
-Run after clang-format:   python3 tools/barr_layout.py app_program/*.[ch]
+Run after clang-format:   python3 tools/barr_layout.py app_program/*.[ch] app_program/*/*.[ch]
 
   8.3.a  'break;' ending a case is aligned with its 'case' label.
   3.3.b  a blank line before and after each natural block of code

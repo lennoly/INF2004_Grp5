@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include "car_types.h"
 #include "car_math.h"
+#include "car_config.h"
 #include "command.h"
 
 #define MAX_FRACTION_DIGITS (6u)
@@ -29,6 +30,7 @@
 #define MIN_DIGITS          (4u)     /* "0.000" has 4 digits            */
 #define DIGITS_MAX          (12u)    /* 2e9 has 10 digits               */
 #define FORMAT_LIMIT        (2.0e6f) /* x1000 still fits in int32_t     */
+#define ID_DIGITS_MAX       (9u)     /* request ids up to 999999999     */
 #define TERMINATOR          ('\0')
 
 typedef struct
@@ -47,7 +49,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"pid", COMMAND_PID, 3u},
                                          {"ff", COMMAND_FF, 2u},
                                          {"line", COMMAND_LINE, 3u},
-                                         {"rate", COMMAND_RATE, 1u}};
+                                         {"rate", COMMAND_RATE, 1u},
+                                         {"timing", COMMAND_TIMING, 0u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -57,6 +60,7 @@ static char const g_digit_chars[] = "0123456789";
 static char const * gp_error = "";
 
 static char const * skip_space(char const * p_text);
+static char const * parse_request_id(char const * p_text, uint32_t * p_id);
 static char const * parse_decimal(char const * p_text, float32_t * p_value);
 static char const * match_keyword(char const * p_text, char const * p_name);
 static char const * find_keyword(char const * p_text, uint32_t * p_index);
@@ -85,9 +89,16 @@ command_parse (char const * p_text, command_t * p_cmd)
     p_cmd->n_args = 0u;
     gp_error      = "unknown command (try help)";
 
-    /* Step 1: the keyword. */
-    p_cursor = find_keyword(skip_space(p_text), &spec_idx);
+    /* Step 0: the optional request id. */
+    p_cursor = parse_request_id(skip_space(p_text), &p_cmd->req_id);
     b_ok     = (NULL != p_cursor);
+
+    /* Step 1: the keyword. */
+    if (b_ok)
+    {
+        p_cursor = find_keyword(skip_space(p_cursor), &spec_idx);
+        b_ok     = (NULL != p_cursor);
+    }
 
     /* Step 2: the optional "=value,value,..." list. */
     if (b_ok)
@@ -138,6 +149,26 @@ char const *
 command_error (void)
 {
     return (gp_error);
+}
+
+/*!
+ * @brief Whether a command may run in the car's current state.  The
+ *        tuning commands change the controllers, so they are refused
+ *        while the car is driving (CSC05 review, FR10).
+ *
+ * @param[in] kind         Parsed command.
+ * @param[in] b_stationary true while the car is IDLE or STOPPED (and in
+ *                         test builds, which have no mission).
+ *
+ * @return true if the command may run now.
+ */
+bool
+command_allowed (command_id_t kind, bool b_stationary)
+{
+    bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
+                    || (COMMAND_FF == kind) || (COMMAND_LINE == kind);
+
+    return ((!b_tuning) || b_stationary);
 }
 
 /*!
@@ -294,6 +325,52 @@ skip_space (char const * p_text)
     while (0 != isspace((unsigned char) *p_cursor))
     {
         p_cursor++;
+    }
+
+    return (p_cursor);
+}
+
+/*!
+ * @brief Parse an optional "#<id>" request id followed by white space.
+ *
+ * @param[in]  p_text Text (white space already skipped).
+ * @param[out] p_id   The id, or 0 if there is none.
+ *
+ * @return Pointer after the id (p_text if there is none), or NULL with
+ *         gp_error set for a malformed id.
+ */
+static char const *
+parse_request_id (char const * p_text, uint32_t * p_id)
+{
+    char const * p_cursor = p_text;
+    uint32_t     digits   = 0u;
+    uint32_t     value    = 0u;
+
+    *p_id = 0u;
+
+    if ('#' == *p_cursor)
+    {
+        p_cursor++;
+
+        /* Cast: a digit minus '0' is 0..9, which uint32_t holds. */
+        while ((*p_cursor >= '0') && (*p_cursor <= '9')
+               && (digits < ID_DIGITS_MAX))
+        {
+            value = (value * DECIMAL_BASE_U) + (uint32_t) (*p_cursor - '0');
+            digits++;
+            p_cursor++;
+        }
+
+        /* Cast: the ctype functions take the character as unsigned char. */
+        if ((0u == value) || (0 == isspace((unsigned char) *p_cursor)))
+        {
+            gp_error = "bad request id (use #1..#999999999 then a space)";
+            p_cursor = NULL;
+        }
+        else
+        {
+            *p_id = value;
+        }
     }
 
     return (p_cursor);
@@ -511,18 +588,28 @@ validate (command_t const * p_cmd)
         break;
 
         case COMMAND_RATE:
-            /* Integer comparison: floats are never tested for equality
-               (Rule 5.4.b.iv). */
-            rate_ms = car_math_round(p_cmd->arg[0]);
-            b_ok    = (0 == rate_ms)
-                   || ((rate_ms >= COMMAND_RATE_MIN_MS)
-                       && (rate_ms <= COMMAND_RATE_MAX_MS));
+            /* Range first, so that car_math_round() never sees a value
+               beyond int32_t (the parser accepts up to 12 digits); then
+               an integer comparison, as floats are never tested for
+               equality (Rule 5.4.b.iv).  Cast: the limit is a small
+               integer, exact in float32_t. */
+            b_ok = (p_cmd->arg[0] >= 0.0f)
+                   && (p_cmd->arg[0] <= (float32_t) COMMAND_RATE_MAX_MS);
+            rate_ms = b_ok ? car_math_round(p_cmd->arg[0]) : -1;
+            b_ok    = b_ok
+                   && ((0 == rate_ms)
+                       || ((rate_ms >= COMMAND_RATE_MIN_MS)
+                           && (rate_ms <= COMMAND_RATE_MAX_MS)));
             gp_error = b_ok ? gp_error : "rate: 0 (off) or 50..5000 ms";
         break;
 
         case COMMAND_SPEED:
-            b_ok     = (p_cmd->arg[0] > 0.0f);
-            gp_error = b_ok ? gp_error : "speed must be > 0";
+            /* Casts: the limits are small integers, exact in float32_t;
+               floats are only compared with < and >, never for equality
+               (Rule 5.4.b.iv). */
+            b_ok = (p_cmd->arg[0] >= (float32_t) SPEED_CMD_MIN_MM_S)
+                   && (p_cmd->arg[0] <= (float32_t) SPEED_CMD_MAX_MM_S);
+            gp_error = b_ok ? gp_error : "speed: 60..300 mm/s";
         break;
 
         default:
