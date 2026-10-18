@@ -114,8 +114,8 @@ a9_check (void)
     obstacle_monitor_enable(true);
     (void) tm_printf(
         (UB const *) "# A9: VALID %u, OUT_OF_RANGE %u, FAULT %u, "
-                     "BUSY %u (FAULT with no target: use 5 V + "
-                     "divider)\n",
+                     "BUSY %u (FAULT: check the sensor wires and "
+                     "power, then try 5 V + divider)\n",
         (UINT) counts[ULTRASONIC_VALID], (UINT) counts[ULTRASONIC_OUT_OF_RANGE],
         (UINT) counts[ULTRASONIC_FAULT], (UINT) counts[ULTRASONIC_BUSY]);
 }

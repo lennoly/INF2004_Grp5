@@ -62,6 +62,7 @@ static bool     servo_go(int32_t angle_deg, obstacle_stop_cb_t p_should_stop,
 static bool     look(int32_t angle_deg, obstacle_stop_cb_t p_should_stop,
                      int32_t * p_dist_mm);
 static int32_t  median_mm(int32_t * p_values, uint32_t count);
+static int32_t  step_toward(int32_t angle, int32_t target);
 static bool     keep_scanning(obstacle_stop_cb_t p_should_stop);
 static uint32_t count_up(uint32_t count, uint32_t limit);
 static void     monitor_update(ultrasonic_ping_t const * p_ping);
@@ -366,42 +367,71 @@ monitor_pause (void)
 }
 
 /*!
- * @brief Move the servo and wait for it to arrive, calling the stop
- *        callback every SETTLE_STEP_MS.
+ * @brief Move the servo gently, SERVO_STEP_DEG every SETTLE_STEP_MS so the
+ *        sensor is not jerked on its mount, then wait SERVO_SETTLE_MS for
+ *        it to stop shaking.  Calls the stop callback every SETTLE_STEP_MS.
  *
  * @param[in] angle_deg     Servo angle, 0 (right) .. 180 (left).
  * @param[in] p_should_stop Stop callback, or NULL.
  * @param[in] b_abortable   true: return as soon as a stop is requested;
- *                          false: always wait the full time (re-centring).
+ *                          false: always finish the move (re-centring).
  *
  * @return false if a stop was requested.
  */
 static bool
 servo_go (int32_t angle_deg, obstacle_stop_cb_t p_should_stop, bool b_abortable)
 {
-    int32_t  delta     = angle_deg - servo_get_angle();
+    int32_t  angle     = servo_get_angle();
     uint32_t settle_ms = 0u;
-    uint32_t waited_ms = 0u;
-    uint32_t step_ms   = 0u;
     bool     b_go      = true;
 
-    /* Cast: |delta| <= 180, so the non-negative value fits uint32_t. */
-    settle_ms =
-        SERVO_SETTLE_MS
-        + ((uint32_t) ((delta < 0) ? -delta : delta) * SWING_MS_PER_DEG);
-    servo_set_angle(angle_deg);
-
-    while ((b_go || (!b_abortable)) && (waited_ms < settle_ms))
+    while ((b_go || (!b_abortable))
+           && ((angle != angle_deg) || (settle_ms < SERVO_SETTLE_MS)))
     {
-        step_ms = ((settle_ms - waited_ms) < SETTLE_STEP_MS)
-                      ? (settle_ms - waited_ms)
-                      : SETTLE_STEP_MS;
-        (void) tk_dly_tsk(step_ms);
-        waited_ms += step_ms;
+        if (angle != angle_deg)
+        {
+            angle = step_toward(angle, angle_deg);
+            servo_set_angle(angle);
+        }
+        else
+        {
+            settle_ms += SETTLE_STEP_MS;
+        }
+
+        (void) tk_dly_tsk(SETTLE_STEP_MS);
         b_go = (keep_scanning(p_should_stop)) && b_go;
     }
 
     return (b_go);
+}
+
+/*!
+ * @brief One servo step towards a target angle.
+ *
+ * @param[in] angle  Current angle.
+ * @param[in] target Target angle.
+ *
+ * @return The target, or SERVO_STEP_DEG closer to it.
+ */
+static int32_t
+step_toward (int32_t angle, int32_t target)
+{
+    int32_t next = target;
+
+    if ((target - angle) > SERVO_STEP_DEG)
+    {
+        next = angle + SERVO_STEP_DEG;
+    }
+    else if ((angle - target) > SERVO_STEP_DEG)
+    {
+        next = angle - SERVO_STEP_DEG;
+    }
+    else
+    {
+        /* Within one step: go straight there. */
+    }
+
+    return (next);
 }
 
 /*!
