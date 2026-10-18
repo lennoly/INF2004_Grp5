@@ -155,6 +155,7 @@
 /* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount)     */
 #define SERVO_INVERT                (0)
 #define SERVO_SETTLE_MS             (120u)
+#define SERVO_STEP_DEG              (5)       /* [CALIBRATE] per 20 ms step */
 #define US_TIMEOUT_MS               (40u)
 #define US_SEM_TIMEOUT_MS           (100u)    /* NFR9: sensor wait limit    */
 #define US_MIN_MM                   (20)
