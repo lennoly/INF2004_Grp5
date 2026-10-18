@@ -15,7 +15,7 @@
 #include "app_tests.h"
 #include "subsystem5_test.h"
 
-#define A9_PINGS (10u)
+#define A9_PINGS (20u) /* the Week 6 A9 method asks for 20 pings */
 
 #if APP_MODE == APP_MODE_TEST_ULTRASONIC
 static void         a9_check(void);
@@ -89,14 +89,18 @@ static void
 a9_check (void)
 {
     ultrasonic_ping_t ping;
-    uint32_t          counts[ULTRASONIC_FAULT + 1] = {0u, 0u, 0u};
-    uint32_t          idx                          = 0u;
+    uint32_t          counts[ULTRASONIC_BUSY + 1] = {0u, 0u, 0u, 0u};
+    uint32_t          idx                         = 0u;
 
     /* Casts in this function: tm_printf() takes the kernel's UB string
        type (the literals are ASCII); pulse widths are below the 40 ms
        timeout and the counters below A9_PINGS, so they fit UINT. */
     (void) tm_printf((UB const *) "# A9 no-target check (aim at open "
                                   "space > 4 m): a9,class,width_us,mm\n");
+
+    /* The front monitor's pings would interleave with these.  Casts in
+       the messages below: as described above. */
+    obstacle_monitor_enable(false);
 
     for (idx = 0u; idx < A9_PINGS; idx++)
     {
@@ -107,12 +111,13 @@ a9_check (void)
                          (UINT) ping.width_us, (INT) ping.dist_mm);
     }
 
-    (void) tm_printf((UB const *) "# A9: VALID %u, OUT_OF_RANGE %u, FAULT %u "
-                                  "(FAULT with no target: use 5 V + "
-                                  "divider)\n",
-                     (UINT) counts[ULTRASONIC_VALID],
-                     (UINT) counts[ULTRASONIC_OUT_OF_RANGE],
-                     (UINT) counts[ULTRASONIC_FAULT]);
+    obstacle_monitor_enable(true);
+    (void) tm_printf(
+        (UB const *) "# A9: VALID %u, OUT_OF_RANGE %u, FAULT %u, "
+                     "BUSY %u (FAULT with no target: use 5 V + "
+                     "divider)\n",
+        (UINT) counts[ULTRASONIC_VALID], (UINT) counts[ULTRASONIC_OUT_OF_RANGE],
+        (UINT) counts[ULTRASONIC_FAULT], (UINT) counts[ULTRASONIC_BUSY]);
 }
 /*!
  * @brief Side of the car a servo angle points to.

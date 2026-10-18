@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "barcode_decode.h"
 #include "terrain.h"
+#include "ultrasonic.h"
 
 void     vehicle_sim_init(void);
 void     vehicle_sim_step(void);
@@ -16,7 +17,11 @@ void     vehicle_sim_run(uint32_t ms);
 void     vehicle_sim_press(uint32_t pin, uint32_t after_ms, uint32_t hold_ms);
 void     vehicle_sim_stop_command_at(uint32_t after_ms);
 void     vehicle_sim_stop_on_next_turn(void);
+void     vehicle_sim_stop_on_side_look(void);
 void     vehicle_sim_front(int32_t mm);
+void     vehicle_sim_front_fault(void);
+void     vehicle_sim_front_ambient(ultrasonic_class_t result, int32_t mm);
+void     vehicle_sim_monitor_starve(bool b_starve);
 void     vehicle_sim_box(bool b_present);
 void     vehicle_sim_line(bool b_on_line);
 void     vehicle_sim_hump(terrain_hump_state_t state);
