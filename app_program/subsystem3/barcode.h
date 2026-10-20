@@ -25,12 +25,16 @@ typedef struct
     uint32_t        frames;  /* candidate frames seen */
     uint32_t        decoded; /* successful decodes    */
     uint32_t        errors;
+    uint32_t        overruns; /* edge loss: damaged frame discarded */
+    uint32_t        dropped;  /* event buffer full */
     barcode_event_t last;
 } barcode_stats_t;
 
 int32_t barcode_init(void);
 bool    barcode_get_event(barcode_event_t * p_event, int32_t timeout_ms);
 void    barcode_get_stats(barcode_stats_t * p_out);
+void    barcode_set_enabled(bool b_enabled);
+void    barcode_poll(void); /* one consumer only; normally barcode task */
 
 #endif /* BARCODE_H */
 

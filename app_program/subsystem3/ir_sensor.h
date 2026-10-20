@@ -32,13 +32,27 @@ typedef struct
     uint32_t width_us;
 } ir_sensor_element_t;
 
+typedef struct
+{
+    uint16_t white[IR_COUNT];
+    uint16_t black[IR_COUNT];
+    uint16_t minimum[IR_COUNT]; /* most recent calibration capture */
+    uint16_t maximum[IR_COUNT];
+    bool     b_valid; /* all three channels passed measured calibration */
+} ir_sensor_calibration_t;
+
 int32_t  ir_sensor_init(void);
 void     ir_sensor_read(ir_sensor_snapshot_t * p_out);
 void     ir_sensor_calib_begin(void);
 bool     ir_sensor_calib_end(void);
+void     ir_sensor_calib_cancel(void);
+void     ir_sensor_get_calibration(ir_sensor_calibration_t * p_out);
+void     ir_sensor_barcode_reset(void);
+uint32_t ir_sensor_barcode_overruns(void);
 bool     ir_sensor_barcode_pop(ir_sensor_element_t * p_out);
 bool     ir_sensor_barcode_is_black(void);
 uint32_t ir_sensor_barcode_idle_us(void);
+bool     ir_sensor_barcode_quiet(uint32_t quiet_us);
 
 #endif /* IR_SENSOR_H */
 

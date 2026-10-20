@@ -52,15 +52,24 @@ void
 line_follow_set_gains (line_follow_t * p_follow, float32_t gain_p,
                        float32_t gain_i, float32_t gain_d)
 {
-    g_gain_p = gain_p;
-    g_gain_i = gain_i;
-    g_gain_d = gain_d;
-
-    if (NULL != p_follow)
+    if ((!car_math_is_finite(gain_p)) || (!car_math_is_finite(gain_i))
+        || (!car_math_is_finite(gain_d)) || (gain_p < 0.0f) || (gain_i < 0.0f)
+        || (gain_d < 0.0f))
     {
-        p_follow->pid.gain_p = gain_p;
-        p_follow->pid.gain_i = gain_i;
-        p_follow->pid.gain_d = gain_d;
+        /* Invalid tuning leaves the active controller unchanged. */
+    }
+    else
+    {
+        g_gain_p = gain_p;
+        g_gain_i = gain_i;
+        g_gain_d = gain_d;
+
+        if (NULL != p_follow)
+        {
+            p_follow->pid.gain_p = gain_p;
+            p_follow->pid.gain_i = gain_i;
+            p_follow->pid.gain_d = gain_d;
+        }
     }
 }
 
@@ -103,27 +112,53 @@ line_follow_classify (line_follow_t * p_follow, float32_t left, float32_t right,
     bool b_both_black =
         (left > LINE_JUNCTION_LEVEL) && (right > LINE_JUNCTION_LEVEL);
 
-    p_follow->lost_ms = b_both_white ? (p_follow->lost_ms + elapsed_ms) : 0u;
-    p_follow->junction_mm =
-        b_both_black ? (p_follow->junction_mm + car_math_abs(distance_mm))
-                     : 0.0f;
-
-    if (p_follow->lost_ms >= LINE_LOST_CONFIRM_MS)
+    if ((!car_math_is_finite(left)) || (!car_math_is_finite(right))
+        || (!car_math_is_finite(distance_mm)) || (left < 0.0f) || (left > 1.0f)
+        || (right < 0.0f) || (right > 1.0f))
     {
-        p_follow->state = LINE_LOST;
-    }
-    else if (p_follow->junction_mm >= LINE_JUNCTION_MIN_MM)
-    {
-        p_follow->state = LINE_JUNCTION;
+        p_follow->state       = LINE_LOST;
+        p_follow->lost_ms     = LINE_LOST_CONFIRM_MS;
+        p_follow->junction_mm = 0.0f;
+        pid_reset(&p_follow->pid);
     }
     else
     {
-        p_follow->state = LINE_ON;
-    }
+        if (!b_both_white)
+        {
+            p_follow->lost_ms = 0u;
+        }
+        else if (elapsed_ms >= (LINE_LOST_CONFIRM_MS - p_follow->lost_ms))
+        {
+            p_follow->lost_ms = LINE_LOST_CONFIRM_MS;
+        }
+        else
+        {
+            p_follow->lost_ms += elapsed_ms;
+        }
 
-    if (!b_both_white)
-    {
-        p_follow->last_seen_error = left - right;
+        p_follow->junction_mm =
+            b_both_black ? car_math_clamp(p_follow->junction_mm
+                                              + car_math_abs(distance_mm),
+                                          0.0f, LINE_JUNCTION_MIN_MM)
+                         : 0.0f;
+
+        if (p_follow->lost_ms >= LINE_LOST_CONFIRM_MS)
+        {
+            p_follow->state = LINE_LOST;
+        }
+        else if (p_follow->junction_mm >= LINE_JUNCTION_MIN_MM)
+        {
+            p_follow->state = LINE_JUNCTION;
+        }
+        else
+        {
+            p_follow->state = LINE_ON;
+        }
+
+        if (!b_both_white)
+        {
+            p_follow->last_seen_error = left - right;
+        }
     }
 
     return (p_follow->state);
@@ -145,11 +180,26 @@ float32_t
 line_follow_steer (line_follow_t * p_follow, float32_t left, float32_t right,
                    float32_t dt_s)
 {
-    p_follow->error = left - right;
+    float32_t result = 0.0f;
 
-    /* Set-point 0 and measurement -error, so the output grows with a
+    if ((LINE_LOST == p_follow->state) || (!car_math_is_finite(left))
+        || (!car_math_is_finite(right)) || (!car_math_is_finite(dt_s))
+        || (dt_s <= 0.0f) || (left < 0.0f) || (left > 1.0f) || (right < 0.0f)
+        || (right > 1.0f))
+    {
+        pid_reset(&p_follow->pid);
+        p_follow->error = 0.0f;
+    }
+    else
+    {
+        p_follow->error = left - right;
+
+        /* Set-point 0 and measurement -error, so the output grows with a
        positive error.  pid_update() returns 0 for non-finite input. */
-    return (pid_update(&p_follow->pid, 0.0f, -p_follow->error, dt_s));
+        result = pid_update(&p_follow->pid, 0.0f, -p_follow->error, dt_s);
+    }
+
+    return (result);
 }
 
 /*!
@@ -167,7 +217,8 @@ line_follow_speed (float32_t cruise_mm_s, float32_t error)
         SPEED_DROP_AT_EDGE * car_math_clamp(car_math_abs(error), 0.0f, 1.0f);
     float32_t speed = cruise_mm_s * (1.0f - drop);
 
-    if (!car_math_is_finite(speed))
+    if ((!car_math_is_finite(speed)) || (!car_math_is_finite(error))
+        || (cruise_mm_s < 0.0f))
     {
         speed = 0.0f;
     }

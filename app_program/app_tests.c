@@ -67,12 +67,14 @@ app_tests_start (void)
     /* No motion task: it would rewrite the motor pins every cycle. */
     (void) encoder_init();
 #elif APP_MODE == APP_MODE_TEST_IR
-    (void) ir_sensor_init();
+    ercd = ir_sensor_init();
 #elif APP_MODE == APP_MODE_TEST_BARCODE
-    (void) encoder_init();
-    (void) motion_init();
-    (void) ir_sensor_init();
-    (void) barcode_init();
+    ercd = ir_sensor_init();
+
+    if (E_OK == ercd)
+    {
+        ercd = barcode_init();
+    }
 #elif APP_MODE == APP_MODE_TEST_IMU
     (void) encoder_init();
     (void) motion_init();
@@ -83,20 +85,31 @@ app_tests_start (void)
 #error "Unknown APP_MODE"
 #endif
 
+#if (APP_MODE == APP_MODE_TEST_IR) || (APP_MODE == APP_MODE_TEST_BARCODE)
+    /* Standalone Buddy 3 bench modes: no motor, network or other sensors. */
+    hal_gpio_init_out(PIN_MOTOR_L_A, false);
+    hal_gpio_init_out(PIN_MOTOR_L_B, false);
+    hal_gpio_init_out(PIN_MOTOR_R_A, false);
+    hal_gpio_init_out(PIN_MOTOR_R_B, false);
+#else
     /* Commands (pid=, ff=, line=, rate=, stop ...) work in every test
        build over the USB / UART console; telemetry streams on "rate=". */
     (void) telemetry_init(false);
+#endif
 
-    ctsk.tskatr = TA_HLNG | TA_RNG3;
+    if (E_OK == ercd)
+    {
+        ctsk.tskatr = TA_HLNG | TA_RNG3;
 
-    /* Cast: the kernel stores every task entry as the generic FP type and
+        /* Cast: the kernel stores every task entry as the generic FP type and
        calls a TA_HLNG task as (INT stacd, void * exinf), matching
        test_task(). */
-    ctsk.task    = (FP) test_task;
-    ctsk.itskpri = TASK_PRIORITY;
-    ctsk.stksz   = TASK_STACK;
-    h_task       = tk_cre_tsk(&ctsk);
-    ercd         = (h_task >= E_OK) ? tk_sta_tsk(h_task, 0) : h_task;
+        ctsk.task    = (FP) test_task;
+        ctsk.itskpri = TASK_PRIORITY;
+        ctsk.stksz   = TASK_STACK;
+        h_task       = tk_cre_tsk(&ctsk);
+        ercd         = (h_task >= E_OK) ? tk_sta_tsk(h_task, 0) : h_task;
+    }
 #endif
 
     return (ercd);
@@ -129,6 +142,9 @@ test_task (INT stacd, void * p_exinf)
     (void) stacd;
     (void) p_exinf;
     hal_gpio_init_in(PIN_BTN_START, true);
+#if (APP_MODE == APP_MODE_TEST_IR) || (APP_MODE == APP_MODE_TEST_BARCODE)
+    hal_gpio_init_in(PIN_BTN_STOP, true);
+#endif
 
     for (;;)
     {
@@ -156,6 +172,13 @@ wait_start_button (void)
     {
         (void) tk_dly_tsk(PRINT_MS);
     }
+
+#if (APP_MODE == APP_MODE_TEST_IR) || (APP_MODE == APP_MODE_TEST_BARCODE)
+    while (!hal_gpio_get(PIN_BTN_START))
+    {
+        (void) tk_dly_tsk(PRINT_MS);
+    }
+#endif
 
     (void) tk_dly_tsk(RELEASE_MS);
 }
