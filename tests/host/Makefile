@@ -5,11 +5,12 @@
 # mqtt_lwip.c runs against a fake lwIP (lwip/), with mqtt_config.h here.
 APP    := ../../app_program
 S1     := $(APP)/subsystem1
-SRCS   := test_main.c $(APP)/car_math.c $(APP)/subsystem2/pid.c \
+SRCS   := test_main.c test_data.c $(APP)/car_math.c $(APP)/subsystem2/pid.c \
           $(APP)/subsystem3/line_follow.c $(APP)/subsystem3/barcode_decode.c \
           $(APP)/subsystem4/terrain.c $(APP)/subsystem5/avoidance.c \
           $(S1)/mqtt_bridge.c $(S1)/mqtt_lwip.c $(S1)/command.c \
-          hal_stub.c timing_stub.c lwip/fake_lwip.c
+          $(APP)/bitpack.c $(APP)/packed.c $(S1)/frames.c \
+          hal_stub.c timing_stub.c fault_stub.c lwip/fake_lwip.c
 CFLAGS := -std=c99 -Wpedantic -Wall -Wextra -Wsign-conversion \
           -Wfloat-equal -Wdouble-promotion -Wshadow -Werror -O1 -I$(APP) \
           $(addprefix -I,$(wildcard $(APP)/*/)) -I. \

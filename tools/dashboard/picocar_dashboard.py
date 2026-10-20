@@ -6,7 +6,12 @@ Connects to the car in one of two ways:
   * MQTT   : python picocar_dashboard.py --mqtt 192.168.1.100 [--car car1]
              (firmware built with WIFI_MQTT=1, broker e.g. mosquitto)
   * Serial : python picocar_dashboard.py --serial auto      (or COM5, /dev/ttyACM0)
-             (any build; the car prints JSON on its USB console)
+             (any build; the car prints its frames on the USB console)
+
+Change Requirement 1: the car sends compact binary frames (frames.py
+decodes them into the same fields as the old JSON), on MQTT as the payload
+and on the console as '@' + hex.  Typed commands are turned into binary
+command frames for MQTT; the serial console still takes them as text.
 
 What it does
   * live plots  : wheel speed vs target, line error + IR, pitch + hump height,
@@ -39,6 +44,8 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
+
+import frames
 
 WINDOW_S = 30.0            # seconds of history shown in the plots
 GUI_REFRESH_MS = 250       # redraw period
@@ -115,6 +122,7 @@ TELEMETRY_COLUMNS = [
     ("front_mm", lambda o: o.get("front")),
     ("avoid_action", lambda o: o.get("act")),
     ("n_obstacles", lambda o: o.get("nobs")),
+    ("faults", lambda o: "|".join(o.get("faults", []))),
 ]
 
 HEARTBEAT_COLUMNS = ["up", "seq", "st", "link", "pub", "drop", "rx", "recon",
@@ -164,25 +172,29 @@ class MqttLink:
 
     def _on_message(self, client, userdata, msg):
         topic = msg.topic[len(self.root):]
-        text = msg.payload.decode("utf-8", errors="replace").strip()
-        if topic == "status":                # "online" / "offline" (LWT)
-            self.inbox.put(("status", text))
-            if text == "online":
-                self.send("gains")           # ask the car for its gains
-            return
         if topic == "cmd":
             return                           # our own commands echoed back
         try:
-            obj = json.loads(text)
-        except ValueError:
-            self.inbox.put(("raw", "[%s] %s" % (topic, text)))
+            kind, obj = frames.decode(msg.payload)
+        except ValueError as err:
+            self.inbox.put(("raw", "[%s] %s (%s)" % (topic, msg.payload.hex(),
+                                                     err)))
             return
-        kind = {"telemetry": "telemetry", "heartbeat": "heartbeat",
-                "event": "event"}.get(topic, classify(obj))
+        if kind == "status":                 # online / offline (LWT)
+            self.inbox.put(("status", obj))
+            if obj == "online":
+                self.send("gains")           # ask the car for its gains
+            return
         self.inbox.put((kind, obj))
 
     def send(self, command):
-        self.client.publish(self.root + "cmd", command.strip())
+        """Typed command -> binary command frame (frames.py)."""
+        try:
+            payload = frames.command_from_text(command)
+        except ValueError as err:
+            self.inbox.put(("raw", "command not sent: %s" % err))
+            return
+        self.client.publish(self.root + "cmd", payload)
 
     def close(self):
         self.client.loop_stop()
@@ -258,7 +270,13 @@ class SerialLink:
 
     def _dispatch(self, line):
         self.inbox.put(("console", line))
-        if line.startswith("{"):
+        if line.startswith("@"):             # a binary frame in hex
+            try:
+                kind, obj = frames.decode_console_line(line)
+            except ValueError:
+                return
+            self.inbox.put((kind, obj))
+        elif line.startswith("{"):           # older JSON firmware
             try:
                 obj = json.loads(line)
             except ValueError:

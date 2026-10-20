@@ -16,6 +16,8 @@
 #include "car_math.h"
 #include "servo.h"
 #include "ultrasonic.h"
+#include "fault.h"
+#include "packed.h"
 #include "obstacle.h"
 
 #define TASK_PRIORITY     (9)
@@ -28,12 +30,16 @@
 #define FINE_MAX_DEG      (170)
 #define MEDIAN_SAMPLES    (3u)
 #define SWING_MS_PER_DEG  (3u) /* about 0.18 s per 60 degrees */
+#define NO_ECHO_FAULTS    (2u) /* FAULT pings in a row: fault bit */
 
 /* Written by the monitor and vehicle tasks, read by the vehicle and
-   telemetry tasks: volatile (Rule 1.8.c). */
-static volatile int32_t             g_front_mm = ULTRASONIC_NO_ECHO;
+   telemetry tasks: volatile (Rule 1.8.c).  Change Requirement 1: the front
+   reading is one packed 32-bit word (class, distance, time) stored with a
+   single write, so the vehicle reads it without a lock; the last profile
+   is packed to 16 bytes. */
+static volatile packed_front_t      g_front    = PACKED_FRONT_NONE;
 static volatile bool                gb_monitor = true;
-static volatile avoidance_profile_t g_last;
+static volatile packed_profile_t    g_last;
 static volatile uint32_t            g_scans = 0u;
 
 static void     servo_go(int32_t angle_deg);
@@ -89,7 +95,7 @@ obstacle_init (void)
 int32_t
 obstacle_front_mm (void)
 {
-    return (g_front_mm);
+    return (packed_front_mm(g_front));
 }
 
 /*!
@@ -101,7 +107,7 @@ void
 obstacle_monitor_enable (bool b_on)
 {
     gb_monitor = b_on;
-    g_front_mm = ULTRASONIC_NO_ECHO;
+    g_front    = PACKED_FRONT_NONE;
 }
 
 /*!
@@ -136,6 +142,7 @@ obstacle_scan (avoidance_profile_t * p_prof)
     int32_t           high    = FINE_MIN_DEG;
     bool              b_found = false;
     UINT              imask   = 0u;
+    packed_profile_t  packed;
 
     gb_monitor = false;
     count      = coarse_scan(points, &low, &high);
@@ -149,9 +156,10 @@ obstacle_scan (avoidance_profile_t * p_prof)
     b_found = avoidance_profile(points, count, p_prof);
     servo_go(SERVO_CENTRE_DEG);
     gb_monitor = true;
+    packed_profile_pack(p_prof, &packed);
 
     DI(imask);
-    g_last = *p_prof;
+    g_last = packed;
     g_scans++;
     EI(imask);
 
@@ -176,12 +184,15 @@ obstacle_scan (avoidance_profile_t * p_prof)
 void
 obstacle_get_last (avoidance_profile_t * p_prof, uint32_t * p_scans)
 {
-    UINT imask = 0u;
+    packed_profile_t copy;
+    UINT             imask = 0u;
 
     DI(imask);
-    *p_prof  = g_last;
+    copy     = g_last;
     *p_scans = g_scans;
     EI(imask);
+
+    packed_profile_unpack(&copy, p_prof);
 }
 
 /*!
@@ -283,11 +294,40 @@ monitor_task (INT stacd, void * p_exinf)
     (void) stacd;
     (void) p_exinf;
 
+    ultrasonic_ping_t ping;
+    SYSTIM            now     = {0, 0u};
+    int32_t           dist_mm = ULTRASONIC_NO_ECHO;
+    uint32_t          faults  = 0u;
+
     for (;;)
     {
         if (gb_monitor && (SERVO_CENTRE_DEG == servo_get_angle()))
         {
-            g_front_mm = ultrasonic_measure_mm();
+            ultrasonic_ping(&ping);
+            (void) tk_get_tim(&now);
+            dist_mm = ((ULTRASONIC_VALID == ping.result)
+                       && (ping.dist_mm >= US_MIN_MM))
+                          ? ping.dist_mm
+                          : ULTRASONIC_NO_ECHO;
+            g_front = packed_front_make(ping.result, dist_mm, now.lo);
+
+            /* Shared fault mask: this task owns the no-echo bit. */
+            faults = (ULTRASONIC_FAULT == ping.result)
+                         ? ((faults < NO_ECHO_FAULTS) ? (faults + 1u) : faults)
+                         : 0u;
+
+            if (faults >= NO_ECHO_FAULTS)
+            {
+                fault_raise(FAULT_NO_ECHO);
+            }
+            else if (0u == faults)
+            {
+                fault_clear(FAULT_NO_ECHO);
+            }
+            else
+            {
+                /* One FAULT ping: wait for the next one. */
+            }
         }
 
         (void) tk_dly_tsk(MONITOR_PERIOD_MS);
