@@ -52,6 +52,7 @@
 #include "mqtt_bridge.h"
 #include "hal.h"
 #include "timing.h"
+#include "fault.h"
 
 #define TOPIC_ROOT          "picocar/" MQTT_CAR_ID "/"
 #define TOPIC_CMD           TOPIC_ROOT "cmd"
@@ -72,8 +73,12 @@ static char const * const g_topic_names[TOPIC_COUNT] = {
     TOPIC_ROOT "telemetry", TOPIC_ROOT "event", TOPIC_ROOT "heartbeat",
     TOPIC_STATUS};
 
-static char const g_online_msg[]  = "online";
-static char const g_offline_msg[] = "offline";
+/* Status frames (frames.h): header 0x1B = version 1, FRAME_STATUS; then
+   bit 0 = online.  Sent retained, and "offline" is the last will. */
+/* Casts: lwIP takes the payload as char; the bytes are sent unchanged. */
+static char const g_online_msg[]  = {(char) 0x1B, (char) 0x01};
+/* Casts: as above. */
+static char const g_offline_msg[] = {(char) 0x1B, (char) 0x00};
 
 /* Client state: used only in the CYW43 service task (see above). */
 static mqtt_client_t g_client;
@@ -83,6 +88,7 @@ static bool          gb_ever_online = false;
 static bool          gb_cmd_topic   = false; /* incoming publish is a command */
 static uint8_t       g_cmd[MQTT_BRIDGE_CMD_MAX];
 static uint32_t      g_cmd_len = 0u;
+static bool          gb_cmd_over    = false; /* frame longer than a slot */
 static char          g_msg[MQTT_BRIDGE_PAYLOAD_MAX];
 static bool          gb_ever_linked = false; /* the link was up once     */
 static bool          gb_link_down   = false; /* link down, or no IP     */
@@ -179,6 +185,11 @@ watch_link (struct netif * p_netif, uint32_t now)
 
     if (b_joined && (!b_no_ip))
     {
+        if (gb_link_down)
+        {
+            fault_clear(FAULT_WIFI_LOSS);
+        }
+
         gb_link_down   = false;
         g_rejoin_tries = 0u;
     }
@@ -187,6 +198,13 @@ watch_link (struct netif * p_netif, uint32_t now)
         gb_link_down = true;
         g_down_ms    = now;
         g_restart_ms = now;
+
+        /* Change Requirement 1: Wi-Fi loss is one bit of the shared fault
+           mask (report-only: STOP and the watchdog do not need it). */
+        if (gb_ever_linked)
+        {
+            fault_raise(FAULT_WIFI_LOSS);
+        }
     }
     else if ((!b_joined) && ((now - g_restart_ms) >= WIFI_RESTART_MS)
              && (mqtt_bridge_restart_ok()))
@@ -238,6 +256,8 @@ start_connect (uint32_t now)
                                               .keep_alive  = MQTT_KEEPALIVE_S,
                                               .will_topic  = TOPIC_STATUS,
                                               .will_msg    = g_offline_msg,
+                                              .will_msg_len =
+                                                  sizeof(g_offline_msg),
                                               .will_qos    = QOS_0,
                                               .will_retain = RETAIN};
     ip_addr_t                         broker;
@@ -291,7 +311,7 @@ flush_tx (void)
 
     while (b_sent && (mqtt_bridge_peek_tx(&topic, g_msg, sizeof(g_msg), &len)))
     {
-        /* Cast: len < MQTT_BRIDGE_PAYLOAD_MAX (512), so it fits u16_t. */
+        /* Cast: len <= MQTT_BRIDGE_PAYLOAD_MAX (47), so it fits u16_t. */
         b_sent = (ERR_OK
                   == mqtt_publish(&g_client, g_topic_names[topic], g_msg,
                                   (u16_t) len, QOS_0, NO_RETAIN, NULL, NULL));
@@ -330,10 +350,10 @@ on_connection (mqtt_client_t * p_client, void * p_arg,
 
         gb_ever_online = true;
 
-        /* Cast: the message is a few bytes long, so it fits u16_t. */
+        /* Cast: the frame is 2 bytes long, so it fits u16_t. */
         (void) mqtt_publish(p_client, TOPIC_STATUS, g_online_msg,
-                            (u16_t) (sizeof(g_online_msg) - 1u), QOS_0, RETAIN,
-                            NULL, NULL);
+                            (u16_t) sizeof(g_online_msg), QOS_0, RETAIN, NULL,
+                            NULL);
         (void) mqtt_subscribe(p_client, TOPIC_CMD, QOS_0, NULL, NULL);
     }
     else
@@ -407,12 +427,14 @@ on_publish (void * p_arg, char const * p_topic, u32_t tot_len)
     (void) tot_len;
     gb_cmd_topic = (0 == strcmp(p_topic, TOPIC_CMD));
     g_cmd_len    = 0u;
+    gb_cmd_over  = false;
 }
 
 /*!
  * @brief Payload fragment of an incoming publish (lwIP callback); a whole
- *        command goes to the bridge.  Bytes beyond MQTT_BRIDGE_CMD_MAX are
- *        dropped, as the bridge would truncate them anyway.
+ *        command frame goes to the bridge.  A frame longer than
+ *        MQTT_BRIDGE_CMD_MAX is not a valid command and is dropped whole
+ *        (a truncated frame could decode as a different command).
  *
  * @param[in] p_arg  Unused.
  * @param[in] p_data Fragment.
@@ -426,17 +448,26 @@ on_data (void * p_arg, u8_t const * p_data, u16_t len, u8_t flags)
 
     (void) p_arg;
 
-    for (idx = 0u;
-         gb_cmd_topic && (idx < len) && (g_cmd_len < MQTT_BRIDGE_CMD_MAX);
-         idx++)
+    for (idx = 0u; gb_cmd_topic && (idx < len); idx++)
     {
-        g_cmd[g_cmd_len] = p_data[idx];
-        g_cmd_len++;
+        if (g_cmd_len < MQTT_BRIDGE_CMD_MAX)
+        {
+            g_cmd[g_cmd_len] = p_data[idx];
+            g_cmd_len++;
+        }
+        else
+        {
+            gb_cmd_over = true;
+        }
     }
 
     if (gb_cmd_topic && (0 != (flags & MQTT_DATA_FLAG_LAST)))
     {
-        mqtt_bridge_put_command(g_cmd, g_cmd_len);
+        if (!gb_cmd_over)
+        {
+            mqtt_bridge_put_command(g_cmd, g_cmd_len);
+        }
+
         gb_cmd_topic = false;
     }
 }

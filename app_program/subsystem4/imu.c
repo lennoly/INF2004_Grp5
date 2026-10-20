@@ -19,6 +19,8 @@
 #include "hal.h"
 #include "motion.h"
 #include "timing.h"
+#include "fault.h"
+#include "packed.h"
 #include "imu.h"
 
 #define TASK_PRIORITY  (8)
@@ -63,6 +65,8 @@
    holds exactly. */
 #define DT_S ((float32_t) IMU_PERIOD_MS / MS_PER_S)
 
+#define FAIL_LIMIT (3u) /* failed reads in a row: IMU fault (Week 6) */
+
 /* Values from the previous 50 Hz step, kept by the IMU task. */
 typedef struct
 {
@@ -72,8 +76,10 @@ typedef struct
     uint32_t  holdoff_ms;      /* impact detector hold-off   */
 } imu_history_t;
 
-/* Published snapshot: written by the IMU task, read by other tasks. */
-static volatile imu_status_t g_st;
+/* Published snapshot: written by the IMU task, read by other tasks.
+   Stored packed (Change Requirement 1): 28 bytes instead of 84.  The hump
+   tracker and the filters keep full width in g_work and g_hump below. */
+static volatile packed_imu_t g_st;
 
 /* Shared with the vehicle task (calibration and run reset): volatile. */
 static volatile float32_t g_mag_min[IMU_AXES];
@@ -86,6 +92,8 @@ static volatile bool      gb_reset_run        = false;
 static imu_status_t   g_work;
 static terrain_hump_t g_hump;
 static float32_t      g_bias[IMU_AXES] = {0.0f, 0.0f, 0.0f};
+static uint32_t       g_seq            = 0u; /* good samples (freshness) */
+static uint32_t       g_fail_run       = 0u; /* failed reads in a row    */
 
 static bool      transfer_ok(int32_t result, uint32_t expected);
 static bool      reg_write(uint8_t addr, uint8_t reg, uint8_t value);
@@ -116,19 +124,23 @@ static void imu_task(INT stacd, void * p_exinf);
 int32_t
 imu_init (void)
 {
-    T_CTSK  ctsk   = {0};
-    ID      h_task = 0;
-    bool    b_ok   = false;
-    int32_t ercd   = E_OK;
+    T_CTSK       ctsk   = {0};
+    ID           h_task = 0;
+    bool         b_ok   = false;
+    int32_t      ercd   = E_OK;
+    imu_status_t first  = {0};
+    packed_imu_t packed;
 
-    g_st.az_mg = ONE_G_MG;
+    first.az_mg = ONE_G_MG;
     (void) hal_i2c_init(PIN_IMU_SDA, PIN_IMU_SCL, IMU_I2C_HZ);
     b_ok = (reg_write(ADDR_IMU, REG_CTRL1, VAL_CTRL1))
            && (reg_write(ADDR_IMU, REG_CTRL2, VAL_CTRL2))
            && (reg_write(ADDR_IMU, REG_CTRL5, VAL_CTRL5))
            && (reg_write(ADDR_IMU, REG_CTRL6, VAL_CTRL6))
            && (reg_write(ADDR_IMU, REG_CTRL7, VAL_CTRL7));
-    g_st.b_ok = b_ok;
+    first.b_ok = b_ok;
+    packed_imu_pack(&first, 0u, &packed);
+    g_st = packed;
 
     ctsk.tskatr = TA_HLNG | TA_RNG3;
 
@@ -161,11 +173,14 @@ imu_init (void)
 void
 imu_get_status (imu_status_t * p_out)
 {
-    UINT imask = 0u;
+    packed_imu_t copy;
+    UINT         imask = 0u;
 
     DI(imask);
-    *p_out = g_st;
+    copy = g_st;
     EI(imask);
+
+    packed_imu_unpack(&copy, p_out);
 }
 
 /*!
@@ -469,10 +484,13 @@ finite_or (float32_t value, float32_t fallback)
 static void
 publish (void)
 {
-    UINT imask = 0u;
+    packed_imu_t packed;
+    UINT         imask = 0u;
+
+    packed_imu_pack(&g_work, g_seq, &packed);
 
     DI(imask);
-    g_st = g_work;
+    g_st = packed;
     EI(imask);
 }
 
@@ -600,9 +618,23 @@ imu_step (imu_history_t * p_hist)
     if (!read_sensors(acc, mag))
     {
         g_work.i2c_errors++;
+        g_fail_run = (g_fail_run < FAIL_LIMIT) ? (g_fail_run + 1u) : g_fail_run;
+
+        /* Risk R1: the snapshot shows the sensor as failed, and the shared
+           fault mask gets the IMU bit, instead of old values looking
+           fresh. */
+        if (g_fail_run >= FAIL_LIMIT)
+        {
+            g_work.b_ok = false;
+            fault_raise(FAULT_IMU);
+        }
     }
     else
     {
+        g_fail_run  = 0u;
+        g_work.b_ok = true;
+        g_seq++;
+        fault_clear(FAULT_IMU);
         motion_get_status(&motion);
         speed = 0.5f * (motion.speed_l_mm_s + motion.speed_r_mm_s);
 
@@ -650,14 +682,17 @@ imu_task (INT stacd, void * p_exinf)
     imu_history_t history  = {0.0f, 0.0f, {0.0f, 0.0f, ONE_G_MG}, 0u};
     UINT          imask    = 0u;
     uint32_t      start_us = 0u;
+    packed_imu_t  first;
 
     (void) stacd;
     (void) p_exinf;
 
     /* Take over the fields imu_init() set, then own the working copy. */
     DI(imask);
-    g_work = g_st;
+    first = g_st;
     EI(imask);
+
+    packed_imu_unpack(&first, &g_work);
 
     terrain_hump_init(&g_hump);
     calibrate_accel();
