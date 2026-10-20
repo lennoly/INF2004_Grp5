@@ -2,14 +2,13 @@
  *
  * @brief Buddy 3 - barcode framing task (see barcode.h).
  *
- * A frame starts at the first bar after a quiet zone and ends when the
- * sensor has been on white for BARCODE_QUIET_MS.
+ * Course frames contain exactly one symbol (*A* through *D*, or report-only
+ * symbols). Decode at element 29, then require white quiet before rearming.
  */
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <tk/tkernel.h>
-#include <tm/tmonitor.h>
 #include "car_config.h"
 #include "ir_sensor.h"
 #include "timing.h"
@@ -22,18 +21,25 @@
 #define QUIET_US           (BARCODE_QUIET_MS * US_PER_MS)
 #define MBF_MSGS           (4u)
 #define MIN_FRAME_ELEMENTS (29u) /* 3 characters x 10 - 1 */
+#define EVENT_BYTES        (6u)  /* 7-bit ASCII, 3-bit command, 32-bit time */
+#define EVENT_STORAGE      (8u)  /* kernel rounds payload to a UW boundary */
 
 /* Shared with the vehicle and telemetry tasks: volatile (Rule 1.8.c). */
 static volatile ID              gh_mbuf = 0;
 static volatile barcode_stats_t g_stats;
+static volatile bool            gb_enabled = true;
+static ID                       gh_task    = 0;
 
 /* Frame being collected; used only by barcode_task(). */
-static uint32_t g_widths[BARCODE_MAX_ELEMENTS];
-static uint32_t g_count = 0u;
+static uint32_t g_widths[MIN_FRAME_ELEMENTS];
+static uint32_t g_count         = 0u;
+static uint32_t g_seen_overruns = 0u;
+static bool     gb_armed        = false;
 
-static void barcode_task(INT stacd, void * p_exinf);
-static void finish_frame(void);
-static void add_element(ir_sensor_element_t const * p_element);
+static int32_t create_task(void);
+static void    barcode_task(INT stacd, void * p_exinf);
+static void    finish_frame(void);
+static void    add_element(ir_sensor_element_t const * p_element);
 
 /*!
  * @brief Create the event message buffer and start the barcode task.
@@ -44,29 +50,16 @@ static void add_element(ir_sensor_element_t const * p_element);
 int32_t
 barcode_init (void)
 {
-    T_CMBF cmbf   = {0};
-    T_CTSK ctsk   = {0};
-    ID     h_task = 0;
-    ER     ercd   = E_LIMIT;
+    T_CMBF  cmbf = {0};
+    int32_t ercd = E_OK;
 
-    cmbf.mbfatr = TA_TFIFO;
-    cmbf.bufsz  = MBF_MSGS * (sizeof(barcode_event_t) + sizeof(UW));
-    cmbf.maxmsz = sizeof(barcode_event_t);
-    gh_mbuf     = tk_cre_mbf(&cmbf);
-
-    ctsk.tskatr = TA_HLNG | TA_RNG3;
-
-    /* Cast: the kernel stores every task entry as the generic FP type and
-       calls a TA_HLNG task as (INT stacd, void * exinf), matching
-       barcode_task(). */
-    ctsk.task    = (FP) barcode_task;
-    ctsk.itskpri = TASK_PRIORITY;
-    ctsk.stksz   = TASK_STACK;
-    h_task       = tk_cre_tsk(&ctsk);
-
-    if ((gh_mbuf >= E_OK) && (h_task >= E_OK))
+    if (gh_task <= 0)
     {
-        ercd = tk_sta_tsk(h_task, 0);
+        cmbf.mbfatr = TA_TFIFO;
+        cmbf.bufsz  = MBF_MSGS * (EVENT_STORAGE + sizeof(UW));
+        cmbf.maxmsz = EVENT_BYTES;
+        gh_mbuf     = tk_cre_mbf(&cmbf);
+        ercd        = (gh_mbuf > 0) ? create_task() : gh_mbuf;
     }
 
     return (ercd);
@@ -83,10 +76,86 @@ barcode_init (void)
 bool
 barcode_get_event (barcode_event_t * p_event, int32_t timeout_ms)
 {
-    INT msg_size = tk_rcv_mbf(gh_mbuf, p_event, timeout_ms);
+    uint8_t packed[EVENT_BYTES] = {0};
+    INT     msg_size            = tk_rcv_mbf(gh_mbuf, packed, timeout_ms);
 
-    /* Cast: the event is a few dozen bytes, far below INT's range. */
-    return ((INT) sizeof(barcode_event_t) == msg_size);
+    if (EVENT_BYTES == msg_size)
+    {
+        *p_event = (barcode_event_t){NAV_NONE, {0}, 0u};
+        /* Casts: 7-bit ASCII and a checked 3-bit command. */
+        p_event->text[0] = (char) (packed[0] & 0x7fu);
+        p_event->cmd     = (barcode_decode_nav_t) (packed[1] & 7u);
+        p_event->time_ms = (uint32_t) packed[2] | ((uint32_t) packed[3] << 8u)
+                           | ((uint32_t) packed[4] << 16u)
+                           | ((uint32_t) packed[5] << 24u);
+    }
+
+    return (EVENT_BYTES == msg_size);
+}
+
+/*!
+ * @brief Pause capture during manual calibration, or start a fresh session.
+ *
+ * @param[in] b_enabled Whether to accept new frames.
+ */
+void
+barcode_set_enabled (bool b_enabled)
+{
+    barcode_event_t discarded;
+    UINT            imask = 0u;
+
+    DI(imask);
+    gb_enabled = false;
+    g_count    = 0u;
+    gb_armed   = false;
+    ir_sensor_barcode_reset();
+    g_seen_overruns = ir_sensor_barcode_overruns();
+    EI(imask);
+
+    while (barcode_get_event(&discarded, TMO_POL))
+    {
+        /* Old commands must not survive a new bench session. */
+    }
+
+    gb_enabled = b_enabled;
+}
+
+/*!
+ * @brief Consume at most one ring of samples, rejecting any damaged frame.
+ *
+ * Called by barcode_task, or synchronously by the host tests.
+ */
+void
+barcode_poll (void)
+{
+    ir_sensor_element_t element  = {false, 0u};
+    uint32_t            overruns = ir_sensor_barcode_overruns();
+    uint32_t            budget   = 64u;
+
+    if (gb_enabled)
+    {
+        if (overruns != g_seen_overruns)
+        {
+            g_stats.overruns += overruns - g_seen_overruns;
+            g_seen_overruns = overruns;
+            g_count         = 0u;
+            gb_armed        = false;
+            ir_sensor_barcode_reset();
+        }
+
+        while ((budget > 0u) && (ir_sensor_barcode_pop(&element)))
+        {
+            budget--;
+            add_element(&element);
+        }
+
+        if (ir_sensor_barcode_quiet(QUIET_US))
+        {
+            g_stats.errors += (g_count > 0u) ? 1u : 0u;
+            g_count  = 0u;
+            gb_armed = true;
+        }
+    }
 }
 
 /*!
@@ -105,6 +174,40 @@ barcode_get_stats (barcode_stats_t * p_out)
 }
 
 /*!
+ * @brief Create and start the sole decoder task, cleaning up on failure.
+ *
+ * @return Kernel result.
+ */
+static int32_t
+create_task (void)
+{
+    T_CTSK  ctsk = {0};
+    int32_t ercd = E_LIMIT;
+
+    ctsk.tskatr = TA_HLNG | TA_RNG3;
+    /* Cast: the kernel's generic task pointer has this entry signature. */
+    ctsk.task    = (FP) barcode_task;
+    ctsk.itskpri = TASK_PRIORITY;
+    ctsk.stksz   = TASK_STACK;
+    gh_task      = tk_cre_tsk(&ctsk);
+    ercd         = (gh_task > 0) ? tk_sta_tsk(gh_task, 0) : gh_task;
+
+    if (ercd < E_OK)
+    {
+        if (gh_task > 0)
+        {
+            (void) tk_del_tsk(gh_task);
+        }
+
+        (void) tk_del_mbf(gh_mbuf);
+        gh_task = 0;
+        gh_mbuf = 0;
+    }
+
+    return (ercd);
+}
+
+/*!
  * @brief Barcode task: frames the bar / space stream from the IR sampler.
  *
  * @param[in] stacd   Start code (unused).
@@ -113,8 +216,7 @@ barcode_get_stats (barcode_stats_t * p_out)
 static void
 barcode_task (INT stacd, void * p_exinf)
 {
-    ir_sensor_element_t element  = {false, 0u};
-    uint32_t            start_us = 0u;
+    uint32_t start_us = 0u;
 
     (void) stacd;
     (void) p_exinf;
@@ -123,17 +225,7 @@ barcode_task (INT stacd, void * p_exinf)
     {
         start_us = timing_start();
 
-        while (ir_sensor_barcode_pop(&element))
-        {
-            add_element(&element);
-        }
-
-        /* The trailing quiet zone ends the frame. */
-        if ((g_count > 0u) && (!ir_sensor_barcode_is_black())
-            && (ir_sensor_barcode_idle_us() >= QUIET_US))
-        {
-            finish_frame();
-        }
+        barcode_poll();
 
         timing_stop(TIMING_BARCODE, start_us);
         (void) tk_dly_tsk(POLL_MS);
@@ -149,39 +241,41 @@ barcode_task (INT stacd, void * p_exinf)
 static void
 finish_frame (void)
 {
-    barcode_event_t event = {NAV_NONE, {0}, 0u};
-    int32_t         len   = 0;
-    SYSTIM          now   = {0, 0u};
+    barcode_event_t event               = {NAV_NONE, {0}, 0u};
+    int32_t         len                 = 0;
+    SYSTIM          now                 = {0, 0u};
+    uint8_t         packed[EVENT_BYTES] = {0};
 
-    if (g_count >= MIN_FRAME_ELEMENTS)
+    g_stats.frames++;
+    len = barcode_decode_frame(g_widths, g_count, event.text, BARCODE_TEXT_MAX);
+
+    if ((1 == len) && (g_seen_overruns == ir_sensor_barcode_overruns()))
     {
-        g_stats.frames++;
-        len = barcode_decode_frame(g_widths, g_count, event.text,
-                                   BARCODE_TEXT_MAX);
+        (void) tk_get_tim(&now);
+        event.cmd     = barcode_decode_to_command(event.text[0]);
+        event.time_ms = now.lo;
+        g_stats.decoded++;
+        g_stats.last = event;
+        /* Casts retain ASCII, command bits and each timestamp byte. */
+        packed[0] = (uint8_t) event.text[0] & 0x7fu;
+        packed[1] = (uint8_t) event.cmd & 7u;
+        packed[2] = (uint8_t) (event.time_ms & 0xffu);
+        packed[3] = (uint8_t) ((event.time_ms >> 8u) & 0xffu);
+        packed[4] = (uint8_t) ((event.time_ms >> 16u) & 0xffu);
+        packed[5] = (uint8_t) ((event.time_ms >> 24u) & 0xffu);
 
-        /* Casts in the messages: tm_printf() takes the kernel's UB string
-           type (the literals are ASCII) and the counts fit in INT. */
-        if (len > 0)
+        if (tk_snd_mbf(gh_mbuf, packed, EVENT_BYTES, TMO_POL) < E_OK)
         {
-            (void) tk_get_tim(&now);
-            event.cmd     = barcode_decode_to_command(event.text[0]);
-            event.time_ms = now.lo;
-            g_stats.decoded++;
-            g_stats.last = event;
-            (void) tk_snd_mbf(gh_mbuf, &event, (INT) sizeof(event), TMO_POL);
-            (void) tm_printf((UB const *) "[barcode] '%s' -> %s\n", event.text,
-                             barcode_decode_command_name(event.cmd));
-        }
-        else
-        {
-            g_stats.errors++;
-            (void) tm_printf((UB const *) "[barcode] frame of %d elements "
-                                          "rejected (%d)\n",
-                             (INT) g_count, (INT) len);
+            g_stats.dropped++;
         }
     }
+    else
+    {
+        g_stats.errors++;
+    }
 
-    g_count = 0u;
+    g_count  = 0u;
+    gb_armed = false;
 }
 
 /*!
@@ -194,16 +288,37 @@ add_element (ir_sensor_element_t const * p_element)
 {
     if ((!p_element->b_bar) && (p_element->width_us >= QUIET_US))
     {
-        finish_frame(); /* long white: the previous frame is over */
+        if (g_count > 0u)
+        {
+            g_stats.errors++;
+        }
+
+        g_count  = 0u;
+        gb_armed = true;
+    }
+    else if (!gb_armed)
+    {
+        /* Ignore the tail of a completed frame until the next quiet zone. */
     }
     else if ((0u == g_count) && (!p_element->b_bar))
     {
         /* Frames always start with a bar. */
     }
-    else if (g_count < BARCODE_MAX_ELEMENTS)
+    else if (p_element->b_bar != (0u == (g_count & 1u)))
+    {
+        g_stats.errors++;
+        g_count  = 0u;
+        gb_armed = false;
+    }
+    else if (g_count < MIN_FRAME_ELEMENTS)
     {
         g_widths[g_count] = p_element->width_us;
         g_count++;
+
+        if (MIN_FRAME_ELEMENTS == g_count)
+        {
+            finish_frame();
+        }
     }
     else
     {

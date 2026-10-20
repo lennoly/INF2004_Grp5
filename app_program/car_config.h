@@ -112,7 +112,9 @@
 /* Line following + barcode (Buddy 3)                                       */
 /* ------------------------------------------------------------------------ */
 #define IR_SAMPLE_PERIOD_US         (1000u)   /* 1 kHz sampler ISR          */
+#ifndef IR_BLACK_IS_HIGH
 #define IR_BLACK_IS_HIGH            (1)       /* A0 rises over black        */
+#endif
 #define IR_DEFAULT_WHITE            (400u)    /* [CALIBRATE] raw ADC counts */
 #define IR_DEFAULT_BLACK            (3000u)   /* [CALIBRATE]                */
 

@@ -19,6 +19,8 @@
 #define START_STOP        ('*')
 #define DECODE_OK         (0)
 #define TERMINATOR        ('\0')
+/* Nominal 3:1, allowing 20 percent width noise and 1 percent/element drift. */
+#define MAX_ELEMENT_RATIO (5.0f)
 
 typedef struct
 {
@@ -54,7 +56,7 @@ static int32_t decode_direction(uint32_t const * p_widths, uint32_t count,
  * @brief Decode a Code 39 frame "*DATA*" read in either direction.
  *
  * @param[in]  p_widths Element widths, first element a bar.
- * @param[in]  count    Number of widths; trailing extras are ignored.
+ * @param[in]  count    Exact number of widths (10k - 1).
  * @param[out] p_out    Decoded data characters, NUL-terminated.
  * @param[in]  out_size Size of p_out in bytes (at least 2).
  *
@@ -73,13 +75,13 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
     b_args_ok =
         (NULL != p_widths) && (NULL != p_out) && (out_size >= MIN_OUT_SIZE);
 
-    /* Drop trailing noise so the length is 10k - 1. */
-    while ((used > 0u) && (0u != ((used + 1u) % ELEMENTS_PER_SLOT)))
+    if ((NULL != p_out) && (out_size > 0u))
     {
-        used--;
+        p_out[0] = TERMINATOR;
     }
 
-    if (b_args_ok && (used >= MIN_ELEMENTS) && (used <= BARCODE_MAX_ELEMENTS))
+    if (b_args_ok && (used >= MIN_ELEMENTS) && (used <= BARCODE_MAX_ELEMENTS)
+        && (0u == ((used + 1u) % ELEMENTS_PER_SLOT)))
     {
         result = decode_direction(p_widths, used, p_out, out_size);
 
@@ -94,6 +96,11 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
 
             result = decode_direction(reversed, used, p_out, out_size);
         }
+    }
+
+    if ((result < 0) && (NULL != p_out) && (out_size > 0u))
+    {
+        p_out[0] = TERMINATOR;
     }
 
     return (result);
@@ -238,10 +245,14 @@ decode_char (uint32_t const * p_widths)
 
     /* Casts: widths are timer ticks far below 2^24, so float32_t holds
        them exactly. */
-    if ((float32_t) sorted[WIDE_FIRST]
-        >= (BARCODE_MIN_WIDE_RATIO * (float32_t) sorted[NARROW_LAST]))
+    if ((sorted[0] > 0u)
+        && ((float32_t) sorted[WIDE_FIRST]
+            >= (BARCODE_MIN_WIDE_RATIO * (float32_t) sorted[NARROW_LAST]))
+        && ((float32_t) sorted[8]
+            <= (MAX_ELEMENT_RATIO * (float32_t) sorted[0])))
     {
-        threshold = (sorted[NARROW_LAST] + sorted[WIDE_FIRST]) / 2u;
+        threshold = sorted[NARROW_LAST]
+                    + ((sorted[WIDE_FIRST] - sorted[NARROW_LAST]) / 2u);
 
         for (idx = 0u; idx < BARCODE_ELEMENTS_PER_CHAR; idx++)
         {
@@ -292,6 +303,10 @@ decode_direction (uint32_t const * p_widths, uint32_t count, char * p_out,
         {
             /* Start / stop character: framing, not data. */
         }
+        else if (START_STOP == symbol)
+        {
+            status = BARCODE_ERR_FRAME;
+        }
         else if (len >= (out_size - 1u))
         {
             status = BARCODE_ERR_LENGTH;
@@ -300,6 +315,23 @@ decode_direction (uint32_t const * p_widths, uint32_t count, char * p_out,
         {
             p_out[len] = symbol;
             len++;
+        }
+
+        /* Inter-character gaps must be narrow, not missing or quiet zones. */
+        if ((DECODE_OK == status) && (char_idx + 1u < chars))
+        {
+            uint32_t sorted[BARCODE_ELEMENTS_PER_CHAR];
+            uint32_t gap = p_widths[char_idx * ELEMENTS_PER_SLOT + 9u];
+
+            sort_widths(&p_widths[char_idx * ELEMENTS_PER_SLOT], sorted);
+
+            /* Casts compare bounded widths as floating-point ratios. */
+            if ((0u == gap)
+                || ((float32_t) gap < (0.5f * (float32_t) sorted[0]))
+                || ((float32_t) gap > (1.5f * (float32_t) sorted[NARROW_LAST])))
+            {
+                status = BARCODE_ERR_RATIO;
+            }
         }
     }
 

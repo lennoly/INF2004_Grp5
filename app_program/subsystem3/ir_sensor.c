@@ -15,11 +15,19 @@
 #define ADC_MAX        (4095u)
 #define PERMILLE       (1000)
 #define PERMILLE_F     (1000.0f)
-#define LINE_EMA_SHIFT (2u)   /* alpha = 1/4 at 1 kHz (about 4 ms)   */
-#define BAR_EMA_SHIFT  (1u)   /* alpha = 1/2 keeps the edges sharp   */
-#define Q4_SHIFT       (4u)   /* the filter keeps 4 fraction bits    */
-#define RING_SIZE      (64u)  /* power of two                        */
-#define MIN_CAL_SPAN   (200u) /* reject a calibration with no swing  */
+#define LINE_EMA_SHIFT (2u)    /* alpha = 1/4 at 1 kHz (about 4 ms)   */
+#define BAR_EMA_SHIFT  (1u)    /* alpha = 1/2 keeps the edges sharp   */
+#define Q4_SHIFT       (4u)    /* the filter keeps 4 fraction bits    */
+#define RING_SIZE      (64u)   /* power of two                        */
+#define MIN_CAL_SPAN   (2048u) /* at least 50 percent of the ADC range */
+#define ELEMENT_BYTES  (3u)
+#define WIDTH_BITS     (18u)
+#define WIDTH_MASK     ((1u << WIDTH_BITS) - 1u)
+#define QUIET_US       (BARCODE_QUIET_MS * 1000u)
+
+#if QUIET_US > WIDTH_MASK
+#error "Barcode quiet time exceeds the packed duration range"
+#endif
 
 /* Casts: the configured levels are fractions 0..1, so the products are
    0..1000 and convert to int32_t exactly. */
@@ -37,13 +45,17 @@ static volatile uint16_t g_black[IR_COUNT];
 static volatile uint16_t g_cal_min[IR_COUNT];
 static volatile uint16_t g_cal_max[IR_COUNT];
 static volatile bool     gb_calibrating = false;
+static volatile bool     gb_calibrated  = false;
+static bool              gb_initialised = false;
 
 /* Barcode single-producer (ISR) / single-consumer (task) ring. */
-static volatile ir_sensor_element_t g_ring[RING_SIZE];
-static volatile uint32_t            g_ring_head   = 0u;
-static volatile uint32_t            g_ring_tail   = 0u;
-static volatile bool                gb_bar_black  = false;
-static volatile uint32_t            g_bar_edge_us = 0u;
+/* 18-bit duration (saturated at quiet time) + one colour bit. */
+static volatile uint8_t  g_ring[RING_SIZE][ELEMENT_BYTES];
+static volatile uint32_t g_ring_head   = 0u;
+static volatile uint32_t g_ring_tail   = 0u;
+static volatile bool     gb_bar_black  = false;
+static volatile uint32_t g_bar_edge_us = 0u;
+static volatile uint32_t g_overruns    = 0u;
 
 static int32_t to_permille(uint32_t raw, uint32_t channel);
 static void    barcode_edge_detect(uint32_t raw, uint32_t t_us);
@@ -58,30 +70,37 @@ static void    ir_sample_isr(uint32_t t_us);
 int32_t
 ir_sensor_init (void)
 {
-    uint32_t idx = 0u;
+    uint32_t idx    = 0u;
+    int32_t  result = E_OK;
 
-    hal_adc_init();
-    hal_adc_pin_init(PIN_IR_LEFT);
-    hal_adc_pin_init(PIN_IR_RIGHT);
-    hal_adc_pin_init(PIN_IR_BARCODE);
-
-    for (idx = 0u; idx < IR_COUNT; idx++)
+    if (!gb_initialised)
     {
+        hal_adc_init();
+        hal_adc_pin_init(PIN_IR_LEFT);
+        hal_adc_pin_init(PIN_IR_RIGHT);
+        hal_adc_pin_init(PIN_IR_BARCODE);
+
+        for (idx = 0u; idx < IR_COUNT; idx++)
+        {
 #if IR_BLACK_IS_HIGH
-        g_white[idx] = IR_DEFAULT_WHITE;
-        g_black[idx] = IR_DEFAULT_BLACK;
+            g_white[idx] = IR_DEFAULT_WHITE;
+            g_black[idx] = IR_DEFAULT_BLACK;
 #else
-        g_white[idx] = IR_DEFAULT_BLACK;
-        g_black[idx] = IR_DEFAULT_WHITE;
+            g_white[idx] = IR_DEFAULT_BLACK;
+            g_black[idx] = IR_DEFAULT_WHITE;
 #endif
 
-        /* Cast: widens the 12-bit value before the shift (Rule 5.3.c). */
-        g_filt[idx] = (uint32_t) g_white[idx] << Q4_SHIFT;
+            /* Cast: widens the 12-bit value before the shift (Rule 5.3.c). */
+            g_filt[idx] = (uint32_t) g_white[idx] << Q4_SHIFT;
+        }
+
+        g_bar_edge_us = hal_time_us();
+
+        result = hal_irq_sampler_attach(IR_SAMPLE_PERIOD_US, ir_sample_isr);
+        gb_initialised = (E_OK == result);
     }
 
-    g_bar_edge_us = hal_time_us();
-
-    return (hal_irq_sampler_attach(IR_SAMPLE_PERIOD_US, ir_sample_isr));
+    return (result);
 }
 
 /*!
@@ -92,7 +111,10 @@ ir_sensor_init (void)
 void
 ir_sensor_read (ir_sensor_snapshot_t * p_out)
 {
-    uint32_t idx = 0u;
+    uint32_t idx   = 0u;
+    UINT     imask = 0u;
+
+    DI(imask);
 
     for (idx = 0u; idx < IR_COUNT; idx++)
     {
@@ -102,6 +124,8 @@ ir_sensor_read (ir_sensor_snapshot_t * p_out)
         p_out->norm[idx] =
             (float32_t) to_permille(p_out->raw[idx], idx) / PERMILLE_F;
     }
+
+    EI(imask);
 }
 
 /*!
@@ -127,12 +151,9 @@ ir_sensor_calib_begin (void)
 }
 
 /*!
- * @brief Stop the capture and apply it per channel (polarity from the
- *        configuration).
+ * @brief Apply all three channels together, or retain the old calibration.
  *
- * A channel that saw too little contrast keeps its old calibration.
- *
- * @return false if a line channel saw too little contrast.
+ * @return true only if every channel saw at least 50 percent contrast.
  */
 bool
 ir_sensor_calib_end (void)
@@ -152,7 +173,12 @@ ir_sensor_calib_end (void)
         b_span_ok = ((uint32_t) g_cal_max[idx]
                      >= ((uint32_t) g_cal_min[idx] + MIN_CAL_SPAN));
 
-        if (b_span_ok)
+        b_ok = b_ok && b_span_ok;
+    }
+
+    if (b_ok)
+    {
+        for (idx = 0u; idx < IR_COUNT; idx++)
         {
 #if IR_BLACK_IS_HIGH
             g_white[idx] = g_cal_min[idx];
@@ -162,19 +188,82 @@ ir_sensor_calib_end (void)
             g_black[idx] = g_cal_min[idx];
 #endif
         }
-        else if (IR_BARCODE != idx)
-        {
-            b_ok = false;
-        }
-        else
-        {
-            /* The barcode channel may miss a bar during the sweep. */
-        }
+
+        gb_calibrated = true;
     }
 
     EI(imask);
+    ir_sensor_barcode_reset();
 
     return (b_ok);
+}
+
+/*!
+ * @brief Abort capture without changing the previously accepted levels.
+ */
+void
+ir_sensor_calib_cancel (void)
+{
+    UINT imask = 0u;
+
+    DI(imask);
+    gb_calibrating = false;
+    EI(imask);
+    ir_sensor_barcode_reset();
+}
+
+/*!
+ * @brief Copy calibration levels and their measured-valid flag atomically.
+ *
+ * @param[out] p_out Calibration report.
+ */
+void
+ir_sensor_get_calibration (ir_sensor_calibration_t * p_out)
+{
+    uint32_t idx   = 0u;
+    UINT     imask = 0u;
+
+    DI(imask);
+
+    for (idx = 0u; idx < IR_COUNT; idx++)
+    {
+        p_out->white[idx] = g_white[idx];
+        p_out->black[idx] = g_black[idx];
+        p_out->minimum[idx] = g_cal_min[idx];
+        p_out->maximum[idx] = g_cal_max[idx];
+    }
+
+    p_out->b_valid = gb_calibrated;
+    EI(imask);
+}
+
+/*!
+ * @brief Flush pre-calibration edges and restart edge timing.
+ *
+ * Call only with the barcode consumer paused (or from that consumer).
+ */
+void
+ir_sensor_barcode_reset (void)
+{
+    UINT imask = 0u;
+
+    DI(imask);
+    g_ring_tail   = g_ring_head;
+    gb_bar_black  = (to_permille(g_filt[IR_BARCODE] >> Q4_SHIFT, IR_BARCODE)
+                    >= BAR_ON_PERMILLE);
+    g_bar_edge_us = hal_time_us();
+    EI(imask);
+}
+
+/*!
+ * @brief Count lost elements; the consumer must discard a damaged frame.
+ *
+ * @return Monotonic modulo-32-bit overrun count.
+ */
+uint32_t
+ir_sensor_barcode_overruns (void)
+{
+    return (g_overruns);
 }
 
 /*!
@@ -187,13 +276,18 @@ ir_sensor_calib_end (void)
 bool
 ir_sensor_barcode_pop (ir_sensor_element_t * p_out)
 {
-    bool b_found = (g_ring_tail != g_ring_head);
+    uint32_t packed  = 0u;
+    bool     b_found = (g_ring_tail != g_ring_head);
 
     if (b_found)
     {
         hal_memory_barrier();
-        p_out->b_bar    = g_ring[g_ring_tail].b_bar;
-        p_out->width_us = g_ring[g_ring_tail].width_us;
+        /* Casts widen bytes before shifting into the 19-bit payload. */
+        packed = (uint32_t) g_ring[g_ring_tail][0]
+                 | ((uint32_t) g_ring[g_ring_tail][1] << 8u)
+                 | ((uint32_t) g_ring[g_ring_tail][2] << 16u);
+        p_out->b_bar    = (0u != (packed >> WIDTH_BITS));
+        p_out->width_us = packed & WIDTH_MASK;
         hal_memory_barrier();
         g_ring_tail = (g_ring_tail + 1u) & (RING_SIZE - 1u);
     }
@@ -220,7 +314,33 @@ ir_sensor_barcode_is_black (void)
 uint32_t
 ir_sensor_barcode_idle_us (void)
 {
-    return (hal_time_us() - g_bar_edge_us);
+    uint32_t elapsed = 0u;
+    UINT imask = 0u;
+
+    DI(imask);
+    elapsed = hal_time_us() - g_bar_edge_us;
+    EI(imask);
+    return (elapsed);
+}
+
+/*!
+ * @brief Test white and elapsed time from one coherent ISR snapshot.
+ *
+ * @param[in] quiet_us Minimum white interval.
+ *
+ * @return true if no barcode edge has occurred during that white interval.
+ */
+bool
+ir_sensor_barcode_quiet (uint32_t quiet_us)
+{
+    bool b_quiet = false;
+    UINT imask = 0u;
+
+    DI(imask);
+    b_quiet = (!gb_bar_black)
+              && ((hal_time_us() - g_bar_edge_us) >= quiet_us);
+    EI(imask);
+    return (b_quiet);
 }
 
 /*!
@@ -267,6 +387,8 @@ barcode_edge_detect (uint32_t raw, uint32_t t_us)
     bool     b_black   = gb_bar_black;
     bool     b_changed = false;
     uint32_t next      = 0u;
+    uint32_t width     = 0u;
+    uint32_t packed    = 0u;
 
     b_changed = ((!b_black) && (level >= BAR_ON_PERMILLE))
                 || (b_black && (level <= BAR_OFF_PERMILLE));
@@ -278,10 +400,19 @@ barcode_edge_detect (uint32_t raw, uint32_t t_us)
 
         if (next != g_ring_tail)
         {
-            g_ring[g_ring_head].b_bar    = b_black;
-            g_ring[g_ring_head].width_us = t_us - g_bar_edge_us;
+            width  = t_us - g_bar_edge_us;
+            width  = (width > QUIET_US) ? QUIET_US : width;
+            packed = width | (b_black ? (1u << WIDTH_BITS) : 0u);
+            /* Casts retain exactly the indicated packed byte. */
+            g_ring[g_ring_head][0] = (uint8_t) (packed & 0xffu);
+            g_ring[g_ring_head][1] = (uint8_t) ((packed >> 8u) & 0xffu);
+            g_ring[g_ring_head][2] = (uint8_t) ((packed >> 16u) & 0xffu);
             hal_memory_barrier();
             g_ring_head = next;
+        }
+        else
+        {
+            g_overruns++;
         }
 
         gb_bar_black  = !b_black;
