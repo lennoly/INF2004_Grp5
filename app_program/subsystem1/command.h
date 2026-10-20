@@ -70,6 +70,8 @@ typedef struct
 bool         command_parse(char const * p_text, command_t * p_cmd);
 char const * command_error(void);
 bool         command_allowed(command_id_t kind, bool b_stationary);
+bool         command_check(command_t * p_cmd);
+uint32_t     command_arg_count(command_id_t kind);
 void         command_line_init(command_line_t * p_line);
 bool command_line_feed(command_line_t * p_line, uint8_t rx_byte, char * p_out,
                        uint32_t out_size);

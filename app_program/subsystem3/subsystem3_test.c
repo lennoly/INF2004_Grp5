@@ -86,11 +86,12 @@ subsystem3_test_barcode (void)
     barcode_get_stats(&bc_stats);
 
     /* Casts: tm_printf() takes the kernel's UB string type (the literal is
-       ASCII); the counters are 32-bit unsigned like UINT. */
+       ASCII); the counters are 32-bit unsigned like UINT, and %c takes the
+       symbol as an INT. */
     (void) tm_printf((UB const *) "# frames=%u decoded=%u errors=%u "
-                                  "last='%s'\n",
+                                  "last='%c'\n",
                      (UINT) bc_stats.frames, (UINT) bc_stats.decoded,
-                     (UINT) bc_stats.errors, bc_stats.last.text);
+                     (UINT) bc_stats.errors, (INT) bc_stats.last.symbol);
 }
 #endif
 

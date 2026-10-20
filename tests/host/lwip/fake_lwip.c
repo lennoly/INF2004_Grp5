@@ -11,6 +11,8 @@ err_t    g_fake_publish_err = ERR_OK;
 char     g_fake_topic[FAKE_TOPIC_MAX];
 u8_t     g_fake_retain = 0u;
 char     g_fake_subscribed[FAKE_TOPIC_MAX];
+u8_t     g_fake_payload[FAKE_PAYLOAD_MAX];
+u16_t    g_fake_payload_len = 0u;
 
 static mqtt_client_t *             gp_client  = NULL;
 static mqtt_connection_cb_t        gp_conn_cb = NULL;
@@ -95,9 +97,9 @@ err_t mqtt_publish(mqtt_client_t * client, char const * topic,
                    void const * payload, u16_t payload_length, u8_t qos,
                    u8_t retain, mqtt_request_cb_t cb, void * arg)
 {
+    u16_t idx = 0u;
+
     (void) client;
-    (void) payload;
-    (void) payload_length;
     (void) qos;
     (void) cb;
     (void) arg;
@@ -105,7 +107,15 @@ err_t mqtt_publish(mqtt_client_t * client, char const * topic,
     if (ERR_OK == g_fake_publish_err)
     {
         copy_topic(g_fake_topic, topic);
-        g_fake_retain = retain;
+        g_fake_retain      = retain;
+        g_fake_payload_len = (payload_length < FAKE_PAYLOAD_MAX)
+                                 ? payload_length
+                                 : (u16_t) FAKE_PAYLOAD_MAX;
+
+        for (idx = 0u; idx < g_fake_payload_len; idx++)
+        {
+            g_fake_payload[idx] = ((u8_t const *) payload)[idx];
+        }
     }
 
     return g_fake_publish_err;
@@ -118,15 +128,19 @@ void fake_mqtt_connection(mqtt_connection_status_t status)
     gp_conn_cb(gp_client, NULL, status);
 }
 
-/* The broker delivers a message, in one fragment. */
-void fake_mqtt_incoming(char const * topic, char const * text)
+/* The broker delivers a binary message, in one fragment. */
+void fake_mqtt_incoming_bytes(char const * topic, u8_t const * p_data,
+                              u16_t len)
 {
-    size_t len = strlen(text);
-
     if ((NULL != gp_pub_cb) && (NULL != gp_data_cb))   /* as lwIP checks */
     {
         gp_pub_cb(NULL, topic, (u32_t) len);
-        gp_data_cb(NULL, (u8_t const *) text, (u16_t) len,
-                   MQTT_DATA_FLAG_LAST);
+        gp_data_cb(NULL, p_data, len, MQTT_DATA_FLAG_LAST);
     }
+}
+
+/* The broker delivers a text message, in one fragment. */
+void fake_mqtt_incoming(char const * topic, char const * text)
+{
+    fake_mqtt_incoming_bytes(topic, (u8_t const *) text, (u16_t) strlen(text));
 }
