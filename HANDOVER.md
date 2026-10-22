@@ -19,6 +19,45 @@ with `main`**. A few verified logic gaps are listed in section 4.
 **Host tests prove the logic. They do not prove the car works.** Nothing in
 the brief is "done" until it has a hardware result row.
 
+## Your checklist (find your buddy number)
+
+Each item points to the section with the details. "Integration" items need
+whoever owns `vehicle.c`, together with the buddy named.
+
+**Buddy 1: WiFi, MQTT, telemetry**
+- [ ] Run S1-U02..U09 on the current `main` (binary frames, not JSON) and record the results (§2, §6)
+- [ ] INT-08: barcode reaches the dashboard as a binary frame; INT-02: MQTT `stop` brakes within 100 ms (§2)
+- [ ] With Buddy 4: the highest hump peak is **reported** over WiFi at the end of the run (Req 5, §6)
+- [ ] Measure the message sizes on the wire for the CR1 Week 13 table (§7)
+
+**Buddy 2: motors, encoders, motion**
+- [ ] Calibrate wheel diameter, track width, slots, top speed, speed PID; fill in the REPORT PID and accuracy tables (§5)
+- [ ] Run S2-U02..U05; INT-07 (packed encoder data under load) (§2, §6)
+- [ ] With integration: 100 ms velocity-expiry brake (FR14), still not coded (§4.1)
+- [ ] Clear the BARR findings in `subsystem2_test.c` and `hal.c` from the TEST_WHEELS commit (§4.8)
+
+**Buddy 3: IR, line following, barcode**
+- [ ] Merge `origin/max` into `main` (resolve the CR1 conflicts) and move the PDFs out of git (§3)
+- [ ] Barcode retry after a failed window, if `max` doesn't already fix it (§4.4)
+- [ ] With integration: barcode command after 400 mm (§4.2) and old commands surviving into a new run (§4.3)
+- [ ] Calibrate IR on the real track; run S3-U02, U03 and the new lighting/speed robustness test (§5, §6)
+
+**Buddy 4: IMU, terrain, humps**
+- [ ] Decide on the hump estimator (6° `ds·sin` vs front-contact 10 mm); update REPORT §4.4 (§4.5)
+- [ ] Add the timeout to the I2C FIFO wait at `hal.c:482` (§4.6)
+- [ ] Run S4-U02, U03 and the new U04 (events) and U05 (impact); save the logs (§6, §7)
+- [ ] Pitch sign, magnetometer spin calibration, hump heights vs ruler (§5)
+
+**Buddy 5: ultrasonic, servo, avoidance**
+- [ ] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1)
+- [ ] Calibrate the servo; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
+- [ ] INT-10 fault injection with the other buddies (FAULT_PATHS.md)
+
+**Everyone / integration owner**
+- [ ] SMP guard (§4.7); the 138 BARR findings in `tests/host/test_data.c` and `fault_stub.c` (§4.8)
+- [ ] INT-01, INT-06, INT-11, then SYS-01..05 on the full course, with videos (§8)
+- [ ] Fill in TEAM.md IDs, the REPORT author line and blanks, and regenerate `wiring.png` (§7)
+
 ## 2. Mission requirements vs status
 
 | # | Brief requirement | Code (on `main`) | On the car | Test that proves it |
