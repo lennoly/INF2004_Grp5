@@ -192,7 +192,7 @@ already measure everything. Put the result in `car_config.h` and reflash:
 | speed PID / feed-forward | TEST_MOTOR, then `ff=` and `pid=` live, START repeats the steps | copy the final `gains` |
 | `IR_DEFAULT_WHITE/BLACK`, `line=` | TEST_IR (S3-U02); `line=` live in MISSION | read directly |
 | `IMU_FORWARD_SIGN` | TEST_IMU, lift the front: pitch must go positive | flip to `-1.0f` if negative |
-| magnetometer offsets | MISSION, STOP while idle = 360° spin | automatic, RAM only: repeat after every boot |
+| magnetometer offsets | MISSION, START held 2 s (or `calibrate`) = 360° spin | automatic, RAM only: repeat after every boot |
 | `SERVO_MIN_US` | TEST_ULTRASONIC (Buddy 5) | no live command: edit and reflash until 0° points right |
 
 Do the wheel diameter before the track width, because the turn uses the diameter too.

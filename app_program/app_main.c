@@ -112,8 +112,8 @@ usermain (void)
     report_init("telemetry", telemetry_init(true));
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
-    (void) tm_printf((UB const *) "START=GP20  STOP=GP21 (STOP while idle "
-                                  "= calibrate)\nType help on this console "
+    (void) tm_printf((UB const *) "START=GP20 (hold 2 s = calibrate)  "
+                                  "STOP=GP21\nType help on this console "
                                   "for tuning commands.\n");
 #else
     report_init("test", app_tests_start());
