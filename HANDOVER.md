@@ -77,6 +77,7 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [x] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1): merged 22 Oct, with the narrow scan (the mount lets the sensor turn only about ±25°)
 - [ ] Calibrate the servo (confirm `SERVO_MIN_DEG`/`SERVO_MAX_DEG` by eye); set `OBST_DEPTH_MAX_MM` to the deepest course obstacle; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
 - [ ] INT-10 fault injection with the other buddies (FAULT_PATHS.md)
+- [x] CSC05 / CR1 leftovers (23 Oct): sonar counts, scan points, servo angle and echo width packed (−56 B RAM, DATA_REPRESENTATION.md §5); worst-case obstacle time worked out in REPORT.md (≈ 39 s worst, ≈ 17 s typical). [ ] Measure it on the car and compare with the course limit
 - [ ] The sonar sees part of the car at ~60–65° (66–83 mm) during scans: move the sensor or the part in its way
 - [ ] `avoidance_profile()` leaves angle/edges/clearances uninitialised when nothing is found (scans print `cl=70647`): zero `*p_out` at the top
 

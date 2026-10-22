@@ -20,6 +20,7 @@
 #define US_PER_MS     (1000u)
 #define PING_GAP_US   (60000u)
 #define MM_PER_US     (0.1715f)
+#define WIDTH_MAX_US  (0xFFFFu) /* echo width field saturates here */
 #define FLG_ECHO      (1u << 0)
 #define MAX_SAMPLES   (7u)
 
@@ -28,7 +29,9 @@
 static volatile ID       gh_echo_flag   = 0;
 static volatile ID       gh_sensor_sem  = 0;
 static volatile uint32_t g_rise_us      = 0u;
-static volatile uint32_t g_width_us     = 0u;
+/* Change Requirement 1: the echo width in 16 bits, saturated at 65 535 us
+   (11 m, far past the 4 m range, still OUT_OF_RANGE). */
+static volatile uint16_t g_width_us     = 0u;
 static volatile uint32_t g_last_ping_us = 0u;
 
 static void               ping_locked(ultrasonic_ping_t * p_out);
@@ -327,7 +330,10 @@ echo_edge_isr (uint32_t pin, uint32_t events, uint32_t t_us)
 
     if ((0u != (events & HAL_GPIO_EDGE_FALL)) && (0u != g_rise_us))
     {
-        g_width_us = t_us - g_rise_us;
+        /* Cast: saturated to the 16-bit field first. */
+        g_width_us = ((t_us - g_rise_us) > WIDTH_MAX_US)
+                         ? (uint16_t) WIDTH_MAX_US
+                         : (uint16_t) (t_us - g_rise_us);
         g_rise_us  = 0u;
         (void) tk_set_flg(gh_echo_flag, FLG_ECHO);
     }

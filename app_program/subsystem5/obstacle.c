@@ -45,20 +45,33 @@
 #define PAUSE_STEP_MS     (10u)
 #define PAUSE_STEPS       (20u) /* wait at most 200 ms for the monitor */
 
+/* Change Requirement 1: the close-echo and FAULT counts (0..3 each) share
+   one byte, written whole by monitor_update() and obstacle_monitor_enable()
+   and read whole by obstacle_ahead(). */
+#define COUNT_BITS        (2u)
+#define COUNT_MASK        (0x03u)
+#define POINT_DIST_NONE   (0xFFFFu) /* stored scan point without an echo */
+
+#if (OBST_CONFIRM_READINGS > COUNT_MASK) || (OBST_FAULT_LIMIT > COUNT_MASK)
+#error "OBST_CONFIRM_READINGS and OBST_FAULT_LIMIT must fit in 2 bits"
+#endif
+
 /* Written by the monitor and vehicle tasks, read by the vehicle and
    telemetry tasks: volatile (Rule 1.8.c).  Change Requirement 1: the front
    reading is one packed 32-bit word (class, distance, time) stored with a
    single write, so the vehicle reads it without a lock; its time gives the
    reading's age.  The last profile is packed to 16 bytes. */
-static volatile packed_front_t    g_front         = PACKED_FRONT_NONE;
-static volatile uint32_t          g_close_count   = 0u;
-static volatile uint32_t          g_fault_count   = 0u;
-static volatile bool              gb_monitor      = true;
-static volatile bool              gb_monitor_busy = false;
-static volatile packed_profile_t  g_last;
-static volatile uint32_t          g_scans = 0u;
-static volatile avoidance_point_t g_last_points[SCAN_MAX_POINTS];
-static volatile uint32_t          g_last_count = 0u;
+static volatile packed_front_t   g_front         = PACKED_FRONT_NONE;
+static volatile uint8_t          g_counts        = 0u; /* see COUNT_BITS */
+static volatile bool             gb_monitor      = true;
+static volatile bool             gb_monitor_busy = false;
+static volatile packed_profile_t g_last;
+static volatile uint8_t          g_scans = 0u; /* wraps: readers test != */
+/* Last scan points: angle 0..180 deg in 8 bits, distance 0..4000 mm in 16
+   bits (POINT_DIST_NONE = no echo); 3 B per point instead of 4. */
+static volatile uint8_t  g_last_angle[SCAN_MAX_POINTS];
+static volatile uint16_t g_last_dist[SCAN_MAX_POINTS];
+static volatile uint8_t  g_last_count = 0u;
 
 /* Stage 1 angles: both limits of the mount and straight ahead. */
 static int32_t const g_coarse_deg[COARSE_ANGLES] = {
@@ -143,7 +156,7 @@ obstacle_front_mm (void)
 bool
 obstacle_ahead (void)
 {
-    return (g_close_count >= OBST_CONFIRM_READINGS);
+    return ((g_counts & COUNT_MASK) >= OBST_CONFIRM_READINGS);
 }
 
 /*!
@@ -178,10 +191,9 @@ obstacle_monitor_enable (bool b_on)
     /* Start afresh: earlier readings must not confirm, fault or age the
        next ones.  The FAULT_NO_ECHO bit is left to the monitor, its only
        writer, which clears it at the next reading that is not a FAULT. */
-    g_front       = no_reading_yet();
-    g_close_count = 0u;
-    g_fault_count = 0u;
-    gb_monitor    = b_on;
+    g_front    = no_reading_yet();
+    g_counts   = 0u;
+    gb_monitor = b_on;
 }
 
 /*!
@@ -234,10 +246,16 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
 
         for (idx = 0u; idx < count; idx++)
         {
-            g_last_points[idx] = points[idx];
+            /* Casts: angles are 0..180 deg and echoes 0..US_MAX_MM, inside
+               8 and 16 bits; a negative distance means no echo. */
+            g_last_angle[idx] = (uint8_t) points[idx].angle_deg;
+            g_last_dist[idx]  = (points[idx].dist_mm < 0)
+                                    ? (uint16_t) POINT_DIST_NONE
+                                    : (uint16_t) points[idx].dist_mm;
         }
 
-        g_last_count = count;
+        /* Cast: count is at most SCAN_MAX_POINTS (40). */
+        g_last_count = (uint8_t) count;
         g_scans++;
         EI(imask);
 
@@ -305,7 +323,11 @@ obstacle_get_points (avoidance_point_t * p_points, uint32_t max_points)
 
     for (idx = 0u; idx < count; idx++)
     {
-        p_points[idx] = g_last_points[idx];
+        /* Casts: 0..180 and 0..US_MAX_MM fit int16_t. */
+        p_points[idx].angle_deg = (int16_t) g_last_angle[idx];
+        p_points[idx].dist_mm   = (POINT_DIST_NONE == g_last_dist[idx])
+                                      ? (int16_t) ULTRASONIC_NO_ECHO
+                                      : (int16_t) g_last_dist[idx];
     }
 
     EI(imask);
@@ -633,28 +655,32 @@ count_up (uint32_t count, uint32_t limit)
 static void
 monitor_update (ultrasonic_ping_t const * p_ping)
 {
-    bool b_valid = (ULTRASONIC_VALID == p_ping->result);
-    bool b_close = b_valid && (p_ping->dist_mm < OBST_DETECT_MM);
-    bool b_fault = (ULTRASONIC_FAULT == p_ping->result);
+    bool     b_valid = (ULTRASONIC_VALID == p_ping->result);
+    bool     b_close = b_valid && (p_ping->dist_mm < OBST_DETECT_MM);
+    bool     b_fault = (ULTRASONIC_FAULT == p_ping->result);
+    uint32_t counts  = g_counts;
+    uint32_t n_close = counts & COUNT_MASK;
+    uint32_t n_fault = (counts >> COUNT_BITS) & COUNT_MASK;
 
     if (ULTRASONIC_BUSY != p_ping->result)
     {
-        /* Any other reading restarts a count. */
-        g_close_count =
-            b_close ? count_up(g_close_count, OBST_CONFIRM_READINGS) : 0u;
-        g_fault_count =
-            b_fault ? count_up(g_fault_count, OBST_FAULT_LIMIT) : 0u;
+        /* Any other reading restarts a count.  Both counts are worked out
+           first and stored with one byte write. */
+        n_close  = b_close ? count_up(n_close, OBST_CONFIRM_READINGS) : 0u;
+        n_fault  = b_fault ? count_up(n_fault, OBST_FAULT_LIMIT) : 0u;
+        /* Cast: both counts are at most 3 (checked above). */
+        g_counts = (uint8_t) (n_close | (n_fault << COUNT_BITS));
         g_front = packed_front_make(
             p_ping->result, b_valid ? p_ping->dist_mm : ULTRASONIC_NO_ECHO,
             now_ms());
 
         /* Shared fault mask (fault.h): this task is the only writer of the
            no-echo bit. */
-        if (g_fault_count >= OBST_FAULT_LIMIT)
+        if (n_fault >= OBST_FAULT_LIMIT)
         {
             fault_raise(FAULT_NO_ECHO);
         }
-        else if (0u == g_fault_count)
+        else if (0u == n_fault)
         {
             fault_clear(FAULT_NO_ECHO);
         }
