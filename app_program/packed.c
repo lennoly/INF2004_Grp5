@@ -54,7 +54,9 @@ static char const * const g_reasons[] = {
     "fault: motor stall",
     "fault: encoder",
     "fault: IMU",
-    "fault: sonar no echo"};
+    "fault: sonar no echo",
+    "sonar stale",
+    "watchdog reset"};
 
 #define REASON_COUNT (sizeof(g_reasons) / sizeof(g_reasons[0]))
 

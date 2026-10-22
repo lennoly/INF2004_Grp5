@@ -99,7 +99,7 @@ the imu task.
 | `line_state` | 3 states | 2 | enum |
 | `pending_nav`, `last_nav` | 5 commands | 3 each | enum |
 | `last_action` | 5 actions | 3 | enum |
-| `reason` | 25 texts | 5 | index into the reason table (`packed.c`); unknown text = "other" |
+| `reason` | 27 texts | 5 | index into the reason table (`packed.c`); unknown text = "other" |
 | `state_seq` | wraps | 8 | readers only test for a change |
 | `barcodes`, `obstacles` | 0 … 255 (saturating) | 8 each | count |
 | `cruise` | 60 … 300 mm/s | 9 | 1 mm/s |

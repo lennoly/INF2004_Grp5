@@ -30,7 +30,8 @@ convention: one folder per student under `app_program/`, `TEAM.md`,
 | `testing/` | test cases and results per subsystem, integration and system (`testing/README.md`) |
 | `videos/` | index of unlisted YouTube videos of tests and demos |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 187/187 pass |
+| `tools/scan_plot.py` | plots `TEST_ULTRASONIC` scans against the real box and prints the error table (Buddy 5 evidence) |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 231/231 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
@@ -95,7 +96,9 @@ git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../d
 2. Hold BOOTSEL, plug USB, copy `template/build_make/*.uf2` (or one from
    `firmware/`). Open the USB serial port.
 3. Press **GP20 (START)** to run a test / the mission. **GP21 (STOP)**
-   stops; STOP while idle = 360° calibration spin (IR + magnetometer).
+   stops and never moves the car. In the mission build START acts on
+   release: a short press starts a run; held for 2 s while idle, it runs
+   the 360° calibration spin (IR + magnetometer), as `calibrate` does.
 
 ## Dashboard and live tuning (no reflashing)
 ```
