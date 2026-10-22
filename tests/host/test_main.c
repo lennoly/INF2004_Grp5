@@ -21,6 +21,7 @@
 #include "mqtt_lwip.h"
 #include "obstacle.h"
 #include "pid.h"
+#include "servo.h"
 #include "sim/vehicle_sim.h"
 #include "terrain.h"
 #include "vehicle.h"
@@ -187,6 +188,7 @@ static void             test_vehicle_obstacle(void);
 static void             test_vehicle_scan_stop(void);
 static void             test_vehicle_manoeuvre_stop(void);
 static void             test_vehicle_sonar_health(void);
+static void             test_servo_limits(void);
 static void             test_vehicle_barcode_watchdog(void);
 
 /*!
@@ -744,6 +746,11 @@ test_obstacle (void)
     check(nearly(prof.width_mm, BOX_WIDTH_MM, WIDTH_TOLERANCE),
           "width estimate");
     check(AVOID_TURN_LEFT == plan.action, "box right of centre: pass left");
+    check(nearly(plan.pass_mm,
+                 (float32_t) prof.closest_mm + OBST_DEPTH_MAX_MM
+                     + CAR_LENGTH_MM + OBST_MARGIN_MM,
+                 0.5f),
+          "bypass: pass = closest + deepest box + car length + margin");
 
     count = scan_box(points, 20.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 200.0f);
     (void) avoidance_profile(points, count, &prof);
@@ -1321,6 +1328,31 @@ vehicle_close_echo (void)
 }
 
 /*!
+ * @brief Servo: angles past the mount's limits are held at the limit, so
+ *        the servo never pushes the sensor against the car.
+ */
+static void
+test_servo_limits (void)
+{
+    uint32_t right_us = 0u;
+    uint32_t left_us  = 0u;
+
+    servo_set_angle(SERVO_MIN_DEG);
+    right_us = vehicle_sim_servo_us();
+    servo_set_angle(SERVO_MAX_DEG);
+    left_us = vehicle_sim_servo_us();
+    servo_set_angle(0);
+    check((SERVO_MIN_DEG == servo_get_angle())
+              && (right_us == vehicle_sim_servo_us()),
+          "servo: 0 deg is held at SERVO_MIN_DEG");
+    servo_set_angle(180);
+    check((SERVO_MAX_DEG == servo_get_angle())
+              && (left_us == vehicle_sim_servo_us()),
+          "servo: 180 deg is held at SERVO_MAX_DEG");
+    servo_set_angle(SERVO_CENTRE_DEG);
+}
+
+/*!
  * @brief Vehicle task: START and STOP buttons and the speed limit.
  */
 static void
@@ -1330,6 +1362,7 @@ test_vehicle_buttons (void)
     check((vehicle_is(VS_IDLE, "boot")) && (!vehicle_sim_watchdog_armed()),
           "vehicle: boots IDLE, watchdog off");
     check(CENTRE_US == vehicle_sim_servo_us(), "vehicle: sonar centred");
+    test_servo_limits();
 
     vehicle_sim_press(PIN_BTN_STOP, 50u, 200u);
     vehicle_sim_run(600u);
@@ -1402,16 +1435,19 @@ test_vehicle_obstacle (void)
     pings = vehicle_sim_pings();
     vehicle_sim_step();
     check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
-    /* (5 coarse + 9 fine looks) x 3 pings, then the bypass's side looks. */
-    check(((vehicle_sim_pings() - pings) >= 42u)
+    /* (3 coarse + 9 fine looks) x 3 pings; the pass needs no side looks. */
+    check(((vehicle_sim_pings() - pings) == 36u)
               && (1u == vehicle_sim_count("{[scan] pts=9 found=1")),
-          "vehicle: coarse then fine scan");
+          "vehicle: coarse then fine scan, inside the mount's limits");
     check((9u == obstacle_get_points(points, SCAN_MAX_POINTS))
               && (70 == points[0].angle_deg) && (200 == points[1].dist_mm),
           "vehicle: last scan points kept (70..110 deg fine scan)");
     check((2u == vehicle_sim_count("L90")) && (2u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: box-shaped bypass, line rejoined");
+    /* Pass: closest 200 + deepest 250 + car 200 + margin 60 mm. */
+    check(1u == vehicle_sim_count("fwd710;"),
+          "vehicle: pass leg = closest + depth + car length + margin");
     vehicle_sim_box(false);
 
     vehicle_sim_impact();
@@ -1518,17 +1554,19 @@ test_vehicle_manoeuvre_stop (void)
               && (0u == vehicle_sim_count("LINE_SEARCH")),
           "vehicle: STOP in a bypass reported once");
 
-    /* STOP during a side look while passing: no further move. */
+    /* Something ahead during the pass: stop beside the obstacle. */
     vehicle_start(DRIVE_MS);
     vehicle_close_echo();
     vehicle_sim_step();
     vehicle_sim_clear_log();
-    vehicle_sim_stop_on_side_look();
+    vehicle_sim_front_ambient(ULTRASONIC_VALID, NEAR_MM);
     vehicle_sim_step();
-    vehicle_sim_step();
-    check((0u == vehicle_sim_count("fwd50;"))
-              && (vehicle_is(VS_STOPPED, "stop command")),
-          "vehicle: STOP during a side look: no further move");
+    vehicle_sim_front_ambient(ULTRASONIC_OUT_OF_RANGE, ULTRASONIC_NO_ECHO);
+    check((1u == vehicle_sim_count("fwd710;"))
+              && (1u == vehicle_sim_count("L90")) && (1u == vehicle_sim_count("R90"))
+              && (vehicle_is(VS_STOPPED, "path blocked"))
+              && (0u == vehicle_sim_count("LINE_SEARCH")),
+          "vehicle: obstacle ahead on the pass: STOPPED (path blocked)");
     vehicle_sim_box(false);
 }
 

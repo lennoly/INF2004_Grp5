@@ -2,9 +2,12 @@
  *
  * @brief Buddy 5 - scanning task and coarse-to-fine scan (see obstacle.h).
  *
- * Stage 1 coarse : 30, 60, 90, 120 and 150 degrees (median of 3 each).
+ * Stage 1 coarse : SERVO_MIN_DEG, straight ahead and SERVO_MAX_DEG
+ *                  (median of 3 each).  The sensor mount only lets the
+ *                  sensor turn about 25 degrees each way, so the brief's
+ *                  example angles (30 .. 150) cannot be reached.
  * Stage 2 fine   : +-OBST_FINE_PAD_DEG around the detected region in
- *                  OBST_FINE_STEP_DEG steps.
+ *                  OBST_FINE_STEP_DEG steps, inside the same limits.
  * Stage 3 profile: avoidance_profile() on the fine points.
  *
  * The caller's stop callback is polled every SETTLE_STEP_MS while the servo
@@ -33,11 +36,9 @@
 #define TASK_PRIORITY     (9)
 #define TASK_STACK        (2048)
 #define MONITOR_PERIOD_MS (70u)
-#define COARSE_START      (30)
-#define COARSE_STEP       (30)
-#define COARSE_END        (150)
-#define FINE_MIN_DEG      (10)
-#define FINE_MAX_DEG      (170)
+#define COARSE_ANGLES     (3u)
+#define FINE_MIN_DEG      (SERVO_MIN_DEG)
+#define FINE_MAX_DEG      (SERVO_MAX_DEG)
 #define MEDIAN_SAMPLES    (3u)
 #define SWING_MS_PER_DEG  (3u)  /* about 0.18 s per 60 degrees */
 #define SETTLE_STEP_MS    (20u) /* stop checks while the servo settles */
@@ -58,6 +59,10 @@ static volatile packed_profile_t  g_last;
 static volatile uint32_t          g_scans = 0u;
 static volatile avoidance_point_t g_last_points[SCAN_MAX_POINTS];
 static volatile uint32_t          g_last_count = 0u;
+
+/* Stage 1 angles: both limits of the mount and straight ahead. */
+static int32_t const g_coarse_deg[COARSE_ANGLES] = {
+    SERVO_MIN_DEG, SERVO_CENTRE_DEG, SERVO_MAX_DEG};
 
 static uint32_t       now_ms(void);
 static packed_front_t no_reading_yet(void);
@@ -177,28 +182,6 @@ obstacle_monitor_enable (bool b_on)
     g_close_count = 0u;
     g_fault_count = 0u;
     gb_monitor    = b_on;
-}
-
-/*!
- * @brief Point the sensor and take the median of MEDIAN_SAMPLES pings,
- *        checking the stop callback while the servo settles and after each
- *        ping.
- *
- * @param[in] servo_deg     Servo angle, 0 (right) .. 180 (left).
- * @param[in] p_should_stop Stop callback, or NULL.  After a stop request
- *                          the look ends early; the caller checks its own
- *                          stop flag.
- *
- * @return Distance in mm, or ULTRASONIC_NO_ECHO.
- */
-int32_t
-obstacle_look_mm (int32_t servo_deg, obstacle_stop_cb_t p_should_stop)
-{
-    int32_t dist_mm = ULTRASONIC_NO_ECHO;
-
-    (void) look(servo_deg, p_should_stop, &dist_mm);
-
-    return (dist_mm);
 }
 
 /*!
@@ -538,7 +521,7 @@ keep_scanning (obstacle_stop_cb_t p_should_stop)
 }
 
 /*!
- * @brief Stage 1: coarse scan at five fixed angles.
+ * @brief Stage 1: coarse scan at the g_coarse_deg angles.
  *
  * @param[out] p_points      Scan points.
  * @param[out] p_count       Number of points taken.
@@ -553,16 +536,17 @@ static bool
 coarse_scan (avoidance_point_t * p_points, uint32_t * p_count, int32_t * p_low,
              int32_t * p_high, obstacle_stop_cb_t p_should_stop)
 {
-    int32_t angle   = 0;
-    int32_t dist_mm = ULTRASONIC_NO_ECHO;
-    bool    b_go    = true;
+    int32_t  angle   = 0;
+    int32_t  dist_mm = ULTRASONIC_NO_ECHO;
+    uint32_t idx     = 0u;
+    bool     b_go    = true;
 
     *p_count = 0u;
 
-    for (angle = COARSE_START; b_go && (angle <= COARSE_END);
-         angle += COARSE_STEP)
+    for (idx = 0u; b_go && (idx < COARSE_ANGLES); idx++)
     {
-        b_go = look(angle, p_should_stop, &dist_mm);
+        angle = g_coarse_deg[idx];
+        b_go  = look(angle, p_should_stop, &dist_mm);
 
         if (b_go)
         {
