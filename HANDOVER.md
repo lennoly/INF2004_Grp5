@@ -10,7 +10,7 @@ per-buddy tasks, assessment criteria).
 ## 1. Where we stand in one paragraph
 
 The **code** for all 10 mission requirements exists on `main`, builds with
-0 warnings (MISSION and every TEST mode), and passes **191/191 host tests**.
+0 warnings (MISSION and every TEST mode), and passes **233/233 host tests** (235 with `OBST_ON_IMPACT` 1).
 Change Requirement 1 (minimum-bit data, binary MQTT, fault mask) is merged.
 What is missing is almost entirely **evidence from the real car**: every
 Results table in `testing/` is empty, every `___` in `docs/REPORT.md` is
@@ -74,14 +74,14 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] IMU `ok` drops to 0 when the car moves: check the Grove 3 wires
 
 **Buddy 5: ultrasonic, servo, avoidance**
-- [ ] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1)
-- [ ] Calibrate the servo; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
+- [x] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1): merged 22 Oct, with the narrow scan (the mount lets the sensor turn only about ±25°)
+- [ ] Calibrate the servo (confirm `SERVO_MIN_DEG`/`SERVO_MAX_DEG` by eye); set `OBST_DEPTH_MAX_MM` to the deepest course obstacle; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
 - [ ] INT-10 fault injection with the other buddies (FAULT_PATHS.md)
 - [ ] The sonar sees part of the car at ~60–65° (66–83 mm) during scans: move the sensor or the part in its way
 - [ ] `avoidance_profile()` leaves angle/edges/clearances uninitialised when nothing is found (scans print `cl=70647`): zero `*p_out` at the top
 
 **Everyone / integration owner**
-- [ ] SMP guard (§4.7); the 138 BARR findings in `tests/host/test_data.c` and `fault_stub.c` (§4.8)
+- [ ] The 138 BARR findings in `tests/host/test_data.c` and `fault_stub.c` (§4.8). (SMP guard, §4.7: done in `app_main.c` by the Raees merge.)
 - [ ] INT-01, INT-06, INT-11, then SYS-01..05 on the full course, with videos (§8)
 - [ ] Fill in TEAM.md IDs, the REPORT author line and blanks, and regenerate `wiring.png` (§7)
 
@@ -95,7 +95,7 @@ whoever owns `vehicle.c`, together with the buddy named.
 | 4 | Detect humps | `imu.c`, `terrain.c` (LSM303D) | IMU reads correctly **at rest only** (before CR1) | S4-U02, SYS-03 |
 | 5 | Report highest hump peak | `terrain.c` `max_peak_mm` → telemetry | not tested | S4-U03, SYS-03 |
 | 6 | Detect obstacles on/near line | `obstacle.c` front monitor | one A9 screenshot only | S5-U04, SYS-04 |
-| 7 | Profile shape/position (ultrasonic) | coarse 30–150° + fine scan, `avoidance_profile()` | not tested | S5-U02 |
+| 7 | Profile shape/position (ultrasonic) | coarse 65/90/115° + fine scan (the mount limits the servo to about ±25°), `avoidance_profile()` | not tested | S5-U02 |
 | 8 | Bypass without collision | `avoidance.c` + `vehicle.c` | not tested | S5-U03, SYS-04 |
 | 9 | Reacquire the line | `vehicle.c` line search | not tested | S5-U03, SYS-04 |
 | 10 | Telemetry over WiFi | `subsystem1/` binary frames + `tools/dashboard` | no WiFi result recorded; **binary frames not run on the car yet** | S1-U03..U06, INT-08, SYS-05 |
@@ -117,14 +117,14 @@ Behaviour the brief also asks for, with no test written yet:
 
 | Branch | What it has | State |
 |---|---|---|
-| `origin/Raees` (Buddy 5) | STOP latch on a GP21 edge interrupt; scans check STOP every 20 ms; sonar stale stop (300 ms); ECHO-stuck-high = FAULT; 250 ms watchdog; vehicle and obstacle host tests | 16 commits ahead. **Conflicts** with `main` in `README.md`, `obstacle.c`, `vehicle.c`, `REPORT.md`, `tests/host`, every `firmware/*.uf2` |
+| `origin/Raees` (Buddy 5) | STOP latch on a GP21 edge interrupt; scans check STOP every 20 ms; sonar stale stop (300 ms); ECHO-stuck-high = FAULT; 250 ms watchdog; vehicle and obstacle host tests | **Merged** into `main` on 22 Oct (main was merged into the branch first and the conflicts resolved there; host tests 231/231, all modes rebuilt) |
 | `origin/max` (Buddy 3) | subsystem 3 rework, standalone host tests in `testing/subsystem3/`, `SUBSYSTEM3_REVIEW.md` | 2 commits ahead. **Conflicts** in `barcode.c`, `barcode.h`, `ir_sensor.c`, `subsystem3_test.c` (CR1 changed the same files). Also commits about 95k lines of PDFs into `max/` (datasheets, tribunal docs): move those out of git |
 
 Merge order suggestion: Raees first (safety), then max. Re-run
 `make -C tests/host`, build all modes, then rebuild `firmware/`. Do not
 hand-pick the `.uf2` conflicts: rebuild them after the merge.
 
-`docs/FAULT_PATHS.md` already marks the Raees items as "Raees branch, not merged".
+`docs/FAULT_PATHS.md` now shows the Raees items as merged.
 
 ## 4. Verified gaps in the code on `main`
 
@@ -136,7 +136,7 @@ run on the car.
 ### 4.1 Safety (A14 / FR14). Owner: Buddy 5 with Buddy 2, integration
 - **STOP is not seen during an obstacle scan** (up to 12 s), the
   **watchdog is missing**, and **sonar stale** is missing: all three are
-  fixed on `Raees` and only need merging (section 3).
+  fixed by the Raees merge (22 Oct, section 3).
 - **Velocity request older than 100 ms → brake** (FR14): **implemented
   (uncommitted)**. `motion.c` brakes a velocity command that is not
   refreshed for `MOTION_VELOCITY_TIMEOUT_MS` (100 ms). The vehicle task
@@ -181,8 +181,8 @@ reproduced on the car; covered by S4-U06.
 
 ### 4.7 No guard against an SMP build. Owner: integration
 All shared snapshots rely on DI/EI, which is atomic only because the build
-is single-core (`CNF_SMP=0`; SMP only if built with `SMP=1`). Nothing in
-`app_program/` checks it. Add `#if CNF_SMP` `#error` in one shared file.
+is single-core (`CNF_SMP=0`; SMP only if built with `SMP=1`). Done: since
+the Raees merge, `app_main.c` stops an SMP build with `#error`.
 
 ### 4.8 BARR-C checker is not at 0
 `python3 tools/barr_check.py app_program/*.[ch] app_program/subsystem*/*.[ch] tests/host/*.[ch]`
@@ -218,7 +218,7 @@ already measure everything. Put the result in `car_config.h` and reflash:
 | speed PID / feed-forward | TEST_MOTOR, then `ff=` and `pid=` live, START repeats the steps | copy the final `gains` |
 | `IR_DEFAULT_WHITE/BLACK`, `line=` | TEST_IR (S3-U02); `line=` live in MISSION | read directly |
 | `IMU_FORWARD_SIGN` | TEST_IMU, lift the front: pitch must go positive | flip to `-1.0f` if negative |
-| magnetometer offsets | MISSION, STOP while idle = 360° spin | automatic, RAM only: repeat after every boot |
+| magnetometer offsets | MISSION, START held 2 s (or `calibrate`) = 360° spin | automatic, RAM only: repeat after every boot |
 | `SERVO_MIN_US` | TEST_ULTRASONIC (Buddy 5) | no live command: edit and reflash until 0° points right |
 
 Do the wheel diameter before the track width, because the turn uses the diameter too.
@@ -264,7 +264,7 @@ Hardware findings:
 - **Possible power dip:** the car restarted once during an obstacle manoeuvre (gains back to
   defaults) — watch the battery.
 
-Code changes (all build with 0 warnings, 191/191 host tests, BARR 0):
+Code changes (all build with 0 warnings, host tests pass, BARR 0):
 - **WiFi on battery** (Buddy 1): WiFi builds use `CONSOLE=uart` — with the USB console the
   board only joined while a computer was on the port. `mqtt_lwip.c`: re-join when joined but
   no IP for 15 s (DHCP restart), failed joins retried every 5 s, WiFi chip power-cycled after
@@ -291,6 +291,12 @@ Code changes (all build with 0 warnings, 191/191 host tests, BARR 0):
   `logs/<date_time>/` CSVs. matplotlib and the old window / `--headless` modes are gone.
 - **`tools/dashboard/encoder_cal.py`:** counts ticks while you turn a wheel by hand and
   prints `ENCODER_SLOTS` and the glitch-filter check.
+
+**Merge with origin/main (Raees merged, 23 Oct):** conflicts resolved keeping Kent's values
+(`CENTRED_ERROR` 0.2, align mode, `OBST_ON_IMPACT`) plus Raees's new `OBST_CONFIRM_READINGS`,
+`OBST_FAULT_LIMIT`, `OBST_STALE_MS` and `CALIB_HOLD_MS`. The obstacle trigger keeps his hump
+and two-reading checks and adds the `OBST_ON_IMPACT` switch. His vehicle-simulation impact
+tests follow `OBST_ON_IMPACT` (0: impact ignored; 1: his original checks, 235/235).
 
 Still to do on the car: line following on curves, then raise speed only if still reliable;
 tape-check forward 500 and re-check turns at 200 mm/s; barcode sensor wiring and barcode runs;
@@ -358,7 +364,7 @@ Tests still to add, because the brief asks for these and nothing checks them:
 
 ```
 sh setup.sh                                   # after every pull that touches the template patch
-make -C tests/host                            # host tests: expect 191 passed, 0 failed
+make -C tests/host                            # host tests: expect 233 passed, 0 failed
 gmake -C template/build_make -j8 APP_MODE=TEST_IMU CONSOLE=usb_cdc   # make on WSL
 python3 tools/barr_check.py app_program/*.[ch] app_program/subsystem*/*.[ch] tests/host/*.[ch]
 screen /dev/cu.usbmodemMTK3PICO1 115200       # macOS console; Windows: PuTTY on the COM port

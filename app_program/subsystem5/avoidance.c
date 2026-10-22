@@ -81,12 +81,13 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
  * @param[in] p_prof   Obstacle profile from avoidance_profile().
  * @param[in] attempts Avoidance attempts already made at this obstacle.
  *
- * @return Action and, for a bypass, the sideways shift needed.
+ * @return Action and, for a bypass, the sideways shift needed and the
+ *         distance to drive beside the obstacle.
  */
 avoidance_plan_t
 avoidance_plan (avoidance_profile_t const * p_prof, uint32_t attempts)
 {
-    avoidance_plan_t plan      = {AVOID_CONTINUE, 0.0f};
+    avoidance_plan_t plan      = {AVOID_CONTINUE, 0.0f, 0.0f};
     bool             b_in_path = false;
 
     b_in_path = (p_prof->b_found) && (p_prof->left_edge_mm <= CORRIDOR_HALF_MM)
@@ -305,25 +306,32 @@ measure_clearance (avoidance_point_t const * p_points, uint32_t count,
 
 /*!
  * @brief Pick the feasible side needing the smaller sideways shift (the
- *        minimum deviation from the original route).
+ *        minimum deviation from the original route).  The sensor mount
+ *        allows only SERVO_MIN_DEG..SERVO_MAX_DEG, too little to watch the
+ *        obstacle go by, so its depth is unknown: the car passes the
+ *        closest echo plus the deepest expected obstacle, its own length
+ *        and the margin.
  *
  * @param[in] p_prof   Obstacle profile (obstacle in the car's path).
  * @param[in] attempts Avoidance attempts already made at this obstacle.
  *
- * @return Action and sideways shift.
+ * @return Action, sideways shift and pass distance.
  */
 static avoidance_plan_t
 choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
 {
-    avoidance_plan_t plan       = {AVOID_CONTINUE, 0.0f};
+    avoidance_plan_t plan       = {AVOID_CONTINUE, 0.0f, 0.0f};
     float32_t        need       = CAR_WIDTH_MM + OBST_MARGIN_MM;
     float32_t        off_left   = -p_prof->left_edge_mm + CORRIDOR_HALF_MM;
     float32_t        off_right  = p_prof->right_edge_mm + CORRIDOR_HALF_MM;
+    float32_t        pass       = 0.0f;
     bool             b_left_ok  = false;
     bool             b_right_ok = false;
 
-    /* Casts: clearances are at most OBST_MAX_CLEARANCE_MM, so they convert
-       exactly to float32_t. */
+    /* Casts: clearances are at most OBST_MAX_CLEARANCE_MM and the closest
+       echo at most US_MAX_MM, so they convert exactly to float32_t. */
+    pass = (float32_t) p_prof->closest_mm + OBST_DEPTH_MAX_MM + CAR_LENGTH_MM
+           + OBST_MARGIN_MM;
     b_left_ok = (car_math_is_finite(off_left))
                 && ((float32_t) p_prof->clear_left_mm >= need);
     b_right_ok = (car_math_is_finite(off_right))
@@ -333,11 +341,13 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     {
         plan.action    = AVOID_TURN_LEFT;
         plan.offset_mm = off_left;
+        plan.pass_mm   = pass;
     }
     else if (b_right_ok)
     {
         plan.action    = AVOID_TURN_RIGHT;
         plan.offset_mm = off_right;
+        plan.pass_mm   = pass;
     }
     else
     {
