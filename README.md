@@ -31,7 +31,7 @@ convention: one folder per student under `app_program/`, `TEAM.md`,
 | `videos/` | index of unlisted YouTube videos of tests and demos |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
 | `tools/scan_plot.py` | plots `TEST_ULTRASONIC` scans against the real box and prints the error table (Buddy 5 evidence) |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 227/227 pass |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 231/231 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |

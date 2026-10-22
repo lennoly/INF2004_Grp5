@@ -44,7 +44,6 @@ static hal_irq_gpio_cb_t    gs_stop_isr;
 static bool                 gs_b_cmd_pending;
 static uint32_t             gs_cmd_at;
 static bool                 gs_b_stop_on_turn;
-static bool                 gs_b_stop_on_side;
 static char                 gs_log[SIM_LOG_SIZE];
 static uint32_t             gs_pings;
 static bool                 gs_b_box;
@@ -440,15 +439,9 @@ void ultrasonic_ping(ultrasonic_ping_t * p_out)
     }
     else
     {
-        /* A scan or side look in the vehicle task: the box, if any. */
+        /* A scan in the vehicle task: the box, if any. */
         gs_pings++;
         sim_log("u%d;", (int) servo_get_angle());
-        if (gs_b_stop_on_side && ((OBST_SIDE_SERVO_DEG == servo_get_angle())
-                                  || ((180 - OBST_SIDE_SERVO_DEG) == servo_get_angle())))
-        {
-            gs_b_stop_on_side = false;
-            vehicle_sim_press(PIN_BTN_STOP, 1u, SIM_STOP_HOLD);
-        }
         sim_advance(SIM_PING_MS);
         p_out->dist_mm = sim_distance(servo_get_angle());
         p_out->result  = (ULTRASONIC_NO_ECHO == p_out->dist_mm) ? ULTRASONIC_OUT_OF_RANGE : ULTRASONIC_VALID;
@@ -518,11 +511,6 @@ void vehicle_sim_stop_command_at(uint32_t after_ms)
 void vehicle_sim_stop_on_next_turn(void)
 {
     gs_b_stop_on_turn = true;
-}
-
-void vehicle_sim_stop_on_side_look(void)
-{
-    gs_b_stop_on_side = true;
 }
 
 static void sim_monitor_once(void)

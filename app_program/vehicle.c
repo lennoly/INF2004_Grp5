@@ -39,35 +39,32 @@
 #include "packed.h"
 #include "vehicle.h"
 
-#define TASK_PRIORITY      (6)
-#define TASK_STACK         (3072)
-#define LOOP_MS            (20u)
-#define MS_PER_S           (1000.0f)
-#define MOVE_TIMEOUT_MS    (10000u)
-#define MBF_MSGS           (4u)
-#define LINE_GAINS         (3u)
-#define REACQ_SPEED        (90.0f)
-#define LINE_SEEN_LEVEL    (0.5f)
-#define CENTRED_ERROR      (0.35f)
-#define CENTRED_SUM        (0.6f)
-#define QUARTER_TURN       (90.0f)
-#define HALF_TURN          (180.0f)
-#define FULL_TURN          (360.0f)
-#define SERVO_FULL_DEG     (180)
-#define REVERSE_MM         (120.0f)
-#define PASS_STEP_MM       (50.0f)
-#define SIDE_SEEN_EXTRA_MM (150.0f)
-#define SEEK_EXTRA_MM      (200.0f)
-#define FRONT_IGNORE_MM    (150.0f)
-#define STRAIGHT_EXTRA_MM  (20.0f)
-#define SPEED_MIN_CMD      (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
-#define SPEED_MAX_CMD      (SPEED_CMD_MAX_MM_S)
-#define STOP_SETTLE_MS     (200u)
-#define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
-#define REACQ_SWEEPS       (5u)
-#define REACQ_BASE_MS      (350u)
-#define SIDE_LEFT          (1.0f)
-#define SIDE_RIGHT         (-1.0f)
+#define TASK_PRIORITY     (6)
+#define TASK_STACK        (3072)
+#define LOOP_MS           (20u)
+#define MS_PER_S          (1000.0f)
+#define MOVE_TIMEOUT_MS   (10000u)
+#define MBF_MSGS          (4u)
+#define LINE_GAINS        (3u)
+#define REACQ_SPEED       (90.0f)
+#define LINE_SEEN_LEVEL   (0.5f)
+#define CENTRED_ERROR     (0.35f)
+#define CENTRED_SUM       (0.6f)
+#define QUARTER_TURN      (90.0f)
+#define HALF_TURN         (180.0f)
+#define FULL_TURN         (360.0f)
+#define REVERSE_MM        (120.0f)
+#define SEEK_EXTRA_MM     (200.0f)
+#define FRONT_IGNORE_MM   (150.0f)
+#define STRAIGHT_EXTRA_MM (20.0f)
+#define SPEED_MIN_CMD     (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
+#define SPEED_MAX_CMD     (SPEED_CMD_MAX_MM_S)
+#define STOP_SETTLE_MS    (200u)
+#define CALIB_HOLD_MS     (2000u) /* START held => calibrate */
+#define REACQ_SWEEPS      (5u)
+#define REACQ_BASE_MS     (350u)
+#define SIDE_LEFT         (1.0f)
+#define SIDE_RIGHT        (-1.0f)
 
 /* Cast: the loop period is a small number of milliseconds, which
    float32_t holds exactly. */
@@ -129,6 +126,7 @@ static bool          gb_btn_start_prev    = false;
 static bool          gb_btn_stop_prev     = false;
 static bool          gb_start_armed       = false;
 static bool          gb_after_impact      = false;
+static bool          gb_path_blocked      = false; /* front watch hit */
 
 /* Names indexed by vehicle_state_t. */
 static char const * const g_state_names[] = {
@@ -147,14 +145,14 @@ static void            wait_polled(uint32_t wait_ms);
 static void            check_faults(void);
 static void            publish_status(void);
 static uint32_t        gain_field(float32_t gain);
-static bool            run_move(void);
+static bool            run_move(bool b_watch_front);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
 static bool            line_centred(ir_sensor_snapshot_t const * p_ir);
 static search_result_t reacquire_poll(void);
 static bool            reacquire_line(float32_t side);
 static void            execute_nav(barcode_decode_nav_t cmd);
-static bool            pass_obstacle(float32_t side, float32_t offset);
+static bool            pass_obstacle(float32_t pass_mm);
 static bool            seek_line(float32_t max_mm);
 static bool            bypass(avoidance_plan_t const * p_plan);
 static void            act_on_scan(avoidance_profile_t const * p_prof);
@@ -657,15 +655,20 @@ wait_polled (uint32_t wait_ms)
 /*!
  * @brief Wait for the issued motion move; abortable by STOP.
  *
+ * @param[in] b_watch_front true to also end the move when the front monitor
+ *                          confirms an obstacle ahead (gb_path_blocked).
+ *
  * @return true if the move completed normally.
  */
 static bool
-run_move (void)
+run_move (bool b_watch_front)
 {
     uint32_t waited    = 0u;
     int32_t  result    = MOTION_WAIT_BUSY;
     bool     b_ok      = false;
     bool     b_waiting = true;
+
+    gb_path_blocked = false;
 
     while (b_waiting)
     {
@@ -680,8 +683,9 @@ run_move (void)
         {
             poll_inputs();
             waited += LOOP_MS;
+            gb_path_blocked = b_watch_front && (obstacle_ahead());
 
-            if (gb_abort || (waited > MOVE_TIMEOUT_MS))
+            if (gb_abort || gb_path_blocked || (waited > MOVE_TIMEOUT_MS))
             {
                 motion_stop();
                 b_waiting = false;
@@ -712,7 +716,7 @@ turn_side (float32_t side, float32_t angle_deg)
         motion_turn_right(angle_deg);
     }
 
-    return (run_move());
+    return (run_move(false));
 }
 
 /*!
@@ -728,7 +732,7 @@ forward (float32_t dist_mm, float32_t speed)
 {
     motion_move_forward(dist_mm, speed);
 
-    return (run_move());
+    return (run_move(false));
 }
 
 /*!
@@ -883,57 +887,24 @@ execute_nav (barcode_decode_nav_t cmd)
 }
 
 /*!
- * @brief Drive alongside the obstacle until the side-looking sensor sees
- *        past its far end, then clear the car's tail.
+ * @brief Drive alongside the obstacle for the planned distance (the sensor
+ *        cannot turn far enough to watch it go by; see avoidance_plan()).
+ *        The centred front sensor watches the way ahead: an obstacle there
+ *        ends the move (gb_path_blocked).
  *
- * @param[in] side   Bypass side, SIDE_LEFT or SIDE_RIGHT.
- * @param[in] offset Sideways offset of the car from the obstacle's edge.
+ * @param[in] pass_mm Distance to drive.
  *
- * @return true if every move completed normally.
+ * @return true if the car is past the obstacle.
  */
 static bool
-pass_obstacle (float32_t side, float32_t offset)
+pass_obstacle (float32_t pass_mm)
 {
-    int32_t   look    = (side > 0.0f) ? OBST_SIDE_SERVO_DEG
-                                      : (SERVO_FULL_DEG - OBST_SIDE_SERVO_DEG);
-    float32_t travel  = 0.0f;
-    int32_t   dist_mm = ULTRASONIC_NO_ECHO;
-    bool      b_ok    = true;
-    bool      b_near  = false;
-    bool      b_seen  = false;
-    bool      b_past  = false;
+    bool b_ok = false;
 
-    while (b_ok && (!b_past) && (travel < OBST_PASS_MAX_MM))
-    {
-        dist_mm = obstacle_look_mm(look, stop_requested);
-
-        /* Cast: distances are at most US_MAX_MM, exact in float32_t. */
-        b_near = (ULTRASONIC_NO_ECHO != dist_mm)
-                 && ((float32_t) dist_mm < (offset + SIDE_SEEN_EXTRA_MM));
-        b_past = b_seen && (!b_near);
-        b_seen = b_seen || b_near;
-
-        if (gb_abort)
-        {
-            b_ok = false;
-        }
-        else if (!b_past)
-        {
-            b_ok = forward(PASS_STEP_MM, SPEED_SLOW_MM_S);
-            travel += PASS_STEP_MM;
-        }
-        else
-        {
-            /* Past the obstacle: leave the loop. */
-        }
-    }
-
-    servo_set_angle(SERVO_CENTRE_DEG);
-
-    if (b_ok)
-    {
-        b_ok = forward(CAR_LENGTH_MM, SPEED_SLOW_MM_S);
-    }
+    obstacle_monitor_enable(true);
+    motion_move_forward(pass_mm, SPEED_SLOW_MM_S);
+    b_ok = run_move(true);
+    obstacle_monitor_enable(false);
 
     return (b_ok);
 }
@@ -987,8 +958,8 @@ seek_line (float32_t max_mm)
 
 /*!
  * @brief Box-shaped bypass that keeps the deviation to the planned
- *        offset: sidestep, pass (side-looking sonar), return, rejoin the
- *        line.
+ *        offset: sidestep, pass (a fixed distance, front sensor watching),
+ *        return, rejoin the line.
  *
  * @param[in] p_plan Plan with AVOID_TURN_LEFT or AVOID_TURN_RIGHT.
  *
@@ -1005,7 +976,7 @@ bypass (avoidance_plan_t const * p_plan)
     b_ok = (turn_side(side, QUARTER_TURN))
            && (forward(p_plan->offset_mm, SPEED_SLOW_MM_S))
            && (turn_side(-side, QUARTER_TURN))
-           && (pass_obstacle(side, p_plan->offset_mm))
+           && (pass_obstacle(p_plan->pass_mm))
            && (turn_side(-side, QUARTER_TURN))
            && (seek_line(p_plan->offset_mm + SEEK_EXTRA_MM))
            && (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
@@ -1049,7 +1020,7 @@ act_on_scan (avoidance_profile_t const * p_prof)
             /* Back off; the state stays OBSTACLE, so it re-scans. */
             g_attempts++;
             motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
-            (void) run_move();
+            (void) run_move(false);
         break;
 
         case AVOID_TURN_LEFT:
@@ -1062,13 +1033,18 @@ act_on_scan (avoidance_profile_t const * p_prof)
                 g_st.obstacles_passed++;
                 set_state(VS_LINE_FOLLOW, "obstacle bypassed");
             }
-            else if (!gb_abort)
+            else if (gb_abort)
             {
-                set_state(VS_LINE_SEARCH, "bypass: line not found");
+                /* Stopped: handle_requests() sets the state next loop. */
+            }
+            else if (gb_path_blocked)
+            {
+                /* Something ahead on the pass: stay off it. */
+                set_state(VS_STOPPED, "path blocked");
             }
             else
             {
-                /* Stopped: handle_requests() sets the state next loop. */
+                set_state(VS_LINE_SEARCH, "bypass: line not found");
             }
         break;
 
@@ -1100,7 +1076,7 @@ handle_obstacle (void)
     {
         gb_after_impact = false;
         motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
-        (void) run_move();
+        (void) run_move(false);
     }
 
     if (!gb_abort)
@@ -1308,7 +1284,7 @@ calibrate (void)
     ir_sensor_calib_begin();
     imu_mag_calib_begin();
     motion_turn_left(FULL_TURN);
-    (void) run_move();
+    (void) run_move(false);
     b_ok = ir_sensor_calib_end();
     imu_mag_calib_end();
     set_state(VS_IDLE, b_ok ? "calibrated" : "IR contrast too low");
