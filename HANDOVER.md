@@ -27,14 +27,14 @@ whoever owns `vehicle.c`, together with the buddy named.
 **Buddy 1: WiFi, MQTT, telemetry**
 - [ ] Run S1-U02..U09 on the current `main` (binary frames, not JSON) and record the results (§2, §6)
 - [ ] INT-08: barcode reaches the dashboard as a binary frame; INT-02: MQTT `stop` brakes within 100 ms (§2)
-- [ ] With Buddy 4: the highest hump peak is **reported** over WiFi at the end of the run (Req 5, §6)
+- [x] Highest hump peak over WiFi: **no code needed**. The run maximum is already in every telemetry frame (`max`, 0.1 mm) and every hump event frame, and the dashboard shows "MAX". It only needs proving in SYS-03 (§6)
 - [ ] Measure the message sizes on the wire for the CR1 Week 13 table (§7)
 
 **Buddy 2: motors, encoders, motion**
 - [ ] Calibrate wheel diameter, track width, slots, top speed, speed PID; fill in the REPORT PID and accuracy tables (§5)
-- [ ] Run S2-U02..U05; INT-07 (packed encoder data under load) (§2, §6)
-- [ ] With integration: 100 ms velocity-expiry brake (FR14), still not coded (§4.1)
-- [ ] Clear the BARR findings in `subsystem2_test.c` and `hal.c` from the TEST_WHEELS commit (§4.8)
+- [ ] Run S2-U02..U06; INT-07 (packed encoder data under load) (§2, §6)
+- [x] 100 ms velocity-expiry brake (FR14): done, uncommitted (§4.1). Run the new S2-U06 on the car
+- [x] Clear the BARR findings in `subsystem2_test.c` and `hal.c` from the TEST_WHEELS commit: done, firmware BARR now 0 (§4.8)
 
 **Buddy 3: IR, line following, barcode**
 - [ ] Merge `origin/max` into `main` (resolve the CR1 conflicts) and move the PDFs out of git (§3)
@@ -43,9 +43,10 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] Calibrate IR on the real track; run S3-U02, U03 and the new lighting/speed robustness test (§5, §6)
 
 **Buddy 4: IMU, terrain, humps**
-- [ ] Decide on the hump estimator (6° `ds·sin` vs front-contact 10 mm); update REPORT §4.4 (§4.5)
-- [ ] Add the timeout to the I2C FIFO wait at `hal.c:482` (§4.6)
-- [ ] Run S4-U02, U03 and the new U04 (events) and U05 (impact); save the logs (§6, §7)
+- [ ] Decide on the hump estimator (6° `ds·sin` vs front-contact 10 mm). This is a team decision, not code; REPORT §4.4 already matches the code (§4.5)
+- [x] Add the timeout to the I2C FIFO wait in `hal_i2c_read()`: done, uncommitted (§4.6)
+- [x] IMU recovers after a re-plug or a boot failure: done, uncommitted (§4.9)
+- [ ] Run S4-U02..U06 (U04 events, U05 impact, U06 unplug are newly defined); save the logs (§6, §7)
 - [ ] Pitch sign, magnetometer spin calibration, hump heights vs ruler (§5)
 
 **Buddy 5: ultrasonic, servo, avoidance**
@@ -81,8 +82,8 @@ Behaviour the brief also asks for, with no test written yet:
   sideways offset, REPORT §4.5) but not measured. Add the measured lateral
   deviation to S5-U03.
 - **Buddy 4 motion events** (stationary, accelerating, turning, climbing,
-  descending, sudden impact) and **collision detection** → S4 has no test
-  for events or impacts. Add tests S4-U04 and S4-U05 (section 6).
+  descending, sudden impact) and **collision detection** → now defined as
+  S4-U04 and S4-U05 (section 6), not yet run.
 - **Buddy 1 connection recovery and heartbeat** → tests exist (S1-U04, U05),
   never run.
 
@@ -101,14 +102,22 @@ hand-pick the `.uf2` conflicts: rebuild them after the merge.
 
 ## 4. Verified gaps in the code on `main`
 
-Each was checked in the source on `9213b98`.
+Each was checked in the source on `9213b98`. Items marked **Fixed
+(uncommitted)** are changed in the working tree and not yet on `main`. They
+build with 0 warnings in all 9 modes and pass 187/187 host tests. None has
+run on the car.
 
 ### 4.1 Safety (A14 / FR14). Owner: Buddy 5 with Buddy 2, integration
 - **STOP is not seen during an obstacle scan** (up to 12 s), the
   **watchdog is missing**, and **sonar stale** is missing: all three are
   fixed on `Raees` and only need merging (section 3).
-- **Velocity request older than 100 ms → brake** (FR14) is still only
-  *designed* (`FAULT_PATHS.md`). No code on any branch.
+- **Velocity request older than 100 ms → brake** (FR14): **implemented
+  (uncommitted)**. `motion.c` brakes a velocity command that is not
+  refreshed for `MOTION_VELOCITY_TIMEOUT_MS` (100 ms). The vehicle task
+  refreshes it with `motion_keep_alive()` from `poll_inputs()`, every 20 ms,
+  in line following, line search and line seek. A keep-alive cannot restart
+  an expired command: only a new `motion_set_velocity()` can. The TEST_MOTOR
+  step test refreshes it too. Not run on the car yet: S2-U06.
 
 ### 4.2 Barcode command after 400 mm without a junction. Owner: integration + Buddy 3
 `vehicle.c` `nav_due()`: when no junction is seen within
@@ -137,11 +146,12 @@ design and the tribunal notes describe a **front-contact estimator with a
 peak measurement" needs real humps: S4-U03, ±5 mm (NFR6). If it fails,
 report NFR6 as unmet; don't hide it.
 
-### 4.6 I2C can hang the IMU task. Owner: Buddy 4
-`hal.c:482`, `while (gp_i2c->txflr >= I2C_TX_FIFO_DEPTH) {}` has **no
-timeout** (only the receive wait has one). A jammed bus would spin the IMU
-task at priority 8 and starve obstacle (9) and telemetry (10). Add the same
-2 ms timeout the receive loop uses.
+### 4.6 I2C can hang the IMU task. Owner: Buddy 4. **Fixed (uncommitted)**
+`hal_i2c_read()` waited for command-FIFO space with **no timeout** (only
+the receive wait had one). A jammed bus would have spun the IMU task at
+priority 8 and starved obstacle (9) and telemetry (10). The wait now uses
+the same `HAL_I2C_TIMEOUT_US` (2 ms) and reports a failed read. Not
+reproduced on the car; covered by S4-U06.
 
 ### 4.7 No guard against an SMP build. Owner: integration
 All shared snapshots rely on DI/EI, which is atomic only because the build
@@ -150,18 +160,42 @@ is single-core (`CNF_SMP=0`; SMP only if built with `SMP=1`). Nothing in
 
 ### 4.8 BARR-C checker is not at 0
 `python3 tools/barr_check.py app_program/*.[ch] app_program/subsystem*/*.[ch] tests/host/*.[ch]`
-gives **TOTAL 149**:
-- 11 in firmware, from the TEST_WHEELS commit: `hal.c:261` line > 80
-  characters, `hal.c:269` magic number `1000u`, `subsystem2_test.c`
-  booleans without a `b_` prefix and a public function after a private
-  one.
-- 138 in `tests/host/test_data.c` and `fault_stub.c`, from the CR1 commit.
+gave **TOTAL 149** on `9213b98`:
+- 11 in firmware, from the TEST_WHEELS commit. **Fixed (uncommitted)**:
+  firmware is now TOTAL 0.
+- 138 in `tests/host/test_data.c` and `fault_stub.c`, from the CR1 commit:
+  **still open** (owner: whoever wrote CR1 / integration).
+
+### 4.9 IMU never recovers after a re-plug or a failed boot. Owner: Buddy 4. **Fixed (uncommitted)**
+Found while defining S4-U06. The LSM303D powers up in power-down mode, so
+after a re-plug its reads were acknowledged but stayed at zero, and `ok`
+went back to 1 with dead data. A sensor that failed at boot was never
+configured at all. Now, while the IMU fault is set, the imu task rewrites
+the five configuration registers every step and reads again from the next
+step. Not run on the car yet: S4-U06.
 
 The README says "expect TOTAL 0" before committing.
 
 ## 5. Calibration and measurements still to do on the car
 
 Everything below is a `[CALIBRATE]` value or a `___` in `docs/REPORT.md`.
+
+**No new calibration code is needed.** The test modes and live commands
+already measure everything. Put the result in `car_config.h` and reflash:
+
+| Value | How | Formula |
+|---|---|---|
+| `WHEEL_DIAMETER_MM` | TEST_MOTION "forward 500", measure with a tape | new = old × tape mm / printed mm |
+| `TRACK_WIDTH_MM` | TEST_MOTION "left 90", measure with a protractor | new = old × 90 / measured degrees |
+| `ENCODER_SLOTS` | turn one wheel exactly once by hand, read `enc` in the dashboard (S2-U05) | ticks for one turn |
+| `SPEED_WHEEL_MAX_MM_S` | TEST_MOTOR open-loop sweep, speed at 100 % | read directly |
+| speed PID / feed-forward | TEST_MOTOR, then `ff=` and `pid=` live, START repeats the steps | copy the final `gains` |
+| `IR_DEFAULT_WHITE/BLACK`, `line=` | TEST_IR (S3-U02); `line=` live in MISSION | read directly |
+| `IMU_FORWARD_SIGN` | TEST_IMU, lift the front: pitch must go positive | flip to `-1.0f` if negative |
+| magnetometer offsets | MISSION, STOP while idle = 360° spin | automatic, RAM only: repeat after every boot |
+| `SERVO_MIN_US` | TEST_ULTRASONIC (Buddy 5) | no live command: edit and reflash until 0° points right |
+
+Do the wheel diameter before the track width, because the turn uses the diameter too.
 
 | Owner | Measure | Where it goes |
 |---|---|---|
@@ -182,19 +216,18 @@ Everything below is a `[CALIBRATE]` value or a `___` in `docs/REPORT.md`.
 | Board modes (`APP_MODE=TEST_*`, 9 modes) | One test program per buddy, CSV on the USB console | Good tools for every S*-U board test | Nothing until someone runs them and saves the log |
 | Test plans (`testing/*/TEST_LOG.md`) | S1–S5 unit, INT-01..INT-11, SYS-01..SYS-05 | Good coverage of the 10 requirements | **0 results recorded in any table**; only one log file in all of `testing/` |
 
-Tests to add, because the brief asks for these and nothing checks them:
-- **S4-U04 motion events:** push, accelerate, turn and stop the car by hand
-  and over a hump in TEST_IMU. Each event should appear in that order and
-  not flicker.
-- **S4-U05 impact:** tap the bumper 10 times. Expect 10 impacts and 0 at
-  rest (the boot false-impact fix is in `6f1bb86`).
+Now defined in the test logs (uncommitted): **S4-U04** motion events,
+**S4-U05** impact, **S4-U06** IMU unplug (no hang, recovers), and **S2-U06**
+velocity expiry.
+
+Tests still to add, because the brief asks for these and nothing checks them:
 - **S3 robustness:** line following under two lighting levels and two
   speeds (brief: "lighting, imperfections, speed").
 - **S5-U03 extension:** measure the lateral deviation during a bypass
   (brief item 8 of obstacle behaviour).
-- **SYS-03 extension:** `max_peak_mm` must be **reported over WiFi at
-  the end of the run**, not just held in RAM (brief Req 5 says "measure
-  and report").
+- **SYS-03 evidence:** the run maximum is already sent in every telemetry
+  frame and hump event (brief Req 5, "measure and report"). A video or
+  screenshot of the dashboard's "MAX" after the run proves it.
 
 ## 7. Paperwork left
 

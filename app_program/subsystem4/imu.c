@@ -101,6 +101,8 @@ static bool      reg_read(uint8_t addr, uint8_t reg, uint8_t * p_dst,
                           uint32_t count);
 static int32_t   to_signed16(uint32_t raw16);
 static int32_t   pair_le(uint8_t const * p_bytes);
+static bool      configure(void);
+static void      recover(void);
 static bool      read_sensors(float32_t * p_acc, float32_t * p_mag);
 static void      calibrate_accel(void);
 static void      mag_track(float32_t const * p_mag);
@@ -133,11 +135,7 @@ imu_init (void)
 
     first.az_mg = ONE_G_MG;
     (void) hal_i2c_init(PIN_IMU_SDA, PIN_IMU_SCL, IMU_I2C_HZ);
-    b_ok = (reg_write(ADDR_IMU, REG_CTRL1, VAL_CTRL1))
-           && (reg_write(ADDR_IMU, REG_CTRL2, VAL_CTRL2))
-           && (reg_write(ADDR_IMU, REG_CTRL5, VAL_CTRL5))
-           && (reg_write(ADDR_IMU, REG_CTRL6, VAL_CTRL6))
-           && (reg_write(ADDR_IMU, REG_CTRL7, VAL_CTRL7));
+    b_ok       = configure();
     first.b_ok = b_ok;
     packed_imu_pack(&first, 0u, &packed);
     g_st = packed;
@@ -325,6 +323,42 @@ pair_le (uint8_t const * p_bytes)
        promoted signed int out of the bitwise operations. */
     return (to_signed16(((uint32_t) p_bytes[1] << BYTE_SHIFT)
                         | (uint32_t) p_bytes[0]));
+}
+
+/*!
+ * @brief Write the five configuration registers (see the file header).
+ *
+ * @return true if every write was acknowledged.
+ */
+static bool
+configure (void)
+{
+    return ((reg_write(ADDR_IMU, REG_CTRL1, VAL_CTRL1))
+            && (reg_write(ADDR_IMU, REG_CTRL2, VAL_CTRL2))
+            && (reg_write(ADDR_IMU, REG_CTRL5, VAL_CTRL5))
+            && (reg_write(ADDR_IMU, REG_CTRL6, VAL_CTRL6))
+            && (reg_write(ADDR_IMU, REG_CTRL7, VAL_CTRL7)));
+}
+
+/*!
+ * @brief IMU fault recovery, one attempt per step.  A sensor that failed
+ *        at boot was never configured, and one that was unplugged powers
+ *        up in power-down mode, where reads are acknowledged but return
+ *        zero.  So configure it again, and read only from the next step,
+ *        after its first conversion (100 Hz).  The fault stays set until
+ *        that read succeeds; one more failed read raises it again.
+ */
+static void
+recover (void)
+{
+    if (configure())
+    {
+        g_fail_run = FAIL_LIMIT - 1u;
+    }
+    else
+    {
+        g_work.i2c_errors++;
+    }
 }
 
 /*!
@@ -615,7 +649,11 @@ imu_step (imu_history_t * p_hist)
     uint32_t        axis     = 0u;
     uint32_t        start_us = 0u;
 
-    if (!read_sensors(acc, mag))
+    if (g_fail_run >= FAIL_LIMIT)
+    {
+        recover();
+    }
+    else if (!read_sensors(acc, mag))
     {
         g_work.i2c_errors++;
         g_fail_run = (g_fail_run < FAIL_LIMIT) ? (g_fail_run + 1u) : g_fail_run;
