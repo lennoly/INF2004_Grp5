@@ -172,6 +172,55 @@ command_allowed (command_id_t kind, bool b_stationary)
 }
 
 /*!
+ * @brief Range-check a command that arrived as a binary frame (the same
+ *        checks as the text parser).
+ *
+ * @param[in,out] p_cmd Command; kind becomes COMMAND_INVALID if it fails.
+ *
+ * @return true if the command is valid.
+ */
+bool
+command_check (command_t * p_cmd)
+{
+    bool b_ok = (p_cmd->kind < COMMAND_INVALID)
+                && (p_cmd->n_args == command_arg_count(p_cmd->kind));
+
+    gp_error = b_ok ? "" : "unknown command (try help)";
+    b_ok     = b_ok && (validate(p_cmd));
+
+    if (!b_ok)
+    {
+        p_cmd->kind = COMMAND_INVALID;
+    }
+
+    return (b_ok);
+}
+
+/*!
+ * @brief Number of values a command takes.
+ *
+ * @param[in] kind Command.
+ *
+ * @return 0..3 (0 for an unknown command).
+ */
+uint32_t
+command_arg_count (command_id_t kind)
+{
+    uint32_t idx   = 0u;
+    uint32_t count = 0u;
+
+    for (idx = 0u; idx < SPEC_COUNT; idx++)
+    {
+        if (g_specs[idx].kind == kind)
+        {
+            count = g_specs[idx].n_args;
+        }
+    }
+
+    return (count);
+}
+
+/*!
  * @brief Empty a line assembler.
  *
  * @param[out] p_line Line assembler.

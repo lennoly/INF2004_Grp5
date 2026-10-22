@@ -67,6 +67,8 @@ typedef char hal_irq_timer_matches_sdk_t
 #define WATCHDOG_MAX_MS      (WATCHDOG_LOAD_BITS / WATCHDOG_LOAD_PER_MS)
 #define WATCHDOG_SCRATCH     (4u)
 #define WATCHDOG_MAGIC       (0x6ab73121u) /* as the SDK's watchdog_enable() */
+#define PWM_INSPECT_SAMPLES  (1000u) /* 1 us apart: 10 PWM periods        */
+#define PWM_INSPECT_PER_PCT  (PWM_INSPECT_SAMPLES / 100u)
 
 /* Chosen by the init task and then used by the IMU task, or shared by a
    task and the sampler ISR: volatile (Rule 1.8.c). */
@@ -277,13 +279,13 @@ hal_pwm_inspect (uint32_t pin, hal_pwm_info_t * p_out)
     p_out->cc      = pwm_hw->slice[slice].cc;
     p_out->b_reset = (0u != (resets_hw->reset & (1u << RESET_PWM)));
 
-    for (idx = 0u; idx < 1000u; idx++)
+    for (idx = 0u; idx < PWM_INSPECT_SAMPLES; idx++)
     {
         highs += gpio_get(pin) ? 1u : 0u;
         hal_delay_us(1u);
     }
 
-    p_out->high_pct = highs / 10u;
+    p_out->high_pct = highs / PWM_INSPECT_PER_PCT;
 }
 
 /*!
@@ -490,13 +492,20 @@ hal_i2c_read (uint8_t addr, uint8_t * p_dst, uint32_t len)
             ((0u == idx) && gb_i2c_restart) ? I2C_IC_DATA_CMD_RESTART_BITS : 0u;
         cmd |= ((len - 1u) == idx) ? I2C_IC_DATA_CMD_STOP_BITS : 0u;
 
-        while (gp_i2c->txflr >= I2C_TX_FIFO_DEPTH)
+        start = timer_hw->timerawl;
+
+        /* Wait for command FIFO space.  A bus held low never drains it,
+           so this wait times out too instead of hanging the caller. */
+        while ((gp_i2c->txflr >= I2C_TX_FIFO_DEPTH) && (!b_abort))
         {
-            /* Wait for command FIFO space; the FIFO always drains. */
+            b_abort = ((timer_hw->timerawl - start) > HAL_I2C_TIMEOUT_US);
         }
 
-        gp_i2c->data_cmd = cmd;
-        start            = timer_hw->timerawl;
+        if (!b_abort)
+        {
+            gp_i2c->data_cmd = cmd;
+            start            = timer_hw->timerawl;
+        }
 
         /* Reading clr_tx_abrt reports and clears an abort. */
         while ((0u == gp_i2c->rxflr) && (!b_abort))

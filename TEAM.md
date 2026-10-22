@@ -28,7 +28,7 @@ Shared files (`app_program/*.c|h` outside the subsystem folders, this file,
 | 3 | `ir_sensor`, `line_follow`, `barcode`, `barcode_decode`; tests `subsystem3_test` (TEST_IR, TEST_BARCODE) |
 | 4 | `imu`, `terrain`; tests `subsystem4_test` (TEST_IMU) |
 | 5 | `ultrasonic`, `servo`, `obstacle`, `avoidance`; tests `subsystem5_test` (TEST_ULTRASONIC) |
-| shared | `app_main`, `app_tests` (test runner: START button, per-mode set-up), `timing` (task times, jitter, CPU load), `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`; `demo_tasks`, `usb_console_compat.h` (from the template) |
+| shared | `app_main`, `app_tests` (test runner: START button, per-mode set-up), `timing` (task times, jitter, CPU load), `vehicle` (integration state machine), `hal`, `hal_irq`, `car_config.h`, `car_math`, `car_types.h`, `bitpack` (minimum-bit helpers), `packed` (packed shared snapshots), `fault` (shared fault mask; bit map owned by Buddy 5); `demo_tasks`, `usb_console_compat.h` (from the template) |
 
 All pins and tunables are in `app_program/car_config.h`.
 
@@ -129,7 +129,7 @@ Limits are in `template/config/config.h`; counted from the code.
 |---|---|---|---|---|---|---|---|
 | Task | 32 | 1 | 1 | 1 | 1 | 1 | 3 (+1 in test builds) |
 | Semaphore | 16 | | | | | 1 | |
-| Event flag | 16 | | 1 | | | 1 | |
+| Event flag | 16 | | 1 | | | 1 | 1 (fault mask) |
 | Message buffer | 4 | | | 1 | | | 1 |
 | Cyclic handler | 4 | | 1 | | | | |
 

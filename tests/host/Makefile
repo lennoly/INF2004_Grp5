@@ -8,11 +8,12 @@
 APP    := ../../app_program
 S1     := $(APP)/subsystem1
 S5     := $(APP)/subsystem5
-SRCS   := test_main.c $(APP)/car_math.c $(APP)/subsystem2/pid.c \
+SRCS   := test_main.c test_data.c $(APP)/car_math.c $(APP)/subsystem2/pid.c \
           $(APP)/subsystem3/line_follow.c $(APP)/subsystem3/barcode_decode.c \
           $(APP)/subsystem4/terrain.c $(S5)/avoidance.c $(S5)/obstacle.c \
           $(S5)/servo.c $(S1)/mqtt_bridge.c $(S1)/mqtt_lwip.c \
-          $(S1)/command.c hal_stub.c timing_stub.c lwip/fake_lwip.c \
+          $(S1)/command.c $(APP)/bitpack.c $(APP)/packed.c $(S1)/frames.c \
+          hal_stub.c timing_stub.c fault_stub.c lwip/fake_lwip.c \
           sim/vehicle_sim.c
 CFLAGS := -std=c99 -Wpedantic -Wall -Wextra -Wsign-conversion \
           -Wfloat-equal -Wdouble-promotion -Wshadow -Werror -O1 -I$(APP) \

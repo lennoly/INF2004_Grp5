@@ -64,8 +64,14 @@ void motion_turn_left(float32_t angle_deg);
 void motion_turn_right(float32_t angle_deg);
 void motion_stop(void);
 
-/* Continuous control for line following and searching. */
+/* Continuous control for line following and searching.  A velocity
+   command brakes if neither it nor motion_keep_alive() is repeated within
+   MOTION_VELOCITY_TIMEOUT_MS (FR14), so the car stops if its commanding
+   task stalls. */
+#define MOTION_VELOCITY_TIMEOUT_MS (100u)
+
 void motion_set_velocity(float32_t left_mm_s, float32_t right_mm_s);
+void motion_keep_alive(void);
 
 /* Completion and telemetry. */
 int32_t motion_wait(int32_t timeout_ms);

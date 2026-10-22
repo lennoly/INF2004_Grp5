@@ -19,7 +19,6 @@ typedef bool (*obstacle_stop_cb_t)(void);
 int32_t  obstacle_init(void);
 int32_t  obstacle_front_mm(void);
 bool     obstacle_ahead(void);
-bool     obstacle_sensor_fault(void);
 bool     obstacle_front_stale(void);
 void     obstacle_monitor_enable(bool b_on);
 bool     obstacle_scan(avoidance_profile_t * p_prof,

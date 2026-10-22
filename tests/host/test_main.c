@@ -24,6 +24,7 @@
 #include "sim/vehicle_sim.h"
 #include "terrain.h"
 #include "vehicle.h"
+#include "test_data.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -213,6 +214,7 @@ main (void)
     test_command();
     test_command_limits();
     test_line_gains();
+    test_data(check);
     (void) printf("\n%" PRIu32 " passed, %" PRIu32 " failed\n", g_pass, g_fail);
 
     return ((0u == g_fail) ? 0 : 1);
@@ -771,33 +773,43 @@ test_obstacle (void)
 static void
 test_bridge (void)
 {
-    static uint8_t const command[] = {'s', 'p', 'e', 'e', 'd',
-                                      '=', '1', '5', '0'};
-    char                 cmd[COMMAND_LINE_MAX];
+    static uint8_t const frame[]   = {0x14u, 0x21u, 0x00u}; /* any bytes */
+    static uint8_t const command[] = {0x1Cu, 0x05u, 0x96u, 0x00u, 0x48u};
+    uint8_t              big[MQTT_BRIDGE_PAYLOAD_MAX + 1u] = {0u};
+    uint8_t              cmd[MQTT_BRIDGE_CMD_MAX];
     char                 data[MQTT_BRIDGE_PAYLOAD_MAX];
     mqtt_bridge_topic_t  topic  = TOPIC_TELEMETRY;
     uint32_t             len    = 0u;
     uint32_t             queued = 0u;
     uint32_t             idx    = 0u;
 
-    check(!mqtt_bridge_publish(TOPIC_TELEMETRY, "{}"), "dropped when offline");
+    check(!mqtt_bridge_publish(TOPIC_TELEMETRY, frame, sizeof(frame)),
+          "dropped when offline");
     mqtt_bridge_set_link(LINK_CONNECTED);
+    check(!mqtt_bridge_publish(TOPIC_TELEMETRY, big, sizeof(big)),
+          "a frame longer than a slot is dropped");
 
     for (idx = 0u; idx < PUBLISHES; idx++)
     {
-        queued += mqtt_bridge_publish(TOPIC_EVENT, "{\"x\":1}") ? 1u : 0u;
+        queued += mqtt_bridge_publish(TOPIC_EVENT, frame, sizeof(frame)) ? 1u
+                                                                         : 0u;
     }
 
     check(5u == queued, "ring holds 5 (6 slots - 1)");
     check((mqtt_bridge_peek_tx(&topic, data, sizeof(data), &len))
-              && (TOPIC_EVENT == topic) && (7u == len),
-          "peek");
+              && (TOPIC_EVENT == topic) && (3u == len)
+              && (0x21 == (uint8_t) data[1]) && (0 == data[2]),
+          "peek: topic, length and binary bytes (zeros included)");
     mqtt_bridge_drop_tx();
     mqtt_bridge_put_command(command, sizeof(command));
-    check((mqtt_bridge_get_command(cmd, sizeof(cmd)))
-              && (0 == strcmp(cmd, "speed=150")),
-          "command");
-    check(!mqtt_bridge_get_command(cmd, sizeof(cmd)), "command ring empty");
+    check((mqtt_bridge_get_command(cmd, sizeof(cmd), &len))
+              && (sizeof(command) == len) && (0 == memcmp(cmd, command, len)),
+          "command frame passes through unchanged");
+    check(!mqtt_bridge_get_command(cmd, sizeof(cmd), &len),
+          "command ring empty");
+    mqtt_bridge_put_command(big, MQTT_BRIDGE_CMD_MAX + 1u);
+    check(!mqtt_bridge_get_command(cmd, sizeof(cmd), &len),
+          "a command longer than a slot is dropped");
 }
 
 /*!
@@ -808,12 +820,15 @@ test_bridge (void)
 static void
 test_mqtt_client (void)
 {
-    struct netif        netif = {0u, {0u}};
-    mqtt_bridge_stats_t stats;
-    char                cmd[COMMAND_LINE_MAX];
-    char                data[MQTT_BRIDGE_PAYLOAD_MAX];
-    mqtt_bridge_topic_t topic = TOPIC_TELEMETRY;
-    uint32_t            len   = 0u;
+    static uint8_t const stop[]  = {0x1Cu, 0x01u, 0x00u, 0x00u};
+    static uint8_t const start[] = {0x1Cu, 0x00u, 0x00u, 0x00u};
+    static uint8_t const tel[]   = {0x11u, 0x01u};
+    struct netif         netif   = {0u, {0u}};
+    mqtt_bridge_stats_t  stats;
+    uint8_t              cmd[MQTT_BRIDGE_CMD_MAX];
+    char                 data[MQTT_BRIDGE_PAYLOAD_MAX];
+    mqtt_bridge_topic_t  topic = TOPIC_TELEMETRY;
+    uint32_t             len   = 0u;
 
     /* Start from an empty publish ring (test_bridge() left messages). */
     while (mqtt_bridge_peek_tx(&topic, data, sizeof(data), &len))
@@ -825,7 +840,8 @@ test_mqtt_client (void)
     cyw43_utk_app_poll(&netif);
     check(0u == g_fake_connects, "no attempt without a network");
     mqtt_bridge_get_stats(&stats);
-    check(0 == strcmp(stats.p_wifi, "host"), "the WiFi state is reported");
+    check((0 == strcmp(stats.p_wifi, "joined")) && (1u == stats.wifi_code),
+          "the WiFi state is reported (3-bit code)");
     g_fake_now_ms += RESTART_MS - 1u;
     cyw43_utk_app_poll(&netif);
     check((0u == rejoins()) && (0u == restarts()),
@@ -869,8 +885,11 @@ test_mqtt_client (void)
               && (1u == g_fake_retain)
               && (0 == strcmp(g_fake_subscribed, "picocar/t/cmd")),
           "connected: online (retained) and cmd subscribed");
+    check((2u == g_fake_payload_len) && (0x1Bu == g_fake_payload[0])
+              && (0x01u == g_fake_payload[1]),
+          "online is a 2-byte status frame");
 
-    (void) mqtt_bridge_publish(TOPIC_TELEMETRY, "{\"t\":1}");
+    (void) mqtt_bridge_publish(TOPIC_TELEMETRY, tel, sizeof(tel));
     g_fake_publish_err = ERR_MEM;
     cyw43_utk_app_poll(&netif);
     check(mqtt_bridge_peek_tx(&topic, data, sizeof(data), &len),
@@ -881,11 +900,11 @@ test_mqtt_client (void)
               && (0 == strcmp(g_fake_topic, "picocar/t/telemetry")),
           "sent once the client has room");
 
-    fake_mqtt_incoming("picocar/t/other", "start");
-    fake_mqtt_incoming("picocar/t/cmd", "stop");
-    check((mqtt_bridge_get_command(cmd, sizeof(cmd)))
-              && (0 == strcmp(cmd, "stop"))
-              && (!mqtt_bridge_get_command(cmd, sizeof(cmd))),
+    fake_mqtt_incoming_bytes("picocar/t/other", start, sizeof(start));
+    fake_mqtt_incoming_bytes("picocar/t/cmd", stop, sizeof(stop));
+    check((mqtt_bridge_get_command(cmd, sizeof(cmd), &len))
+              && (sizeof(stop) == len) && (0 == memcmp(cmd, stop, len))
+              && (!mqtt_bridge_get_command(cmd, sizeof(cmd), &len)),
           "only the cmd topic gives commands");
 
     g_fake_now_ms += SESSION_MS;
@@ -1528,7 +1547,7 @@ test_vehicle_sonar_health (void)
     vehicle_sim_front_fault();
     vehicle_sim_front_fault();
     vehicle_sim_step();
-    check(vehicle_is(VS_STOPPED, "sonar fault"),
+    check(vehicle_is(VS_STOPPED, "fault: sonar no echo"),
           "vehicle: two FAULT pings in a row stop the car");
 
     vehicle_start(DRIVE_MS);
@@ -1556,7 +1575,8 @@ test_vehicle_barcode_watchdog (void)
               && (1u == vehicle_sim_count("2 stale barcode(s) discarded")),
           "vehicle: barcodes read while stopped are discarded");
     vehicle_sim_barcode(NAV_RIGHT);
-    vehicle_sim_step();
+    vehicle_sim_step(); /* taken in this loop ...               */
+    vehicle_sim_step(); /* ... and published at the next one */
     check(NAV_RIGHT == vehicle_status().pending_nav,
           "vehicle: a barcode read during the run is kept");
 

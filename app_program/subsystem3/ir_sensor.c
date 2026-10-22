@@ -10,6 +10,7 @@
 #include "car_config.h"
 #include "hal.h"
 #include "hal_irq.h"
+#include "packed.h"
 #include "ir_sensor.h"
 
 #define ADC_MAX        (4095u)
@@ -31,14 +32,19 @@ static uint32_t const g_channel[IR_COUNT] = {ADC_CH_IR_LEFT, ADC_CH_IR_RIGHT,
 
 /* Filter state and calibration, shared between the sampler ISR and the
    tasks: volatile (Rule 1.8.c). */
-static volatile uint32_t g_filt[IR_COUNT]; /* raw << 4 (Q4) */
+/* Change Requirement 1: a 12-bit reading with 4 fraction bits needs exactly
+   16 bits; the ISR is the only writer and stores each value at once. */
+static volatile uint16_t g_filt[IR_COUNT]; /* raw << 4 (Q4) */
 static volatile uint16_t g_white[IR_COUNT];
 static volatile uint16_t g_black[IR_COUNT];
 static volatile uint16_t g_cal_min[IR_COUNT];
 static volatile uint16_t g_cal_max[IR_COUNT];
 static volatile bool     gb_calibrating = false;
 
-/* Barcode single-producer (ISR) / single-consumer (task) ring. */
+/* Barcode single-producer (ISR) / single-consumer (task) ring of packed
+   2-byte elements.  head (ISR) and tail (task) stay in separate words:
+   packing them together would make both sides read-modify-write one word
+   (Tribunal 1 decision). */
 static volatile ir_sensor_element_t g_ring[RING_SIZE];
 static volatile uint32_t            g_ring_head   = 0u;
 static volatile uint32_t            g_ring_tail   = 0u;
@@ -75,8 +81,9 @@ ir_sensor_init (void)
         g_black[idx] = IR_DEFAULT_WHITE;
 #endif
 
-        /* Cast: widens the 12-bit value before the shift (Rule 5.3.c). */
-        g_filt[idx] = (uint32_t) g_white[idx] << Q4_SHIFT;
+        /* Casts: widen the 12-bit value before the shift (Rule 5.3.c); the
+           Q4 result is below 2^16. */
+        g_filt[idx] = (uint16_t) ((uint32_t) g_white[idx] << Q4_SHIFT);
     }
 
     g_bar_edge_us = hal_time_us();
@@ -98,7 +105,7 @@ ir_sensor_read (ir_sensor_snapshot_t * p_out)
     {
         /* Casts: the filtered value is at most ADC_MAX (12 bits), and the
            permille value (0..1000) converts to float32_t exactly. */
-        p_out->raw[idx] = (uint16_t) (g_filt[idx] >> Q4_SHIFT);
+        p_out->raw[idx] = (uint16_t) ((uint32_t) g_filt[idx] >> Q4_SHIFT);
         p_out->norm[idx] =
             (float32_t) to_permille(p_out->raw[idx], idx) / PERMILLE_F;
     }
@@ -180,7 +187,7 @@ ir_sensor_calib_end (void)
 /*!
  * @brief Take one completed bar / space element (task context).
  *
- * @param[out] p_out Element.
+ * @param[out] p_out Packed element (packed_ir_element_bar / _ticks).
  *
  * @return true if an element was taken.
  */
@@ -192,8 +199,7 @@ ir_sensor_barcode_pop (ir_sensor_element_t * p_out)
     if (b_found)
     {
         hal_memory_barrier();
-        p_out->b_bar    = g_ring[g_ring_tail].b_bar;
-        p_out->width_us = g_ring[g_ring_tail].width_us;
+        *p_out = g_ring[g_ring_tail];
         hal_memory_barrier();
         g_ring_tail = (g_ring_tail + 1u) & (RING_SIZE - 1u);
     }
@@ -278,8 +284,9 @@ barcode_edge_detect (uint32_t raw, uint32_t t_us)
 
         if (next != g_ring_tail)
         {
-            g_ring[g_ring_head].b_bar    = b_black;
-            g_ring[g_ring_head].width_us = t_us - g_bar_edge_us;
+            /* One 16-bit store: bar flag + width in 1 ms ticks. */
+            g_ring[g_ring_head] =
+                packed_ir_element_make(b_black, t_us - g_bar_edge_us);
             hal_memory_barrier();
             g_ring_head = next;
         }
@@ -301,6 +308,7 @@ ir_sample_isr (uint32_t t_us)
     uint32_t raw    = 0u;
     uint32_t shift  = 0u;
     uint32_t target = 0u;
+    uint32_t filt   = 0u;
 
     for (idx = 0u; idx < IR_COUNT; idx++)
     {
@@ -310,17 +318,20 @@ ir_sample_isr (uint32_t t_us)
         /* EMA in Q4 fixed point, f += (x - f) >> shift, written with
            unsigned arithmetic only (Rules 5.3.b and 5.3.c). */
         target = raw << Q4_SHIFT;
+        filt   = g_filt[idx];
 
-        if (target >= g_filt[idx])
+        if (target >= filt)
         {
-            g_filt[idx] += (target - g_filt[idx]) >> shift;
+            filt += (target - filt) >> shift;
         }
         else
         {
-            g_filt[idx] -= (g_filt[idx] - target) >> shift;
+            filt -= (filt - target) >> shift;
         }
 
-        raw = g_filt[idx] >> Q4_SHIFT;
+        /* Cast: a Q4 12-bit value is below 2^16; one store. */
+        g_filt[idx] = (uint16_t) filt;
+        raw         = filt >> Q4_SHIFT;
 
         /* Casts: raw is at most ADC_MAX (12 bits), so it fits uint16_t. */
         if (gb_calibrating)
@@ -332,7 +343,7 @@ ir_sample_isr (uint32_t t_us)
         }
     }
 
-    barcode_edge_detect(g_filt[IR_BARCODE] >> Q4_SHIFT, t_us);
+    barcode_edge_detect((uint32_t) g_filt[IR_BARCODE] >> Q4_SHIFT, t_us);
 }
 
 /*** end of file ***/

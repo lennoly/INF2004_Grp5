@@ -13,6 +13,9 @@
 #include "motor.h"
 #include "pid.h"
 #include "timing.h"
+#include "bitpack.h"
+#include "fault.h"
+#include "packed.h"
 #include "motion.h"
 
 #define TASK_PRIORITY    (5)
@@ -29,12 +32,19 @@
 #define FULL_TURN_DEG    (360.0f)
 #define DIR_FORWARD      (1.0f)
 #define DIR_BACKWARD     (-1.0f)
+#define ENC_FAULT_MS     (500u)  /* driven, no encoder edge: fault   */
+#define ENC_FAULT_PCT    (10.0f) /* drive above the friction offset  */
+#define CMD_SPEED_BITS   (10u)   /* mm/s, 0..1023                    */
+#define CMD_GOAL_BITS    (20u)   /* 0.1 mm, 0..104 m                 */
+#define CMD_SEQ_BITS     (8u)
+#define TENTHS           (10.0f)
 
 /* Cast: the period is a small number of milliseconds, which float32_t
    holds exactly. */
 #define DT_S ((float32_t) CONTROL_PERIOD_MS / MS_PER_S)
 
-/* Command shared between the API callers and the control task. */
+/* Command in full width: built by the API callers, used by the control
+   task (each keeps its own copy). */
 typedef struct
 {
     motion_mode_t mode;
@@ -48,15 +58,34 @@ typedef struct
     uint32_t      seq;       /* increments on every new command        */
 } motion_cmd_t;
 
+/* The same command as shared between the API callers and the control task
+   (Change Requirement 1): 12 bytes instead of 36.  Velocities are kept to
+   1 mm/s (or 1 % in open loop), goals to 0.1 mm. */
+typedef struct
+{
+    uint32_t mode      : 3;  /* motion_mode_t, 5 values             */
+    uint32_t b_rev_l   : 1;  /* direction -1                        */
+    uint32_t b_rev_r   : 1;
+    uint32_t b_invalid : 1;
+    uint32_t seq       : 8;  /* wraps; the task only tests change   */
+    uint32_t speed     : 10; /* CMD_SPEED_BITS                      */
+    uint32_t v_l       : 11; /* PACKED_SPEED_BITS, two's complement */
+    uint32_t v_r       : 11;
+    uint32_t goal      : 20; /* CMD_GOAL_BITS                       */
+} motion_cmd_packed_t;
+
 /* Shared between the API callers (any task), the cyclic handler and the
-   control task: volatile (Rule 1.8.c); multi-field access under DI/EI. */
-static volatile motion_cmd_t    g_cmd;
-static volatile motion_status_t g_status;
+   control task: volatile (Rule 1.8.c); multi-field access under DI/EI.
+   Stored packed (Change Requirement 1): each writer builds a local copy and
+   stores it in one interrupt-protected copy. */
+static volatile motion_cmd_packed_t g_cmd;
+static volatile packed_motion_t     g_status;
 static volatile motion_gains_t  g_gains      = {SPEED_KP, SPEED_KI, SPEED_KD,
                                                 SPEED_KF, SPEED_OFFSET_PCT};
 static volatile uint32_t        g_gains_seq  = 0u; /* bumped per change */
 static volatile ID              gh_task      = 0;
 static volatile ID              gh_done_flag = 0;
+static volatile uint32_t        g_alive      = 0u; /* bumped per keep-alive */
 
 /* Used only by the task that initialises the drivers. */
 static bool gb_started = false;
@@ -75,6 +104,12 @@ static uint32_t        g_elapsed_ms        = 0u;
 static uint32_t        g_limit_ms          = 0u;
 static int32_t         g_prev_dir_l        = 0; /* -1, 0 (idle) or +1 */
 static int32_t         g_prev_dir_r        = 0;
+static uint32_t        g_idle_ms_l         = 0u; /* driven without an edge */
+static uint32_t        g_idle_ms_r         = 0u;
+static uint32_t        g_last_ticks_l      = 0u;
+static uint32_t        g_last_ticks_r      = 0u;
+static uint32_t        g_vel_age_ms        = 0u; /* since the last refresh */
+static uint32_t        g_seen_alive        = 0u;
 
 static void post_command(motion_cmd_t const * p_cmd);
 static void start_move(motion_mode_t mode, float32_t goal_mm, float32_t dir_l,
@@ -95,6 +130,15 @@ static void      drive_wheels(motion_cmd_t const * p_cmd, float32_t target_l,
                               float32_t target_r, float32_t speed_l,
                               float32_t speed_r);
 static void      publish_status(void);
+static void      check_encoders(encoder_reading_t const * p_left,
+                                encoder_reading_t const * p_right);
+static uint32_t  wheel_idle(uint32_t idle_ms, uint32_t ticks,
+                            uint32_t last_ticks, float32_t pwm_pct);
+static void      pack_command(motion_cmd_t const * p_cmd, uint32_t seq,
+                              motion_cmd_packed_t * p_out);
+static void      unpack_command(motion_cmd_packed_t const * p_in,
+                                motion_cmd_t * p_out);
+static bool      velocity_fresh(void);
 static void      control_step(void);
 static void      control_cyclic_isr(void * p_exinf);
 static void      motion_task(INT stacd, void * p_exinf);
@@ -204,6 +248,22 @@ motion_set_velocity (float32_t left_mm_s, float32_t right_mm_s)
 }
 
 /*!
+ * @brief Confirm that the current velocity command is still wanted.  The
+ *        commanding task calls this every cycle while it waits; once a
+ *        command has expired, only a new motion_set_velocity() restarts
+ *        the wheels.
+ */
+void
+motion_keep_alive (void)
+{
+    UINT imask = 0u;
+
+    DI(imask);
+    g_alive++;
+    EI(imask);
+}
+
+/*!
  * @brief Fixed duty per wheel for motor characterisation (no PID).
  *
  * @param[in] left_pct  Left duty, -100..100 percent.
@@ -240,7 +300,7 @@ motion_wait (int32_t timeout_ms)
 
     if (E_OK == ercd)
     {
-        result = g_status.b_last_ok ? MOTION_WAIT_OK : MOTION_WAIT_FAIL;
+        result = (0u != g_status.b_last_ok) ? MOTION_WAIT_OK : MOTION_WAIT_FAIL;
     }
 
     return (result);
@@ -267,11 +327,14 @@ motion_wait_done (int32_t timeout_ms)
 void
 motion_get_status (motion_status_t * p_out)
 {
-    UINT imask = 0u;
+    packed_motion_t copy;
+    UINT            imask = 0u;
 
     DI(imask);
-    *p_out = g_status;
+    copy = g_status;
     EI(imask);
+
+    packed_motion_unpack(&copy, p_out);
 }
 
 /*!
@@ -336,20 +399,14 @@ motion_get_gains (motion_gains_t * p_out)
 static void
 post_command (motion_cmd_t const * p_cmd)
 {
-    UINT imask = 0u;
+    motion_cmd_packed_t packed;
+    UINT                imask = 0u;
 
     (void) tk_clr_flg(gh_done_flag, ~FLG_DONE);
 
     DI(imask);
-    g_cmd.mode      = p_cmd->mode;
-    g_cmd.v_l       = p_cmd->v_l;
-    g_cmd.v_r       = p_cmd->v_r;
-    g_cmd.goal_mm   = p_cmd->goal_mm;
-    g_cmd.dir_l     = p_cmd->dir_l;
-    g_cmd.dir_r     = p_cmd->dir_r;
-    g_cmd.speed     = p_cmd->speed;
-    g_cmd.b_invalid = p_cmd->b_invalid;
-    g_cmd.seq++;
+    pack_command(p_cmd, g_cmd.seq + 1u, &packed);
+    g_cmd = packed;
     EI(imask);
 }
 
@@ -444,15 +501,18 @@ start_control (void)
 static void
 read_inputs (motion_cmd_t * p_cmd)
 {
-    motion_gains_t gains;
-    uint32_t       gains_seq = 0u;
-    UINT           imask     = 0u;
+    motion_cmd_packed_t packed;
+    motion_gains_t      gains;
+    uint32_t            gains_seq = 0u;
+    UINT                imask     = 0u;
 
     DI(imask);
-    *p_cmd    = g_cmd;
+    packed    = g_cmd;
     gains     = g_gains;
     gains_seq = g_gains_seq;
     EI(imask);
+
+    unpack_command(&packed, p_cmd);
 
     /* A live tuning command arrived. */
     if (gains_seq != g_applied_gains_seq)
@@ -530,6 +590,7 @@ accept_command (motion_cmd_t const * p_cmd)
     if (p_cmd->seq != g_seen_seq)
     {
         g_seen_seq   = p_cmd->seq;
+        g_vel_age_ms = 0u;
         g_start_l    = g_work.dist_l_mm;
         g_start_r    = g_work.dist_r_mm;
         g_elapsed_ms = 0u;
@@ -547,6 +608,7 @@ accept_command (motion_cmd_t const * p_cmd)
         g_work.b_busy =
             (MOTION_DISTANCE == p_cmd->mode) || (MOTION_TURN == p_cmd->mode);
         g_work.b_last_ok = !p_cmd->b_invalid;
+        fault_clear(FAULT_MOTOR_STALL); /* a new move starts clean */
     }
 }
 
@@ -612,11 +674,12 @@ move_step (motion_cmd_t const * p_cmd, float32_t * p_target_l,
 
     g_elapsed_ms += CONTROL_PERIOD_MS;
 
-    /* Stalled or blocked. */
+    /* Stalled or blocked: one bit of the shared fault mask. */
     if (g_elapsed_ms > g_limit_ms)
     {
         b_done           = true;
         g_work.b_last_ok = false;
+        fault_raise(FAULT_MOTOR_STALL);
     }
 
     if (b_done)
@@ -713,11 +776,160 @@ drive_wheels (motion_cmd_t const * p_cmd, float32_t target_l,
 static void
 publish_status (void)
 {
-    UINT imask = 0u;
+    packed_motion_t packed;
+    UINT            imask = 0u;
+
+    packed_motion_pack(&g_work, &packed);
 
     DI(imask);
-    g_status = g_work;
+    g_status = packed;
     EI(imask);
+}
+
+/*!
+ * @brief Encoder fault (one bit of the shared fault mask): a wheel driven
+ *        well above the friction offset that gives no edge for
+ *        ENC_FAULT_MS.  Clears as soon as edges come back.
+ *
+ * @param[in] p_left  Left encoder reading.
+ * @param[in] p_right Right encoder reading.
+ */
+static void
+check_encoders (encoder_reading_t const * p_left,
+                encoder_reading_t const * p_right)
+{
+    g_idle_ms_l    = wheel_idle(g_idle_ms_l, p_left->ticks, g_last_ticks_l,
+                                g_work.pwm_l_pct);
+    g_idle_ms_r    = wheel_idle(g_idle_ms_r, p_right->ticks, g_last_ticks_r,
+                                g_work.pwm_r_pct);
+    g_last_ticks_l = p_left->ticks;
+    g_last_ticks_r = p_right->ticks;
+
+    if ((g_idle_ms_l >= ENC_FAULT_MS) || (g_idle_ms_r >= ENC_FAULT_MS))
+    {
+        fault_raise(FAULT_ENCODER);
+    }
+    else
+    {
+        fault_clear(FAULT_ENCODER);
+    }
+}
+
+/*!
+ * @brief Time one wheel has been driven without an encoder edge.
+ *
+ * @param[in] idle_ms    Time so far.
+ * @param[in] ticks      Edge counter now.
+ * @param[in] last_ticks Edge counter one cycle ago.
+ * @param[in] pwm_pct    Duty applied this cycle (signed).
+ *
+ * @return New idle time in ms (0 if the wheel moved or is not driven).
+ */
+static uint32_t
+wheel_idle (uint32_t idle_ms, uint32_t ticks, uint32_t last_ticks,
+            float32_t pwm_pct)
+{
+    bool b_driven =
+        (car_math_abs(pwm_pct) >= (g_offset_pct + ENC_FAULT_PCT));
+    uint32_t result = 0u;
+
+    if (b_driven && (ticks == last_ticks))
+    {
+        result = (idle_ms < ENC_FAULT_MS) ? (idle_ms + CONTROL_PERIOD_MS)
+                                          : idle_ms;
+    }
+
+    return (result);
+}
+
+/*!
+ * @brief Pack a command for sharing (caller holds DI).
+ *
+ * @param[in]  p_cmd Full-width command.
+ * @param[in]  seq   Sequence number (low 8 bits kept).
+ * @param[out] p_out Packed command.
+ */
+static void
+pack_command (motion_cmd_t const * p_cmd, uint32_t seq,
+              motion_cmd_packed_t * p_out)
+{
+    /* Casts: bits <= 20, so the maxima fit int32_t; the quantised values
+       are in 0..max.  The mode is a small non-negative enumeration
+       constant. */
+    int32_t speed_max = (int32_t) bitpack_max_u(CMD_SPEED_BITS);
+    int32_t goal_max  = (int32_t) bitpack_max_u(CMD_GOAL_BITS);
+    int32_t v_max     = (int32_t) bitpack_max_u(PACKED_SPEED_BITS - 1u);
+
+    p_out->mode      = (uint32_t) p_cmd->mode & bitpack_max_u(3u);
+    p_out->b_rev_l   = (p_cmd->dir_l < 0.0f) ? 1u : 0u;
+    p_out->b_rev_r   = (p_cmd->dir_r < 0.0f) ? 1u : 0u;
+    p_out->b_invalid = p_cmd->b_invalid ? 1u : 0u;
+    p_out->seq       = seq & bitpack_max_u(CMD_SEQ_BITS);
+    p_out->speed =
+        (uint32_t) bitpack_quantise(p_cmd->speed, 1.0f, 0, speed_max);
+    p_out->v_l = bitpack_to_field_s(
+        bitpack_quantise(p_cmd->v_l, 1.0f, -v_max - 1, v_max),
+        PACKED_SPEED_BITS);
+    p_out->v_r = bitpack_to_field_s(
+        bitpack_quantise(p_cmd->v_r, 1.0f, -v_max - 1, v_max),
+        PACKED_SPEED_BITS);
+    p_out->goal =
+        (uint32_t) bitpack_quantise(p_cmd->goal_mm, TENTHS, 0, goal_max);
+}
+
+/*!
+ * @brief Unpack the shared command into the control task copy.
+ *
+ * @param[in]  p_in  Packed command.
+ * @param[out] p_out Full-width command.
+ */
+static void
+unpack_command (motion_cmd_packed_t const * p_in, motion_cmd_t * p_out)
+{
+    /* Casts: the mode field holds a value written by pack_command(); the
+       speed and goal fields are below 2^20, exact in float32_t. */
+    p_out->mode      = (motion_mode_t) p_in->mode;
+    p_out->dir_l     = (0u != p_in->b_rev_l) ? DIR_BACKWARD : DIR_FORWARD;
+    p_out->dir_r     = (0u != p_in->b_rev_r) ? DIR_BACKWARD : DIR_FORWARD;
+    p_out->b_invalid = (0u != p_in->b_invalid);
+    p_out->seq       = p_in->seq;
+    p_out->speed     = (float32_t) p_in->speed;
+    p_out->v_l       = (float32_t) bitpack_from_field_s(p_in->v_l,
+                                                        PACKED_SPEED_BITS);
+    p_out->v_r       = (float32_t) bitpack_from_field_s(p_in->v_r,
+                                                        PACKED_SPEED_BITS);
+    p_out->goal_mm   = (float32_t) p_in->goal / TENTHS;
+}
+
+/*!
+ * @brief Age the velocity command by one cycle (FR14).  A keep-alive
+ *        resets the age only while the command has not expired.
+ *
+ * @return true while the command is younger than
+ *         MOTION_VELOCITY_TIMEOUT_MS.
+ */
+static bool
+velocity_fresh (void)
+{
+    uint32_t alive = g_alive; /* one aligned word: a single load */
+
+    if (alive != g_seen_alive)
+    {
+        g_seen_alive = alive;
+
+        if (g_vel_age_ms <= MOTION_VELOCITY_TIMEOUT_MS)
+        {
+            g_vel_age_ms = 0u;
+        }
+    }
+
+    /* Saturates just past the limit, so it never wraps. */
+    if (g_vel_age_ms <= MOTION_VELOCITY_TIMEOUT_MS)
+    {
+        g_vel_age_ms += CONTROL_PERIOD_MS;
+    }
+
+    return (g_vel_age_ms <= MOTION_VELOCITY_TIMEOUT_MS);
 }
 
 /*!
@@ -741,8 +953,13 @@ control_step (void)
 
     if (MOTION_VELOCITY == cmd.mode)
     {
-        target_l = cmd.v_l;
-        target_r = cmd.v_r;
+        /* Not refreshed for MOTION_VELOCITY_TIMEOUT_MS: zero targets
+           brake the motors (FR14). */
+        if (velocity_fresh())
+        {
+            target_l = cmd.v_l;
+            target_r = cmd.v_r;
+        }
     }
     else if (g_work.b_busy)
     {
@@ -756,6 +973,7 @@ control_step (void)
     g_work.target_l_mm_s = target_l;
     g_work.target_r_mm_s = target_r;
     drive_wheels(&cmd, target_l, target_r, enc_l.speed_mm_s, enc_r.speed_mm_s);
+    check_encoders(&enc_l, &enc_r);
 
     /* Publish b_last_ok before waking the waiting task. */
     publish_status();

@@ -44,7 +44,7 @@ The software follows the suggested three-layer architecture (sensor, control, co
 | 7 | `barcode` | 100 Hz | frames + decodes barcode edge stream |
 | 8 | `imu` | 50 Hz | tilt, hump, impact, turn-rate, motion events |
 | 9 | `sonar` | ~14 Hz | front-distance monitor |
-| 10 | `telemetry` | 20 ms loop | commands (USB, UART, MQTT), JSON telemetry (off–20 Hz), 1 Hz heartbeat, events |
+| 10 | `telemetry` | 20 ms loop | commands (USB, UART, MQTT), binary telemetry frames (off–20 Hz), 1 Hz heartbeat, events |
 | 10 | `blink` (template) | 2 Hz | liveness LED on GP16 |
 
 The motion loop is woken by a **µT-Kernel cyclic handler** (`tk_cre_cyc`) calling `tk_wup_tsk`, so its period is drift-free. Timing-critical capture (encoders, echo width, barcode bars) happens in interrupt handlers registered with `tk_def_int`; heavier processing is deferred to tasks.
@@ -84,6 +84,11 @@ Studying the template revealed constraints that drove several design decisions:
 | Application code only (linked, WiFi build) | 27.4 KB | 8.2 KB (+ 17.4 KB task stacks) |
 
 The RP2040 has 264 KB of SRAM and 2 MB of flash, so all builds fit comfortably.
+
+Change Requirement 1 (minimum-bit data representation) cut the mission
+build's static RAM by 4.1 KB and the application's own RAM from 6.1 KB to
+2.0 KB; the measurements, the field table and the message sizes are in
+`docs/DATA_REPRESENTATION.md`.
 
 Efficiency choices:
 
@@ -130,7 +135,7 @@ Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic ana
 
 ## 4.1 Buddy 1 — WiFi Communication, Command and Telemetry
 
-**Communication API** (`mqtt_bridge.h`): `mqtt_bridge_publish(topic, json)`, `mqtt_bridge_get_command(buf, size)`, `mqtt_bridge_get_stats(&stats)`. Application tasks never touch lwIP. Two single-producer/single-consumer rings carry messages into and out of the lwIP context, using memory barriers so they are also correct under the template's dual-core SMP profile.
+**Communication API** (`mqtt_bridge.h`): `mqtt_bridge_publish(topic, frame, len)`, `mqtt_bridge_get_command(buf, size, &len)`, `mqtt_bridge_get_stats(&stats)`. Application tasks never touch lwIP. Two single-producer/single-consumer rings carry messages into and out of the lwIP context, using memory barriers so they are also correct under the template's dual-core SMP profile.
 
 **MQTT client** (`mqtt_lwip.c` on lwIP's `apps/mqtt`). lwIP's own MQTT 3.1.1 client does the protocol work: CONNECT with last will, PUBLISH, SUBSCRIBE, keep-alive pings and the broker watchdog. `mqtt_lwip.c` manages the connection and moves messages between that client and the bridge. It runs inside the template's CYW43 task through the new hook, so all lwIP calls stay in one context as `NO_SYS` requires. An earlier version carried its own MQTT encoder and decoder; a simplification review replaced them with the client lwIP already ships.
 
@@ -144,73 +149,46 @@ Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic ana
 ### MQTT documentation
 
 All topics start with `picocar/<id>/`, where `<id>` is `MQTT_CAR_ID` in
-`mqtt_config.h` (default `car1`). Payloads are one-line JSON with integers
-only, except `status` (plain text) and `cmd` (a text command).
+`mqtt_config.h` (default `car1`). Since Change Requirement 1 every payload
+is a compact binary frame: byte 0 holds the frame type and the format
+version, then the fields follow with explicit masks and shifts, least
+significant bit first (`frames.c`). The field list of every frame, with
+ranges, units and bit widths, is in `docs/DATA_REPRESENTATION.md`;
+`tools/dashboard/frames.py` decodes them into the field names below.
 
-| Topic | Dir | QoS / retain | Rate | Payload |
+| Topic | Dir | QoS / retain | Rate | Frame |
 |---|---|---|---|---|
-| `picocar/<id>/telemetry` | car → laptop | 0 / no | 5 Hz (`rate=`: off, or 50–5000 ms) | telemetry object |
-| `picocar/<id>/heartbeat` | car → laptop | 0 / no | 1 Hz | heartbeat object |
-| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | one event object (`type` below) |
-| `picocar/<id>/status` | car → laptop | 0 / **retained** | on connect; last will | `online` / `offline` |
-| `picocar/<id>/cmd` | laptop → car | 0 / no | on demand | `[#<id> ]<command>`, see *Commands* |
+| `picocar/<id>/telemetry` | car → laptop | 0 / no | 5 Hz (`rate=`: off, or 50–5000 ms) | telemetry, 43 B |
+| `picocar/<id>/heartbeat` | car → laptop | 0 / no | 1 Hz | heartbeat, 26 B |
+| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | state, barcode, hump, obstacle, impact, reply, gains, timing (2–24 B) |
+| `picocar/<id>/status` | car → laptop | 0 / **retained** | on connect; last will | status, 2 B: online / offline |
+| `picocar/<id>/cmd` | laptop → car | 0 / no | on demand | command, 4–11 B |
 
-**Telemetry**:
-`{"t","st","spd":[l,r],"tgt":[l,r],"pwm":[l,r],"enc":[l,r],"odo","hdg","ir":[l,r,bc],"le","ls","bc","nav","nbc","pitch","roll","yaw","rate","hump":{"h","pk","max","n"},"ev","front","act","nobs"}`
+**Telemetry** (decoded names): `t` run time ms, `st` vehicle state, `ls` line
+state, `nav` / `pend` last and pending barcode command, `spd` / `tgt` wheel
+speed and target mm/s, `pwm` duty %, `enc` encoder ticks (low 16 bits), `odo`
+mm, `hdg` heading 0.1°, `ir` normalised IR ‰ (left, right, barcode), `le`
+line error ‰, `nbc` barcodes and `bc` the last symbol, `pitch` / `roll` /
+`yaw` 0.1°, `rate` turn rate 0.1°/s, `hump` {`h`, `pk`, `max` mm, `n`}, `ev`
+motion event, `front` mm (−1 = no echo), `act` / `nobs` avoidance action and
+obstacles passed, `faults` the active fault bits.
 
-| Field | Type, unit | Meaning |
-|---|---|---|
-| `t` | int, ms | run time |
-| `st` | string | vehicle state: `IDLE`, `CALIBRATE`, `LINE_FOLLOW`, `NAV_TURN`, `LINE_SEARCH`, `OBSTACLE`, `STOPPED` |
-| `spd`, `tgt` | [int, int], mm/s | wheel speed and its target, left / right |
-| `pwm` | [int, int], % | motor duty, left / right |
-| `enc` | [uint, uint] | encoder ticks (both edges), left / right |
-| `odo` | int, mm | distance travelled |
-| `hdg`, `pitch`, `roll`, `yaw` | int, 0.1° | heading, tilt and IMU heading |
-| `rate` | int, 0.1°/s | turn rate |
-| `ir` | [int ×3], ‰ | normalised IR: left, right, barcode (0 white … 1000 black) |
-| `le` | int, ‰ | line error (left − right) |
-| `ls` | string | line state: `ON`, `LOST`, `JUNC` |
-| `bc`, `nav` | string | last barcode text and its command |
-| `nbc` | uint | barcodes read |
-| `hump` | object | `h` height now, `pk` last peak, `max` run maximum (mm); `n` humps |
-| `ev` | string | motion event (`STATIONARY`, `CRUISING`, `CLIMBING`, … `IMPACT`) |
-| `front` | int, mm | front sonar distance |
-| `act`, `nobs` | string, uint | last avoidance action; obstacles passed |
+**Heartbeat**: `up` s, `seq`, `st`, `link`, `pub` / `drop` / `rx` (16-bit,
+wrapping), `recon`, `rejoin`, `wreset`, `tries` (8-bit, saturating), `wifi`
+and `why` (sent as 3- and 4-bit codes of the texts listed in the README),
+`ip`, `imu`, `i2cerr`, `faults` and `fcount` (how often each fault was
+raised).
 
-**Heartbeat**:
-`{"up","seq","st","link","pub","drop","rx","recon","rejoin","wreset","wifi","ip","broker","tries","why","imu","i2cerr"}`
-
-| Field | Type | Meaning |
-|---|---|---|
-| `up` | uint, s | time since boot |
-| `seq` | uint | heartbeat number (a gap = a lost heartbeat) |
-| `st` | string | vehicle state, as in telemetry |
-| `link` | string | `WAIT_NET`, `CONNECTING`, `CONNECTED`, `BACKOFF` |
-| `pub`, `drop`, `rx` | uint | messages published, dropped while offline, commands received |
-| `recon`, `rejoin`, `wreset`, `tries` | uint | broker reconnects, Wi-Fi re-joins, Wi-Fi chip restarts, broker attempts |
-| `wifi` | string | Wi-Fi state in words (`joined`, `hotspot not found …`, `waiting for an IP address`, …) |
-| `ip`, `broker` | string | the car's address; the broker address it was built with |
-| `why` | string | how the last broker attempt ended, in words |
-| `imu`, `i2cerr` | int, uint | IMU healthy (1/0); I2C errors |
-
-**Events** (`event` topic, one object each, told apart by `type`):
-
-| `type` | Fields | Sent when |
-|---|---|---|
-| `cmd` | `id` (request id, 0 if none), `cmd` (the text), `ok` (1/0), `err` (reason, only when `ok` is 0) | every command |
-| `gains` | `pid` [kp,ki,kd], `ff` [kf,offset], `line` [kp,ki,kd], `speed` mm/s, `rate` ms | 60 ms after a tuning command, and on `gains` |
-| `state` | `st`, `why` (reason) | every state change |
-| `barcode` | `code`, `cmd` | a barcode is decoded |
-| `hump` | `n`, `peak_mm`, `max_mm` | a hump is counted |
-| `impact` | `n` | an IMU impact |
-| `obstacle` | `found`, `dist` mm, `ang` °, `width` mm, `centre`, `cl`, `cr` (clearances, mm), `act` | after each obstacle scan |
-| `timing` | `win_ms`, `load_pct`, `jit_max_us`, `periods`, then per section [max_us, avg_us, count]: `motion`, `vehicle`, `barcode`, `imu`, `hump`, `ir_isr`, `net`, `rejoin` | on `timing` |
-| `help` | `cmds` | on `help` |
+**Events**: `state` (`st`, `why`: a 5-bit code of the reason), `barcode`
+(`code`, `cmd`), `hump` (`n`, `peak_mm`, `max_mm`), `obstacle` (`found`,
+`dist`, `ang`, `width`, `centre`, `cl`, `cr`, `act`), `impact` (`n`), `cmd`
+(the reply: `id`, `cmd`, `ok`, `err`), `gains` (`pid`, `ff`, `line`, `speed`,
+`rate`) and `timing` (window, load, jitter, periods and each section's
+maximum; the averages are printed on the console).
 
 ### Commands and live tuning
 
-The same text commands are accepted on the MQTT `cmd` topic **and** typed on the USB or UART serial console. So gains can be tuned without reflashing in every build, including the test builds that have no WiFi. `command.c` parses them (pure C, 28 unit tests) and the telemetry task executes them within 20 ms.
+The same commands are accepted on the MQTT `cmd` topic, as binary command frames, **and** typed as text on the USB or UART serial console. So gains can be tuned without reflashing in every build, including the test builds that have no WiFi. `command.c` parses them (pure C, 28 unit tests) and the telemetry task executes them within 20 ms.
 
 | Command | Effect | Applied by |
 |---|---|---|
@@ -225,12 +203,13 @@ The same text commands are accepted on the MQTT `cmd` topic **and** typed on the
 
 The tuning commands (`speed=`, `pid=`, `ff=`, `line=`) are accepted only while
 the car is IDLE or STOPPED, so the controllers never change mid-run; while
-driving they are answered `"ok":0,"err":"only while IDLE or STOPPED"`.
+driving they are answered with a reply frame whose error is "only while
+IDLE or STOPPED".
 `start`, `stop`, `rate=`, `gains`, `help` and `timing` work in every state.
 
 - Keywords are case-insensitive and spaces are ignored.
-- Every command is answered with `{"type":"cmd","cmd":"…","ok":1}`, or `"ok":0` with the reason (for example `wrong number of values`, `gain out of range 0..1000`, or `not available in this build`).
-- Every change is followed by `{"type":"gains","pid":[…],"ff":[…],"line":[…],"speed":…,"rate":…}` with the values now in use. It is sent 60 ms later so the vehicle task has applied line gains first; review caught that an immediate reply would have reported the old values.
+- Every command is answered with a reply frame (request id, command, error code), and on the console with a readable `# cmd` line giving the reason (for example `wrong number of values`, `gain out of range 0..1000`, or `not available in this build`).
+- Every change is followed by a gains frame (and a `# gains` console line) with the values now in use; gains travel in 0.001 steps, the same precision as the text commands. It is sent 60 ms later so the vehicle task has applied line gains first; review caught that an immediate reply would have reported the old values.
 - Gains live in RAM and reset on reboot. The final values are copied into `car_config.h`, because the template forbids flash writes without parking the second core.
 - Serial input is limited to 64-character lines. On the UART, commands are paced in 16-byte chunks so the 32-byte receive FIFO (polled every 20 ms) never overflows; the dashboard does this automatically.
 
@@ -247,7 +226,7 @@ driving they are answered `"ok":0,"err":"only while IDLE or STOPPED"`.
 
 `tools/dashboard/sim_car.py` publishes the firmware's exact message formats and obeys the same commands. Its wheel model uses the firmware's PID law, so a `pid=` change visibly alters the response. It was used to verify the dashboard end to end against a Mosquitto broker: commands, acks, rejected commands, rate changes and logging. The serial path was verified against an emulated console on a pseudo-terminal.
 
-**Recovery demonstration.** Stop and restart the broker: the heartbeat's reconnect counter increments and publishing resumes. Without `WIFI_MQTT`, the same JSON is printed on the USB console at 1 Hz, so the dashboard's serial mode demonstrates the telemetry framework without a network.
+**Recovery demonstration.** Stop and restart the broker: the heartbeat's reconnect counter increments and publishing resumes. Without `WIFI_MQTT`, the same frames are printed on the USB console (as `@` + hex) at 1 Hz, so the dashboard's serial mode demonstrates the telemetry framework without a network.
 
 ## 4.2 Buddy 2 — Motion Control System
 
@@ -464,7 +443,7 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 
 **Build verification.** All eight application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
 
-**Host unit tests** (`make -C tests/host`): **163/163 pass**. The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
+**Host unit tests** (`make -C tests/host`): **227/227 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
 
 | Module | What is proven |
 |---|---|
