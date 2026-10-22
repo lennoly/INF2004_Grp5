@@ -32,6 +32,7 @@
 #include "vehicle.h"
 #include "app_tests.h"
 #include "timing.h"
+#include "hal.h"
 #include "app_main.h"
 
 #define USB_WAIT_POLLS (50)
@@ -54,12 +55,16 @@ INT
 usermain (void)
 {
     INT attempt = 0;
+#if APP_MODE == APP_MODE_TEST_BUDDY3
+    int32_t ercd = E_OK;
+#endif
 
     start_blink();
 
     /* Let USB-CDC enumerate so that the boot messages are not lost. */
     for (attempt = 0;
-         (attempt < USB_WAIT_POLLS) && (tm_usb_state() < USB_ENUMERATED);
+         (APP_MODE != APP_MODE_TEST_BUDDY3)
+         && (attempt < USB_WAIT_POLLS) && (tm_usb_state() < USB_ENUMERATED);
          attempt++)
     {
         (void) tk_dly_tsk(USB_WAIT_MS);
@@ -84,6 +89,30 @@ usermain (void)
                                   "WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 "
                                   "WIFI_DNS=1 WIFI_MQTT=1\n");
 #endif
+#elif APP_MODE == APP_MODE_TEST_BUDDY3
+    /* Only Buddy 3 and its motor/encoder dependencies. No USB host needed. */
+    hal_gpio_init_out(PIN_SERVO, false);
+    ercd = encoder_init();
+    if (E_OK == ercd)
+    {
+        ercd = motion_init();
+    }
+    if (E_OK == ercd)
+    {
+        ercd = ir_sensor_init();
+    }
+    if (E_OK == ercd)
+    {
+        ercd = barcode_init();
+    }
+    if (E_OK == ercd)
+    {
+        barcode_set_enabled(false);
+        ercd = vehicle_init();
+    }
+    report_init("Buddy 3 driving", ercd);
+    (void) tm_printf((UB const *) "Buddy 3: GP20=start, GP21=stop. "
+                                  "IR + barcode; no sonar/servo.\n");
 #elif APP_MODE == APP_MODE_MISSION
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */
     report_init("encoder", encoder_init());

@@ -25,7 +25,8 @@
 #include "subsystem5_test.h"
 #include "app_tests.h"
 
-#if (APP_MODE != APP_MODE_MISSION) && (APP_MODE != APP_MODE_TEST_TELEMETRY)
+#if (APP_MODE != APP_MODE_MISSION) && (APP_MODE != APP_MODE_TEST_TELEMETRY) \
+    && (APP_MODE != APP_MODE_TEST_BUDDY3)
 #define TEST_TASK_BUILD (1)
 #else
 #define TEST_TASK_BUILD (0)
