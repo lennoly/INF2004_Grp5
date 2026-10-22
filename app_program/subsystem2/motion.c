@@ -85,6 +85,7 @@ static volatile motion_gains_t  g_gains      = {SPEED_KP, SPEED_KI, SPEED_KD,
 static volatile uint32_t        g_gains_seq  = 0u; /* bumped per change */
 static volatile ID              gh_task      = 0;
 static volatile ID              gh_done_flag = 0;
+static volatile uint32_t        g_alive      = 0u; /* bumped per keep-alive */
 
 /* Used only by the task that initialises the drivers. */
 static bool gb_started = false;
@@ -107,6 +108,8 @@ static uint32_t        g_idle_ms_l         = 0u; /* driven without an edge */
 static uint32_t        g_idle_ms_r         = 0u;
 static uint32_t        g_last_ticks_l      = 0u;
 static uint32_t        g_last_ticks_r      = 0u;
+static uint32_t        g_vel_age_ms        = 0u; /* since the last refresh */
+static uint32_t        g_seen_alive        = 0u;
 
 static void post_command(motion_cmd_t const * p_cmd);
 static void start_move(motion_mode_t mode, float32_t goal_mm, float32_t dir_l,
@@ -135,6 +138,7 @@ static void      pack_command(motion_cmd_t const * p_cmd, uint32_t seq,
                               motion_cmd_packed_t * p_out);
 static void      unpack_command(motion_cmd_packed_t const * p_in,
                                 motion_cmd_t * p_out);
+static bool      velocity_fresh(void);
 static void      control_step(void);
 static void      control_cyclic_isr(void * p_exinf);
 static void      motion_task(INT stacd, void * p_exinf);
@@ -241,6 +245,22 @@ motion_set_velocity (float32_t left_mm_s, float32_t right_mm_s)
     cmd.v_l = car_math_is_finite(left_mm_s) ? left_mm_s : 0.0f;
     cmd.v_r = car_math_is_finite(right_mm_s) ? right_mm_s : 0.0f;
     post_command(&cmd);
+}
+
+/*!
+ * @brief Confirm that the current velocity command is still wanted.  The
+ *        commanding task calls this every cycle while it waits; once a
+ *        command has expired, only a new motion_set_velocity() restarts
+ *        the wheels.
+ */
+void
+motion_keep_alive (void)
+{
+    UINT imask = 0u;
+
+    DI(imask);
+    g_alive++;
+    EI(imask);
 }
 
 /*!
@@ -570,6 +590,7 @@ accept_command (motion_cmd_t const * p_cmd)
     if (p_cmd->seq != g_seen_seq)
     {
         g_seen_seq   = p_cmd->seq;
+        g_vel_age_ms = 0u;
         g_start_l    = g_work.dist_l_mm;
         g_start_r    = g_work.dist_r_mm;
         g_elapsed_ms = 0u;
@@ -881,6 +902,37 @@ unpack_command (motion_cmd_packed_t const * p_in, motion_cmd_t * p_out)
 }
 
 /*!
+ * @brief Age the velocity command by one cycle (FR14).  A keep-alive
+ *        resets the age only while the command has not expired.
+ *
+ * @return true while the command is younger than
+ *         MOTION_VELOCITY_TIMEOUT_MS.
+ */
+static bool
+velocity_fresh (void)
+{
+    uint32_t alive = g_alive; /* one aligned word: a single load */
+
+    if (alive != g_seen_alive)
+    {
+        g_seen_alive = alive;
+
+        if (g_vel_age_ms <= MOTION_VELOCITY_TIMEOUT_MS)
+        {
+            g_vel_age_ms = 0u;
+        }
+    }
+
+    /* Saturates just past the limit, so it never wraps. */
+    if (g_vel_age_ms <= MOTION_VELOCITY_TIMEOUT_MS)
+    {
+        g_vel_age_ms += CONTROL_PERIOD_MS;
+    }
+
+    return (g_vel_age_ms <= MOTION_VELOCITY_TIMEOUT_MS);
+}
+
+/*!
  * @brief One 20 ms control cycle.
  */
 static void
@@ -901,8 +953,13 @@ control_step (void)
 
     if (MOTION_VELOCITY == cmd.mode)
     {
-        target_l = cmd.v_l;
-        target_r = cmd.v_r;
+        /* Not refreshed for MOTION_VELOCITY_TIMEOUT_MS: zero targets
+           brake the motors (FR14). */
+        if (velocity_fresh())
+        {
+            target_l = cmd.v_l;
+            target_r = cmd.v_r;
+        }
     }
     else if (g_work.b_busy)
     {

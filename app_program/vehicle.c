@@ -431,6 +431,7 @@ poll_inputs (void)
     poll_messages();
     check_faults();
     publish_status();
+    motion_keep_alive(); /* this loop is alive: keep driving (FR14) */
 }
 
 /*!
