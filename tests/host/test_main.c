@@ -1117,6 +1117,12 @@ test_command (void)
     check((command_parse("rate=0", &cmd)) && (COMMAND_RATE == cmd.kind),
           "rate off");
     check(!command_parse("rate=10", &cmd), "rate too fast rejected");
+    check((command_parse("nav=4", &cmd)) && (COMMAND_NAV == cmd.kind)
+              && (nearly(cmd.arg[0], 4.0f, GAIN_TOLERANCE))
+              && (command_allowed(COMMAND_NAV, false)),
+          "nav: U-turn, accepted while driving");
+    check((!command_parse("nav=0", &cmd)) && (!command_parse("nav=5", &cmd)),
+          "nav: only 1..4");
     check(!command_parse("pid=1,2", &cmd), "pid needs 3 values");
     check(!command_parse("pid=1,2,3,4", &cmd), "too many values");
     check(!command_parse("pid=-1,0,0", &cmd), "negative gain rejected");

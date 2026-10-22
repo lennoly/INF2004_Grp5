@@ -1,36 +1,25 @@
 #!/usr/bin/env python3
 """
-PicoCar dashboard - live telemetry, tuning and CSV logging (Buddy 1).
+PicoCar dashboard - live telemetry, tuning and CSV logging in the browser
+(Buddy 1).
 
-Connects to the car in one of two ways:
-  * MQTT   : python picocar_dashboard.py --mqtt 192.168.1.100 [--car car1]
-             (firmware built with WIFI_MQTT=1, broker e.g. mosquitto)
-  * Serial : python picocar_dashboard.py --serial auto      (or COM5, /dev/ttyACM0)
-             (any build; the car prints its frames on the USB console)
+  * Serial : python picocar_dashboard.py --serial auto      (or COM5)
+             (any build with the USB console; frames are printed as '@' hex)
+  * MQTT   : python picocar_dashboard.py --mqtt 172.20.10.3 [--car car1]
+             (WiFi builds; mosquitto on the laptop)
 
-Change Requirement 1: the car sends compact binary frames (frames.py
-decodes them into the same fields as the old JSON), on MQTT as the payload
-and on the console as '@' + hex.  Typed commands are turned into binary
-command frames for MQTT; the serial console still takes them as text.
+It starts a small web server on this PC (standard library only) and opens
+http://127.0.0.1:8050 in the browser: live values, two light charts (wheel
+speed vs target, line error + IR), events, the car's console, buttons,
+tuning boxes and a command box.  Every session is logged to
+logs/<date_time>/ (telemetry.csv, events.csv, heartbeat.csv,
+commands.log, console.log) for the report.
 
-What it does
-  * live plots  : wheel speed vs target, line error + IR, pitch + hump height,
-                  front ultrasonic distance (last 30 s)
-  * status panel: state, barcode, hump peak, obstacles, link health, gains
-  * tuning panel: edit speed PID / feed-forward / line PID and press Apply -
-                  sends pid= / ff= / line= to the car, no reflashing needed
-  * commands    : Start / Stop / Calibrate buttons, a free command box, and
-                  Fast (20 Hz) / Normal telemetry rate buttons
-  * logging     : every run is saved in logs/<date_time>/ as CSV files
-                  (telemetry.csv, events.csv, heartbeat.csv, commands.log,
-                  console.log) ready for the report tables; "Save PNG" stores
-                  the current plots next to them.
+Change Requirement 1: the car sends compact binary frames; frames.py
+decodes them.  Commands typed on the page go to the car as text over
+serial, or as binary command frames over MQTT.
 
-Headless mode (--headless) logs and prints a status line every second, and
-reads commands typed in the terminal.  --snapshot out.png --duration N renders
-the dashboard to an image after N seconds (no display needed).
-
-Requires: matplotlib, paho-mqtt (MQTT mode), pyserial (serial mode).
+Requires: paho-mqtt (MQTT mode), pyserial (serial mode).
 """
 
 import argparse
@@ -42,17 +31,19 @@ import queue
 import sys
 import threading
 import time
+import webbrowser
 from collections import deque
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import frames
 
-WINDOW_S = 30.0            # seconds of history shown in the plots
-GUI_REFRESH_MS = 250       # redraw period
+HISTORY_S = 30.0           # chart history kept for a page (re)load
+PUSH_PERIOD_S = 0.2        # page updates: at most 5 per second
 SERIAL_CHUNK = 16          # bytes per write: the car's UART FIFO is 32 deep
 SERIAL_CHUNK_GAP_S = 0.03  # and is polled every 20 ms
 RASPBERRY_PI_USB_VID = 0x2E8A
-FAST_RATE_MS = 50          # "Fast" button: 20 Hz telemetry for tuning
+WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 
 # ---------------------------------------------------------------------------
@@ -363,127 +354,94 @@ class Logger:
 
 
 # ---------------------------------------------------------------------------
-# Dashboard state (shared by GUI and headless mode)
+# Dashboard state (filled by the link thread, read by the web server)
 # ---------------------------------------------------------------------------
 class State:
-    SERIES = ["spd_l", "spd_r", "tgt_l", "tgt_r", "le", "ir_l", "ir_r",
-              "pitch", "hump_h", "front"]
+    """Latest values plus numbered event, console and chart-sample lists,
+    so each page asks only for what it has not seen yet."""
 
     def __init__(self, logger):
         self.log = logger
+        self.lock = threading.Lock()
         self.t0 = time.time()
         self.tel = {}
         self.hb = {}
         self.gains = None
         self.car_status = "unknown"
         self.link_msg = "starting"
-        self.events = deque(maxlen=14)
-        self.n_events = 0          # total ever added (headless printing)
-        self.console = deque(maxlen=6)
         self.n_tel = 0
         self.last_tel_time = None
-        self.t = deque()
-        self.data = {k: deque() for k in self.SERIES}
+        self.events = deque(maxlen=200)      # (number, text)
+        self.n_events = 0
+        self.console = deque(maxlen=200)     # (number, text)
+        self.n_console = 0
+        self.samples = deque()               # (number, t, values)
+        self.n_samples = 0
 
     def handle(self, kind, payload):
-        if kind == "telemetry":
-            self._telemetry(payload)
-        elif kind == "heartbeat":
-            self.hb = payload
-            self.log.heartbeat(payload)
-        elif kind == "event":
-            self.log.event(payload)
-            if payload.get("type") == "gains":
-                self.gains = payload
-            self._add_event(describe_event(payload))
-        elif kind == "status":
-            self.car_status = payload
-            self._add_event("car is %s" % payload)
-        elif kind == "link":
-            self.link_msg = payload
-        elif kind in ("console", "raw"):
-            self.log.console(payload)
-            if not payload.startswith("{"):
-                self.console.append(payload[:90])
+        with self.lock:
+            if kind == "telemetry":
+                self._telemetry(payload)
+            elif kind == "heartbeat":
+                self.hb = payload
+                self.log.heartbeat(payload)
+            elif kind == "event":
+                self.log.event(payload)
+                if payload.get("type") == "gains":
+                    self.gains = payload
+                self._add_event(describe_event(payload))
+            elif kind == "status":
+                self.car_status = payload
+                self._add_event("car is %s" % payload)
+            elif kind == "link":
+                self.link_msg = payload
+            elif kind in ("console", "raw"):
+                self.log.console(payload)
+                if not payload.startswith(("{", "@")):   # frames: decoded
+                    self.n_console += 1
+                    self.console.append((self.n_console, payload[:160]))
 
     def _add_event(self, text):
-        line = "%s  %s" % (datetime.now().strftime("%H:%M:%S"), text)
-        self.events.append(line if len(line) <= 78 else line[:75] + "...")
         self.n_events += 1
+        self.events.append(
+            (self.n_events, "%s  %s" % (datetime.now().strftime("%H:%M:%S"),
+                                        text)))
 
     def _telemetry(self, o):
         self.tel = o
         self.n_tel += 1
         self.last_tel_time = time.time()
         self.log.telemetry(o)
-        now = time.time() - self.t0
-        front = o.get("front")
-        values = {
-            "spd_l": pair(o, "spd", 0), "spd_r": pair(o, "spd", 1),
-            "tgt_l": pair(o, "tgt", 0), "tgt_r": pair(o, "tgt", 1),
-            "le": scaled(o.get("le"), 0.001),
-            "ir_l": scaled(pair(o, "ir", 0), 0.001),
-            "ir_r": scaled(pair(o, "ir", 1), 0.001),
-            "pitch": scaled(o.get("pitch"), 0.1),
-            "hump_h": (o.get("hump") or {}).get("h"),
-            "front": front if (front is not None and front >= 0) else None,
-        }
-        self.t.append(now)
-        for k in self.SERIES:
-            v = values[k]
-            self.data[k].append(float("nan") if v is None else v)
-        while self.t and now - self.t[0] > WINDOW_S:
-            self.t.popleft()
-            for k in self.SERIES:
-                self.data[k].popleft()
+        now = round(time.time() - self.t0, 3)
+        values = [pair(o, "spd", 0), pair(o, "spd", 1),
+                  pair(o, "tgt", 0), pair(o, "tgt", 1),
+                  scaled(o.get("le"), 0.001),
+                  scaled(pair(o, "ir", 0), 0.001),
+                  scaled(pair(o, "ir", 1), 0.001)]
+        self.n_samples += 1
+        self.samples.append((self.n_samples, now, values))
+        while self.samples and now - self.samples[0][1] > HISTORY_S:
+            self.samples.popleft()
 
-    def status_lines(self, link_where, link_up):
-        o, hb, g = self.tel, self.hb, self.gains
-        hump = o.get("hump") or {}
-        age = ("%.1f s ago" % (time.time() - self.last_tel_time)
-               if self.last_tel_time else "none yet")
-        lines = [
-            "LINK   %s  [%s]" % (link_where, "up" if link_up else "DOWN"),
-            "       %s | car %s" % (self.link_msg, self.car_status),
-            "DATA   %d telemetry msgs, last %s" % (self.n_tel, age),
-            "",
-            "STATE  %s" % o.get("st", "-"),
-            "RUN    %.1f s   odo %s mm   hdg %s deg" % (
-                (o.get("t") or 0) / 1000.0, o.get("odo", "-"),
-                fmt(scaled(o.get("hdg"), 0.1))),
-            "LINE   %s  err %s" % (o.get("ls", "-"),
-                                   fmt(scaled(o.get("le"), 0.001), 3)),
-            "BARCODE last '%s' -> %s   count %s" % (
-                o.get("bc", ""), o.get("nav", "-"), o.get("nbc", 0)),
-            "HUMP   now %s mm  last peak %s mm  MAX %s mm  (n=%s)" % (
-                hump.get("h", "-"), hump.get("pk", "-"),
-                hump.get("max", "-"), hump.get("n", 0)),
-            "OBST   front %s mm  last %s  passed %s" % (
-                o.get("front", "-"), o.get("act", "-"), o.get("nobs", 0)),
-            "MOTION %s   pitch %s deg" % (
-                o.get("ev", "-"), fmt(scaled(o.get("pitch"), 0.1))),
-            "",
-            "HEART  up %s s  seq %s  link %s" % (
-                hb.get("up", "-"), hb.get("seq", "-"), hb.get("link", "-")),
-            "       published %s  dropped %s  reconnects %s" % (
-                hb.get("pub", "-"), hb.get("drop", "-"),
-                hb.get("recon", "-")),
-        ]
-        if g:
-            lines += [
-                "GAINS  pid=%s  ff=%s" % (join_num(g.get("pid")),
-                                          join_num(g.get("ff"))),
-                "       line=%s  speed=%s  rate=%s ms" % (
-                    join_num(g.get("line")), g.get("speed"),
-                    g.get("rate")),
-            ]
-        else:
-            lines.append("GAINS  (not received yet - press Gains)")
-        return lines
-
-
-def fmt(value, digits=1):
-    return "-" if value is None else ("%." + str(digits) + "f") % value
+    def update_since(self, seen, link):
+        """Everything a page has not seen yet; seen = [events, console,
+        samples] counters, updated in place."""
+        with self.lock:
+            age = (round(time.time() - self.last_tel_time, 1)
+                   if self.last_tel_time else None)
+            msg = {
+                "link": {"where": link.where, "up": link.connected,
+                         "msg": self.link_msg, "car": self.car_status},
+                "tel": self.tel, "hb": self.hb, "gains": self.gains,
+                "n_tel": self.n_tel, "age_s": age,
+                "events": [e for n, e in self.events if n > seen[0]],
+                "console": [c for n, c in self.console if n > seen[1]],
+                "samples": [[t] + v for n, t, v in self.samples
+                            if n > seen[2]],
+            }
+            seen[0], seen[1], seen[2] = (self.n_events, self.n_console,
+                                         self.n_samples)
+        return msg
 
 
 def describe_event(e):
@@ -518,265 +476,60 @@ def join_num(values):
 
 
 # ---------------------------------------------------------------------------
-# GUI
+# Web server: the page, a Server-Sent Events stream and a command endpoint
 # ---------------------------------------------------------------------------
-class DashboardGUI:
-    def __init__(self, state, link, snapshot=None):
-        import matplotlib
-        if snapshot:
-            matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from matplotlib.widgets import Button, TextBox
-        self.plt = plt
-        self.state = state
-        self.link = link
-        self.snapshot = snapshot
+def make_handler(state, link):
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt_, *args):          # keep the terminal quiet
+            pass
 
-        self.fig = plt.figure(figsize=(15, 9))
-        try:
-            self.fig.canvas.manager.set_window_title("PicoCar dashboard")
-        except AttributeError:
-            pass                                  # no window (snapshot)
-        # plots in the top 2/3, controls in the bottom third
-        gs = self.fig.add_gridspec(2, 3, width_ratios=[1, 1, 1.2],
-                                   hspace=0.45, wspace=0.3, left=0.05,
-                                   right=0.99, top=0.92, bottom=0.36)
-        self.ax_spd = self.fig.add_subplot(gs[0, 0])
-        self.ax_line = self.fig.add_subplot(gs[0, 1])
-        self.ax_hump = self.fig.add_subplot(gs[1, 0])
-        self.ax_front = self.fig.add_subplot(gs[1, 1])
-        self.ax_text = self.fig.add_subplot(gs[:, 2])
-        self.ax_text.axis("off")
-        self.fig.suptitle("PicoCar live dashboard", fontsize=13,
-                          fontweight="bold", x=0.05, y=0.985, ha="left")
+        def _send(self, code, body, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
 
-        self.lines = {}
-        a = self.ax_spd
-        a.set_title("Wheel speed vs target (mm/s)", fontsize=10)
-        self.lines["spd_l"], = a.plot([], [], color="#2563eb", label="left")
-        self.lines["spd_r"], = a.plot([], [], color="#dc2626", label="right")
-        self.lines["tgt_l"], = a.plot([], [], color="#2563eb", ls="--",
-                                      lw=1, label="target L")
-        self.lines["tgt_r"], = a.plot([], [], color="#dc2626", ls="--",
-                                      lw=1, label="target R")
-        a.legend(loc="lower left", fontsize=7, ncol=4, framealpha=0.8)
+        def do_GET(self):
+            if self.path in ("/", "/index.html"):
+                with open(os.path.join(WEB_DIR, "index.html"), "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            elif self.path == "/stream":
+                self._stream()
+            else:
+                self._send(404, b"not found", "text/plain")
 
-        a = self.ax_line
-        a.set_title("Line: error (L-R) and IR (0 white .. 1 black)",
-                    fontsize=10)
-        a.set_ylim(-1.05, 1.05)
-        self.lines["le"], = a.plot([], [], color="#111827", label="error")
-        self.lines["ir_l"], = a.plot([], [], color="#16a34a", lw=1,
-                                     label="IR left")
-        self.lines["ir_r"], = a.plot([], [], color="#9333ea", lw=1,
-                                     label="IR right")
-        a.axhline(0, color="#9ca3af", lw=0.8)
-        a.legend(loc="lower left", fontsize=7, ncol=3, framealpha=0.8)
+        def _stream(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            seen = [0, 0, 0]
+            try:
+                while True:
+                    data = json.dumps(state.update_since(seen, link),
+                                      separators=(",", ":"), default=str)
+                    self.wfile.write(("data: %s\n\n" % data).encode("utf-8"))
+                    self.wfile.flush()
+                    time.sleep(PUSH_PERIOD_S)
+            except (BrokenPipeError, ConnectionResetError,
+                    ConnectionAbortedError, OSError):
+                return                                # page closed
 
-        a = self.ax_hump
-        a.set_title("Terrain: pitch (deg) and hump height (mm)", fontsize=10)
-        self.lines["pitch"], = a.plot([], [], color="#ea580c",
-                                      label="pitch deg")
-        a.set_ylabel("pitch (deg)", fontsize=8)
-        self.ax_hump2 = a.twinx()
-        self.lines["hump_h"], = self.ax_hump2.plot([], [], color="#0891b2",
-                                                   label="hump mm")
-        self.ax_hump2.set_ylabel("height (mm)", fontsize=8)
-        a.legend(handles=[self.lines["pitch"], self.lines["hump_h"]],
-                 loc="upper left", fontsize=7)
+        def do_POST(self):
+            if self.path != "/cmd":
+                self._send(404, b"not found", "text/plain")
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            text = self.rfile.read(min(length, 200)).decode(
+                "utf-8", errors="ignore").strip()
+            if text:
+                link.send(text)
+                state.log.command(text)
+            self._send(200, b"ok", "text/plain")
 
-        a = self.ax_front
-        a.set_title("Front ultrasonic distance (mm)", fontsize=10)
-        self.lines["front"], = a.plot([], [], color="#4b5563")
-        a.axhline(300, color="#dc2626", lw=0.8, ls=":")
-        a.text(0.99, 0.02, "300 mm = obstacle threshold", fontsize=7,
-               color="#dc2626", ha="right", transform=a.transAxes)
-
-        for ax in (self.ax_spd, self.ax_line, self.ax_hump, self.ax_front):
-            ax.grid(True, alpha=0.3)
-            ax.tick_params(labelsize=8)
-            ax.set_xlabel("time (s)", fontsize=8)
-
-        self.status_text = self.ax_text.text(
-            0.0, 1.0, "", va="top", ha="left", family="monospace",
-            fontsize=7.8, transform=self.ax_text.transAxes)
-
-        # ---- controls row ------------------------------------------------
-        self.widgets = []
-
-        def button(x, y, w, label, cb):
-            ax = self.fig.add_axes([x, y, w, 0.04])
-            b = Button(ax, label)
-            b.on_clicked(lambda _e: cb())
-            self.widgets.append(b)
-            return b
-
-        def box(x, y, w, label, initial=""):
-            ax = self.fig.add_axes([x, y, w, 0.035])
-            t = TextBox(ax, label, initial=initial, label_pad=0.05)
-            t.label.set_fontsize(8)
-            self.widgets.append(t)
-            return t
-
-        y1, y2, y3 = 0.235, 0.165, 0.10
-        button(0.05, y1, 0.07, "Start", lambda: self.send("start"))
-        button(0.125, y1, 0.07, "Stop", lambda: self.send("stop"))
-        button(0.20, y1, 0.08, "Calibrate", lambda: self.send("calibrate"))
-        button(0.285, y1, 0.07, "Gains", lambda: self.send("gains"))
-        button(0.36, y1, 0.09, "Fast 20 Hz",
-               lambda: self.send("rate=%d" % FAST_RATE_MS))
-        button(0.455, y1, 0.09, "Normal rate", lambda: self.send("rate=200"))
-        button(0.55, y1, 0.08, "Save PNG", self.save_png)
-
-        self.pid = [box(0.09 + i * 0.075, y2, 0.05, lbl)
-                    for i, lbl in enumerate(["speed Kp", "Ki", "Kd"])]
-        button(0.315, y2, 0.075, "Apply PID", self.apply_pid)
-        self.ff = [box(0.45 + i * 0.085, y2, 0.05, lbl)
-                   for i, lbl in enumerate(["Kf", "offset %"])]
-        button(0.63, y2, 0.07, "Apply FF", self.apply_ff)
-
-        self.line = [box(0.09 + i * 0.075, y3, 0.05, lbl)
-                     for i, lbl in enumerate(["line Kp", "Ki", "Kd"])]
-        button(0.315, y3, 0.075, "Apply line", self.apply_line)
-        self.speed = box(0.45, y3, 0.05, "cruise")
-        button(0.505, y3, 0.07, "Set speed",
-               lambda: self.send("speed=%s" % self.speed.text.strip()))
-
-        self.cmd = box(0.09, 0.035, 0.45, "command")
-        self.fig.text(0.05, 0.285, "Controls", fontsize=10,
-                      fontweight="bold")
-        self.cmd.on_submit(self.submit_command)
-        self.fig.text(0.55, 0.045, "Enter to send, e.g. pid=0.1,0.8,0  "
-                      "line=150,0,10  rate=100  help", fontsize=8,
-                      color="#6b7280")
-        self.feedback = self.fig.text(0.64, 0.245, "", fontsize=8,
-                                      color="#6b7280")
-        self.gains_seen = None
-
-    # ---- actions ----------------------------------------------------------
-    def send(self, command):
-        command = command.strip()
-        if not command:
-            return
-        self.link.send(command)
-        self.state.log.command(command)
-        self.feedback.set_text("sent: " + command)
-
-    def submit_command(self, text):
-        if text.strip():
-            self.send(text)
-            self.cmd.set_val("")
-
-    def _values(self, boxes):
-        return ",".join(b.text.strip() for b in boxes)
-
-    def apply_pid(self):
-        self.send("pid=" + self._values(self.pid))
-
-    def apply_ff(self):
-        self.send("ff=" + self._values(self.ff))
-
-    def apply_line(self):
-        self.send("line=" + self._values(self.line))
-
-    def save_png(self):
-        path = os.path.join(self.state.log.dir, "dashboard_%s.png" %
-                            datetime.now().strftime("%H%M%S"))
-        self.fig.savefig(path, dpi=110)
-        self.feedback.set_text("saved " + path)
-
-    # ---- refresh ----------------------------------------------------------
-    def fill_gains(self):
-        """Copy the car's gains into the tuning boxes when they change."""
-        g = self.state.gains
-        if not g or g is self.gains_seen:
-            return
-        self.gains_seen = g
-        for boxes, key in ((self.pid, "pid"), (self.ff, "ff"),
-                           (self.line, "line")):
-            for b, v in zip(boxes, g.get(key, [])):
-                b.set_val(str(v))
-        if g.get("speed") is not None:
-            self.speed.set_val(str(g.get("speed")))
-
-    def refresh(self):
-        s = self.state
-        t = list(s.t)
-        for k, ln in self.lines.items():
-            ln.set_data(t, list(s.data[k]))
-        for ax in (self.ax_spd, self.ax_line, self.ax_hump, self.ax_hump2,
-                   self.ax_front):
-            ax.relim()
-            ax.autoscale_view(scalex=True, scaley=(ax is not self.ax_line))
-            if t:
-                ax.set_xlim(max(0.0, t[-1] - WINDOW_S), max(WINDOW_S, t[-1]))
-        self.ax_front.set_ylim(bottom=0)       # keep 0 and 300 mm in view
-        self.ax_front.set_ylim(top=max(self.ax_front.get_ylim()[1], 400))
-        text = s.status_lines(self.link.where, self.link.connected)
-        text += ["", "EVENTS"] + list(s.events)
-        if s.console:
-            text += ["", "CONSOLE"] + list(s.console)
-        self.status_text.set_text("\n".join(text))
-        self.fill_gains()
-
-    def run(self, pump, duration=None):
-        from matplotlib.animation import FuncAnimation
-
-        def tick(_frame):
-            pump()
-            self.refresh()
-            return []
-
-        if self.snapshot:
-            end = time.time() + (duration or 5)
-            while time.time() < end:
-                pump()
-                time.sleep(0.05)
-            self.refresh()
-            self.fig.savefig(self.snapshot, dpi=100)
-            print("snapshot saved to", self.snapshot)
-            return
-        self._anim = FuncAnimation(self.fig, tick, interval=GUI_REFRESH_MS,
-                                   cache_frame_data=False)
-        if duration:
-            timer = self.fig.canvas.new_timer(interval=int(duration * 1000))
-            timer.add_callback(self.plt.close, self.fig)
-            timer.start()
-        self.plt.show()
-
-
-# ---------------------------------------------------------------------------
-# Headless mode
-# ---------------------------------------------------------------------------
-def run_headless(state, link, pump, duration):
-    """Log, print a status line every second, send typed commands."""
-    def stdin_reader():
-        for line in sys.stdin:
-            if line.strip():
-                link.send(line)
-                state.log.command(line.strip())
-
-    threading.Thread(target=stdin_reader, daemon=True).start()
-    print("headless: logging to %s  (type commands, Ctrl+C to quit)" %
-          state.log.dir)
-    end = time.time() + duration if duration else None
-    shown = 0
-    last = 0.0
-    while end is None or time.time() < end:
-        pump()
-        new = state.n_events - shown
-        if new > 0:
-            for e in list(state.events)[-min(new, len(state.events)):]:
-                print("  event:", e)
-            shown = state.n_events
-        if time.time() - last >= 1.0:
-            last = time.time()
-            o = state.tel
-            print("[%s] %s msgs=%d st=%s spd=%s le=%s hump_max=%s front=%s" % (
-                "up" if link.connected else "DOWN", state.link_msg,
-                state.n_tel, o.get("st"), o.get("spd"), o.get("le"),
-                (o.get("hump") or {}).get("max"), o.get("front")))
-        time.sleep(0.05)
+    return Handler
 
 
 # ---------------------------------------------------------------------------
@@ -794,9 +547,10 @@ def main():
     ap.add_argument("--car", default="car1", help="MQTT_CAR_ID of the car")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--log-dir", default="logs")
-    ap.add_argument("--headless", action="store_true")
-    ap.add_argument("--snapshot", metavar="PNG",
-                    help="render the dashboard to PNG after --duration s")
+    ap.add_argument("--http-port", type=int, default=8050,
+                    help="web page port (default 8050)")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="don't open the page automatically")
     ap.add_argument("--duration", type=float, default=None,
                     help="stop after N seconds")
     args = ap.parse_args()
@@ -815,26 +569,36 @@ def main():
             else SerialLink(args.serial, args.baud, inbox))
     logger = Logger(args.log_dir)
     state = State(logger)
-    print("logging to", logger.dir)
 
     def pump():
         while True:
-            try:
-                kind, payload = inbox.get_nowait()
-            except queue.Empty:
+            kind, payload = inbox.get()
+            if kind is None:
                 return
             state.handle(kind, payload)
 
+    threading.Thread(target=pump, daemon=True).start()
+    server = ThreadingHTTPServer(("127.0.0.1", args.http_port),
+                                 make_handler(state, link))
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = "http://127.0.0.1:%d" % args.http_port
+    print("PicoCar dashboard on %s  (%s)" % (url, link.where))
+    print("logging to %s   Ctrl+C to stop" % logger.dir)
+    if not args.no_browser:
+        webbrowser.open(url)
+
     try:
-        if args.headless:
-            run_headless(state, link, pump, args.duration)
-        else:
-            DashboardGUI(state, link, args.snapshot).run(pump, args.duration)
+        end = time.time() + args.duration if args.duration else None
+        while end is None or time.time() < end:
+            time.sleep(0.5)
     except KeyboardInterrupt:
         pass
     finally:
-        pump()
+        server.shutdown()
         link.close()
+        inbox.put((None, None))
+        time.sleep(0.1)
         logger.close()
         print("saved %d telemetry rows in %s" % (logger.rows, logger.dir))
 

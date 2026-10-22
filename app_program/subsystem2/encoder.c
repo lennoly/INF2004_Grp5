@@ -28,11 +28,35 @@ typedef struct
     uint32_t head;
 } wheel_state_t;
 
+/* Count-based cross-check of the period speed (see encoder_read()): below
+   ~100 mm/s on the floor the wheels stick-slip, and the burst of fast edges
+   in each lurch made the 4-period average read 400-900 mm/s while the car
+   crawled at ~10 mm/s. */
+#define COUNT_SAMPLES     (8u)     /* history, ~160 ms at a 20 ms caller  */
+#define COUNT_MIN_GAP_US  (10000u) /* record at most one sample per 10 ms */
+#define COUNT_MIN_SPAN_US (60000u) /* shortest window used for the check  */
+#define PLAUSIBLE_RATIO   (2.0f)   /* period speed may exceed the counted */
+#define PLAUSIBLE_MARGIN  (60.0f)  /* one by 2x + 60 mm/s (acceleration)  */
+
+typedef struct
+{
+    uint32_t ticks;
+    uint32_t t_us;
+} count_sample_t;
+
 /* Written by the GPIO interrupt, read by the motion task (Rule 1.8.c). */
 static volatile wheel_state_t g_wheel[ENCODER_COUNT];
 
-static void encoder_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
-static void check_glitch_filter(void);
+/* Tick history: used only by the one task that calls encoder_read() (the
+   motion task, or the TEST_WHEELS test task in that build). */
+static count_sample_t g_hist[ENCODER_COUNT][COUNT_SAMPLES];
+static uint32_t       g_hist_head[ENCODER_COUNT];
+static uint32_t       g_hist_count[ENCODER_COUNT];
+
+static void      encoder_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
+static void      check_glitch_filter(void);
+static float32_t counted_speed(uint32_t wheel, uint32_t ticks, uint32_t now_us,
+                               bool * pb_valid);
 
 /*!
  * @brief Configure both encoder inputs and their edge interrupts.
@@ -77,11 +101,14 @@ void
 encoder_read (uint32_t wheel, encoder_reading_t * p_out)
 {
     wheel_state_t snap;
-    UINT          imask = 0u;
-    uint32_t      idx   = 0u;
-    uint32_t      sum   = 0u;
-    uint32_t      mean  = 0u;
-    uint32_t      since = 0u;
+    UINT          imask     = 0u;
+    uint32_t      idx       = 0u;
+    uint32_t      sum       = 0u;
+    uint32_t      mean      = 0u;
+    uint32_t      since     = 0u;
+    uint32_t      now       = 0u;
+    float32_t     counted   = 0.0f;
+    bool          b_counted = false;
 
     /* Cast: drops the volatile qualifier for one whole-struct copy, which
        is safe because the interrupt cannot run while it is disabled. */
@@ -89,9 +116,11 @@ encoder_read (uint32_t wheel, encoder_reading_t * p_out)
     snap = *(wheel_state_t const *) &g_wheel[wheel];
     EI(imask);
 
-    since             = hal_time_us() - snap.last_rise_us;
+    now               = hal_time_us();
+    since             = now - snap.last_rise_us;
     p_out->ticks      = snap.ticks;
     p_out->speed_mm_s = 0.0f;
+    counted           = counted_speed(wheel, snap.ticks, now, &b_counted);
 
     if ((0u != snap.n_periods) && (since <= ENCODER_TIMEOUT_US))
     {
@@ -107,6 +136,14 @@ encoder_read (uint32_t wheel, encoder_reading_t * p_out)
            float32_t holds exactly (the timeout is far shorter). */
         p_out->speed_mm_s = (MM_PER_SLOT * US_PER_S) / (float32_t) mean;
     }
+
+    /* A lurch burst, not real speed: use the counted speed instead. */
+    if (b_counted
+        && (p_out->speed_mm_s
+            > ((PLAUSIBLE_RATIO * counted) + PLAUSIBLE_MARGIN)))
+    {
+        p_out->speed_mm_s = counted;
+    }
 }
 
 /*!
@@ -118,6 +155,58 @@ float32_t
 encoder_mm_per_tick (void)
 {
     return (MM_PER_SLOT / TICKS_PER_SLOT);
+}
+
+/*!
+ * @brief Average speed from the tick count over the last ~60..160 ms, and
+ *        record this reading in the history.
+ *
+ * @param[in]  wheel   ENCODER_LEFT or ENCODER_RIGHT.
+ * @param[in]  ticks   Current tick count.
+ * @param[in]  now_us  Current time.
+ * @param[out] pb_valid true if the history spans at least COUNT_MIN_SPAN_US.
+ *
+ * @return Speed in mm/s (0 when pb_valid is false).
+ */
+static float32_t
+counted_speed (uint32_t wheel, uint32_t ticks, uint32_t now_us, bool * pb_valid)
+{
+    uint32_t  head   = g_hist_head[wheel];
+    uint32_t  count  = g_hist_count[wheel];
+    uint32_t  oldest = 0u;
+    uint32_t  newest = 0u;
+    uint32_t  span   = 0u;
+    float32_t speed  = 0.0f;
+
+    *pb_valid = false;
+
+    if (count > 0u)
+    {
+        oldest = (head + COUNT_SAMPLES - count) % COUNT_SAMPLES;
+        newest = (head + COUNT_SAMPLES - 1u) % COUNT_SAMPLES;
+        span   = now_us - g_hist[wheel][oldest].t_us;
+
+        if (span >= COUNT_MIN_SPAN_US)
+        {
+            /* Casts: the tick difference over 160 ms and the span in
+               microseconds are far below 2^24, exact in float32_t. */
+            speed = ((float32_t) (ticks - g_hist[wheel][oldest].ticks)
+                     * (MM_PER_SLOT / TICKS_PER_SLOT) * US_PER_S)
+                    / (float32_t) span;
+            *pb_valid = true;
+        }
+    }
+
+    if ((0u == count)
+        || ((now_us - g_hist[wheel][newest].t_us) >= COUNT_MIN_GAP_US))
+    {
+        g_hist[wheel][head].ticks = ticks;
+        g_hist[wheel][head].t_us  = now_us;
+        g_hist_head[wheel]        = (head + 1u) % COUNT_SAMPLES;
+        g_hist_count[wheel] = (count < COUNT_SAMPLES) ? (count + 1u) : count;
+    }
+
+    return (speed);
 }
 
 /*!
