@@ -50,12 +50,12 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] Pitch sign, magnetometer spin calibration, hump heights vs ruler (§5)
 
 **Buddy 5: ultrasonic, servo, avoidance**
-- [ ] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1)
-- [ ] Calibrate the servo; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
+- [x] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1): merged 22 Oct, with the narrow scan (the mount lets the sensor turn only about ±25°)
+- [ ] Calibrate the servo (confirm `SERVO_MIN_DEG`/`SERVO_MAX_DEG` by eye); set `OBST_DEPTH_MAX_MM` to the deepest course obstacle; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
 - [ ] INT-10 fault injection with the other buddies (FAULT_PATHS.md)
 
 **Everyone / integration owner**
-- [ ] SMP guard (§4.7); the 138 BARR findings in `tests/host/test_data.c` and `fault_stub.c` (§4.8)
+- [ ] The 138 BARR findings in `tests/host/test_data.c` and `fault_stub.c` (§4.8). (SMP guard, §4.7: done in `app_main.c` by the Raees merge.)
 - [ ] INT-01, INT-06, INT-11, then SYS-01..05 on the full course, with videos (§8)
 - [ ] Fill in TEAM.md IDs, the REPORT author line and blanks, and regenerate `wiring.png` (§7)
 
@@ -91,14 +91,14 @@ Behaviour the brief also asks for, with no test written yet:
 
 | Branch | What it has | State |
 |---|---|---|
-| `origin/Raees` (Buddy 5) | STOP latch on a GP21 edge interrupt; scans check STOP every 20 ms; sonar stale stop (300 ms); ECHO-stuck-high = FAULT; 250 ms watchdog; vehicle and obstacle host tests | 16 commits ahead. **Conflicts** with `main` in `README.md`, `obstacle.c`, `vehicle.c`, `REPORT.md`, `tests/host`, every `firmware/*.uf2` |
+| `origin/Raees` (Buddy 5) | STOP latch on a GP21 edge interrupt; scans check STOP every 20 ms; sonar stale stop (300 ms); ECHO-stuck-high = FAULT; 250 ms watchdog; vehicle and obstacle host tests | **Merged** into `main` on 22 Oct (main was merged into the branch first and the conflicts resolved there; host tests 231/231, all modes rebuilt) |
 | `origin/max` (Buddy 3) | subsystem 3 rework, standalone host tests in `testing/subsystem3/`, `SUBSYSTEM3_REVIEW.md` | 2 commits ahead. **Conflicts** in `barcode.c`, `barcode.h`, `ir_sensor.c`, `subsystem3_test.c` (CR1 changed the same files). Also commits about 95k lines of PDFs into `max/` (datasheets, tribunal docs): move those out of git |
 
 Merge order suggestion: Raees first (safety), then max. Re-run
 `make -C tests/host`, build all modes, then rebuild `firmware/`. Do not
 hand-pick the `.uf2` conflicts: rebuild them after the merge.
 
-`docs/FAULT_PATHS.md` already marks the Raees items as "Raees branch, not merged".
+`docs/FAULT_PATHS.md` now shows the Raees items as merged.
 
 ## 4. Verified gaps in the code on `main`
 
@@ -110,7 +110,7 @@ run on the car.
 ### 4.1 Safety (A14 / FR14). Owner: Buddy 5 with Buddy 2, integration
 - **STOP is not seen during an obstacle scan** (up to 12 s), the
   **watchdog is missing**, and **sonar stale** is missing: all three are
-  fixed on `Raees` and only need merging (section 3).
+  fixed by the Raees merge (22 Oct, section 3).
 - **Velocity request older than 100 ms → brake** (FR14): **implemented
   (uncommitted)**. `motion.c` brakes a velocity command that is not
   refreshed for `MOTION_VELOCITY_TIMEOUT_MS` (100 ms). The vehicle task
@@ -155,8 +155,8 @@ reproduced on the car; covered by S4-U06.
 
 ### 4.7 No guard against an SMP build. Owner: integration
 All shared snapshots rely on DI/EI, which is atomic only because the build
-is single-core (`CNF_SMP=0`; SMP only if built with `SMP=1`). Nothing in
-`app_program/` checks it. Add `#if CNF_SMP` `#error` in one shared file.
+is single-core (`CNF_SMP=0`; SMP only if built with `SMP=1`). Done: since
+the Raees merge, `app_main.c` stops an SMP build with `#error`.
 
 ### 4.8 BARR-C checker is not at 0
 `python3 tools/barr_check.py app_program/*.[ch] app_program/subsystem*/*.[ch] tests/host/*.[ch]`
