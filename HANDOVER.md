@@ -69,7 +69,7 @@ whoever owns `vehicle.c`, together with the buddy named.
 | 4 | Detect humps | `imu.c`, `terrain.c` (LSM303D) | IMU reads correctly **at rest only** (before CR1) | S4-U02, SYS-03 |
 | 5 | Report highest hump peak | `terrain.c` `max_peak_mm` → telemetry | not tested | S4-U03, SYS-03 |
 | 6 | Detect obstacles on/near line | `obstacle.c` front monitor | one A9 screenshot only | S5-U04, SYS-04 |
-| 7 | Profile shape/position (ultrasonic) | coarse 30–150° + fine scan, `avoidance_profile()` | not tested | S5-U02 |
+| 7 | Profile shape/position (ultrasonic) | coarse 65/90/115° + fine scan (the mount limits the servo to about ±25°), `avoidance_profile()` | not tested | S5-U02 |
 | 8 | Bypass without collision | `avoidance.c` + `vehicle.c` | not tested | S5-U03, SYS-04 |
 | 9 | Reacquire the line | `vehicle.c` line search | not tested | S5-U03, SYS-04 |
 | 10 | Telemetry over WiFi | `subsystem1/` binary frames + `tools/dashboard` | no WiFi result recorded; **binary frames not run on the car yet** | S1-U03..U06, INT-08, SYS-05 |

@@ -152,6 +152,10 @@
 #define SERVO_MIN_US                (500u)    /* pulse at 0 deg [CALIBRATE] */
 #define SERVO_MAX_US                (2500u)   /* pulse at 180 deg           */
 #define SERVO_CENTRE_DEG            (90)      /* straight ahead             */
+/* [CALIBRATE] The mount stops the sensor at about 60 and 120 deg (bench,
+   22 Oct): never command past these, so the servo cannot push on it.      */
+#define SERVO_MIN_DEG               (65)      /* furthest right             */
+#define SERVO_MAX_DEG               (115)     /* furthest left              */
 /* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount)     */
 #define SERVO_INVERT                (0)
 #define SERVO_SETTLE_MS             (120u)
@@ -170,8 +174,7 @@
 #define OBST_MAX_CLEARANCE_MM       (1000)
 #define OBST_FINE_STEP_DEG          (5)
 #define OBST_FINE_PAD_DEG           (20)
-#define OBST_SIDE_SERVO_DEG         (15)      /* 15 = right, 165 = left     */
-#define OBST_PASS_MAX_MM            (600.0f)
+#define OBST_DEPTH_MAX_MM           (250.0f)  /* [CALIBRATE] deepest box    */
 #define OBST_MAX_ATTEMPTS           (2u)
 
 /* ------------------------------------------------------------------------ */

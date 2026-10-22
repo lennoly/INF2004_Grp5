@@ -13,6 +13,11 @@
 #define SERVO_WRAP      (19999u)
 #define SERVO_RANGE_DEG (180)
 
+#if (SERVO_MIN_DEG < 0) || (SERVO_MIN_DEG > SERVO_CENTRE_DEG) \
+    || (SERVO_MAX_DEG < SERVO_CENTRE_DEG) || (SERVO_MAX_DEG > SERVO_RANGE_DEG)
+#error "SERVO_MIN_DEG..SERVO_MAX_DEG must include the centre, within 0..180"
+#endif
+
 /* Set by the vehicle task, read by the sonar monitor task: volatile. */
 static volatile int32_t g_angle = SERVO_CENTRE_DEG;
 
@@ -27,7 +32,8 @@ servo_init (void)
 }
 
 /*!
- * @brief Move the servo; the angle is limited to 0..180 degrees.
+ * @brief Move the servo; the angle is limited to SERVO_MIN_DEG..
+ *        SERVO_MAX_DEG, the range the sensor mount allows.
  *
  * @param[in] angle_deg Requested angle in degrees, 0 (right) .. 180 (left).
  *                      SERVO_INVERT mirrors the pulse for a sensor mounted
@@ -41,17 +47,17 @@ servo_set_angle (int32_t angle_deg)
     int32_t  physical = 0;
     uint32_t pulse_us = 0u;
 
-    if (limited < 0)
+    if (limited < SERVO_MIN_DEG)
     {
-        limited = 0;
+        limited = SERVO_MIN_DEG;
     }
-    else if (limited > SERVO_RANGE_DEG)
+    else if (limited > SERVO_MAX_DEG)
     {
-        limited = SERVO_RANGE_DEG;
+        limited = SERVO_MAX_DEG;
     }
     else
     {
-        /* Already inside the servo's range. */
+        /* Already inside the mount's range. */
     }
 
 #if SERVO_INVERT
@@ -72,7 +78,7 @@ servo_set_angle (int32_t angle_deg)
 /*!
  * @brief Last angle commanded with servo_set_angle().
  *
- * @return Angle in degrees, 0..180.
+ * @return Angle in degrees, SERVO_MIN_DEG..SERVO_MAX_DEG.
  */
 int32_t
 servo_get_angle (void)
