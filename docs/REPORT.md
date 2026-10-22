@@ -403,6 +403,23 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 
 Every step is abortable, including the scan (STOP is checked every 20 ms while the servo settles and after every ping, so it acts within about one ping, 0.1 s), and failures fall back to LINE_SEARCH. After an IMU impact the car first reverses 120 mm, because the HC-SR04 gets no echo closer than 20 mm and the scan would otherwise report a clear path.
 
+**Worst-case obstacle time.** Worked out from the constants in `obstacle.c`, `avoidance.c`, `vehicle.c` and `car_config.h`, not measured yet. Bypass legs run at `SPEED_SLOW` (160 mm/s) and turns at `SPEED_TURN` (120 mm/s).
+
+| Step | How it is worked out | Worst | Typical |
+|---|---|---|---|
+| Stop and settle | `STOP_SETTLE_MS` | 0.2 s | 0.2 s |
+| Scan | each point: servo move (5° per 20 ms) + 120 ms settle + 3 pings × 60 ms. Coarse 65/90/115° ≈ 1.2 s, fine ±20° in 5° steps (11 points) ≈ 3.7 s, recentre ≈ 0.2 s | 5.1 s | 5.1 s |
+| Too close: reverse and re-scan | 120 mm at 160 mm/s ≈ 0.95 s + settle + scan; at most `OBST_MAX_ATTEMPTS` (2), then STOP | 2 × 6.25 s | 0 |
+| 4 × 90° turns | ≈ 1.2 s each | 4.8 s | 4.8 s |
+| Sidestep | object edge + 80 mm half corridor + 60 mm margin, ≤ ≈ 270 mm | 1.7 s | 1.0 s |
+| Pass | closest + 250 mm depth + 200 mm car + 60 mm margin, ≤ ≈ 810 mm | 5.1 s | 3.5 s |
+| Seek the line | sidestep + 200 mm | 3.0 s | 1.5 s |
+| Advance to the axle | `LINE_SENSOR_AHEAD_MM` 140 mm | 0.9 s | 0.9 s |
+| Re-acquire sweeps | 5 sweeps of 350 × (n + 1) ms | 5.25 s | 0.5 s |
+| **Total** | | **≈ 39 s** | **≈ 17 s** |
+
+Each move also has a 10 s timeout (`MOVE_TIMEOUT_MS`), so a stuck leg ends in STOP rather than hanging, and the 250 ms watchdog is fed throughout the scan. The team should compare the 39 s worst case with the course time limit and record measured times in step 3 of the hardware test below.
+
 **Servo direction.** The code assumes 0° points to the car's right. `SERVO_INVERT` in `car_config.h` corrects a mirrored mount; `TEST_ULTRASONIC` prints which side the closest echo is on, so a box offset to the right must read RIGHT.
 
 **Verification.**

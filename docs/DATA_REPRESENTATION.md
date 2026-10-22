@@ -36,6 +36,11 @@ These follow the Tribunal 1 decisions (Version B of the Tribunal 1 document).
 | Front sonar word `packed_front_t` | sonar monitor task | vehicle | one aligned 32-bit store / load, no lock | An aligned word access is atomic on the M0+. |
 | IR element ring (64 × 2 B) | 1 kHz IR ISR | barcode task | lock-free SPSC ring; `head` and `tail` in separate words | Each index has one writer; packing them into one word would break this (Tribunal 1). |
 | IR filter `g_filt` (3 × 16 bit) | IR ISR | tasks | one half-word store per update | Computed locally, stored once. |
+| Sonar counts `g_counts` (1 B: close 2 bits, FAULT 2 bits) | sonar monitor task; reset by `obstacle_monitor_enable()` | vehicle | whole-byte store, whole-byte read | Both counts are worked out from one read and stored with one write; the reset is a whole-byte store (the same as the two separate words before). |
+| Monitor handshake `gb_monitor`, `gb_monitor_busy` | vehicle / monitor task | the other task | one byte each | Kept apart on purpose: each flag has a different writer, and the pause handshake relies on two separate stores (section 4). |
+| Last scan points (3 B each) and counts | vehicle task (scan) | telemetry / TEST_ULTRASONIC | stored and read under DI/EI | One writer; copied whole. |
+| Servo angle `g_angle` (1 B) | the task moving the servo | sonar monitor | one byte store | Single store, atomic. |
+| Echo width `g_width_us` (16 bit) | echo ISR | the pinging task | one half-word store | Single store, atomic on the M0+. |
 | Encoder counters and periods | encoder ISR | motion task | unchanged 32-bit words | Documented exception (section 4). |
 | MQTT link counters (`mqtt_bridge.c`) | CYW43 task | telemetry | packed into 16 B | All packed counters have the same writer; the drop counter (written by the telemetry task) and the link state keep their own words. |
 | MQTT TX / RX rings | telemetry / CYW43 | CYW43 / telemetry | SPSC rings with memory barriers | Unchanged design; slots shrank. |
@@ -129,6 +134,12 @@ the imu task.
 | Vehicle queue message | command 3, speed 9, three line gains 20 bits each (0 … 1000.000 in 0.001) | 20 B → 12 B |
 | IR filter state | Q4 of a 12-bit reading = 16 bits | 3 × 4 B → 3 × 2 B |
 | Fault mask | 5 bits: motor stall, encoder, IMU, no echo, Wi-Fi loss | (new) |
+| Sonar counts `g_counts` (Buddy 5) | bits 0–1 close readings in a row (0…`OBST_CONFIRM_READINGS`), bits 2–3 FAULT pings in a row (0…`OBST_FAULT_LIMIT`); a compile-time check keeps both limits ≤ 3 | 2 × 4 B → 1 B |
+| Scan count `g_scans` (Buddy 5) | 8 bits, wraps (telemetry only tests for a change) | 4 B → 1 B |
+| Last scan points (Buddy 5) | angle 0…180° in 8 bits + distance 0…4000 mm in 16 bits (0xFFFF = no echo), 40 points; count 0…40 in 8 bits | 160 B + 4 B → 120 B + 1 B |
+| Servo angle (Buddy 5) | 0…180° in 8 bits | 4 B → 1 B |
+| Echo width (Buddy 5) | 0…65 535 µs in 16 bits, saturated (11 m, still OUT_OF_RANGE past the 4 m range) | 4 B → 2 B |
+| IR calibration white / black / sweep min / max (Buddy 3) | 12-bit ADC values in 16-bit storage, per channel | 3 × 4 × 2 B (unchanged; 16 bits is the smallest unit a 12-bit value fits) |
 | MQTT link counters | published 16, commands 16 (wrap), reconnects / re-joins / restarts / attempts 8 (saturate), why 4, Wi-Fi state 3, IPv4 32 | 44 B → 16 B + 2 B drops + 1 B link |
 
 ## 4. Documented exceptions
@@ -138,7 +149,9 @@ the imu task.
 | Encoder edge counters, edge periods (`encoder.c`) | 32-bit words | The counter is unbounded (deltas by unsigned subtraction); periods up to the 200 ms timeout need 18 bits. ISR-written words stay single-writer and lock-free instead of adding interrupt-off sections that would delay encoder time stamps (Tribunal 1). |
 | Task-private working state (PID controllers, hump tracker, filters, calibration, odometry) | `float32_t` | Not shared; packing adds rounding that accumulates. |
 | Microsecond time stamps | `uint32_t` | Full range needed for wrap-safe differences. |
-| Scan points (`avoidance_point_t`) | 2 × `int16_t` on the vehicle stack | Temporary, never shared. |
+| Scan points (`avoidance_point_t`) during a scan | 2 × `int16_t` on the vehicle stack | Temporary while scanning; the copy kept after the scan is packed (3 B per point, section 3). |
+| Monitor handshake `gb_monitor` / `gb_monitor_busy`; IR flags `gb_calibrating` (task → ISR) and `gb_bar_black` (ISR → task) | one `bool` byte each | Each flag has a different writer. Packing two flags into one byte would need a read-modify-write, which the Cortex-M0+ cannot do atomically (no LDREX/STREX), so one writer could undo the other's change. |
+| Line-following gains (`line_follow.c`) | 3 × `float32_t` | PID coefficients written by the `line=` command, read when the follower restarts; the queue message that carries them is packed (20 bits each). |
 | Kernel, lwIP, CYW43 and USB data | template | Not application data. |
 
 ## 5. RAM usage: before and after
@@ -177,6 +190,20 @@ The Wi-Fi builds save more: `mqtt_lwip.c`'s 512-byte publish buffer and
 64-byte command buffer became 47 and 15 bytes. Kernel message buffers shrink
 with their messages (barcode: 4 × 24 B → 4 × 6 B; vehicle: 20 → 12 B per
 message).
+
+**Update (23 Oct, after the Raees merge):** the Buddy 3 / 5 leftovers above
+(sonar counts, scan count and points, servo angle, echo width), MISSION build,
+USB console:
+
+| | text | data | bss |
+|---|---|---|---|
+| Before the leftovers | 91 997 | 88 | 17 876 |
+| After | 92 101 | 88 | 17 820 |
+| Change | +104 | 0 | **−56 B** |
+
+`obstacle.c`, `servo.c`, `ultrasonic.c` shared data: 194 B → 136 B
+(sonar counts 8 → 1, scan count 4 → 1, scan points 164 → 121, servo angle
+4 → 1, echo width 4 → 2).
 
 **Cost:** +8.5 KB of code (pack / unpack and frame functions) out of 2 MB
 flash, and task stacks are unchanged. The barcode task now widens a frame's
