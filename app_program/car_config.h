@@ -26,6 +26,7 @@
 #define APP_MODE_TEST_ULTRASONIC    (6)  /* Buddy 5: scan + profile + plan */
 #define APP_MODE_TEST_TELEMETRY     (7)  /* Buddy 1: MQTT telemetry        */
 #define APP_MODE_TEST_WHEELS        (8)  /* Buddy 2: raw motor pin check   */
+#define APP_MODE_TEST_BUDDY3        (9)  /* Moving IR + barcode test      */
 
 #ifndef APP_MODE
 #define APP_MODE                    APP_MODE_MISSION

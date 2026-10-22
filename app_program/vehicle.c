@@ -60,6 +60,7 @@
 #define REACQ_BASE_MS      (350u)
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
+#define FULL_MISSION       (APP_MODE != APP_MODE_TEST_BUDDY3)
 
 /* Cast: the loop period is a small number of milliseconds, which
    float32_t holds exactly. */
@@ -337,8 +338,9 @@ poll_buttons (void)
     bool b_pressed = b_stop && (!gb_btn_stop_prev);
 
     gb_start          = gb_start || (b_start && (!gb_btn_start_prev));
-    gb_calib          = gb_calib || (b_pressed && b_idle);
-    gb_abort          = gb_abort || (b_pressed && (!b_idle));
+    gb_calib          = gb_calib || (FULL_MISSION && b_pressed && b_idle);
+    gb_abort          = gb_abort || (FULL_MISSION ? (b_pressed && (!b_idle))
+                                                 : b_stop);
     gb_btn_start_prev = b_start;
     gb_btn_stop_prev  = b_stop;
 }
@@ -907,7 +909,7 @@ handle_line_follow (void)
     {
         set_state(VS_LINE_SEARCH, "line lost");
     }
-    else if (obstacle_due(motion.odo_mm))
+    else if (FULL_MISSION && obstacle_due(motion.odo_mm))
     {
         motion_stop();
         set_state(VS_OBSTACLE, "obstacle ahead / impact");
@@ -954,9 +956,16 @@ start_run (void)
 {
     imu_status_t imu;
 
-    imu_reset_run();
-    imu_get_status(&imu);
-    g_seen_impacts = imu.impacts;
+    if (!FULL_MISSION)
+    {
+        barcode_set_enabled(true); /* Flush stale frames before each run. */
+    }
+    if (FULL_MISSION)
+    {
+        imu_reset_run();
+        imu_get_status(&imu);
+        g_seen_impacts = imu.impacts;
+    }
     line_follow_init(&g_lf);
     g_st.pending_nav      = NAV_NONE;
     g_st.barcodes         = 0u;
@@ -996,13 +1005,20 @@ handle_requests (void)
         gb_abort = false;
         gb_start = false;
         motion_stop();
-        servo_set_angle(SERVO_CENTRE_DEG);
+        if (!FULL_MISSION)
+        {
+            barcode_set_enabled(false);
+        }
+        if (FULL_MISSION)
+        {
+            servo_set_angle(SERVO_CENTRE_DEG);
+        }
         set_state(VS_STOPPED, "stop command");
     }
 
     if ((VS_IDLE == g_st.state) || (VS_STOPPED == g_st.state))
     {
-        if (gb_calib)
+        if (FULL_MISSION && gb_calib)
         {
             gb_calib = false;
             calibrate();
@@ -1047,7 +1063,10 @@ run_state (void)
         break;
 
         case VS_OBSTACLE:
-            handle_obstacle();
+            if (FULL_MISSION)
+            {
+                handle_obstacle();
+            }
         break;
 
         default:
