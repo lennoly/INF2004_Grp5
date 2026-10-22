@@ -39,6 +39,7 @@
 #define GAIN_BITS     (20u) /* 0..1000.000 in 0.001 steps              */
 #define OFFSET_BITS   (17u) /* 0..100.000 in 0.001 steps               */
 #define RATE_BITS     (13u) /* 0..5000 ms                              */
+#define NAV_ARG_BITS  (3u)  /* nav= 1..4                               */
 #define WIN_BITS      (16u) /* ms                                      */
 #define LOAD_BITS     (7u)  /* %                                       */
 #define US_BITS       (16u) /* us, saturating                          */
@@ -411,6 +412,10 @@ frames_command (uint8_t * p_buf, uint32_t size, command_t const * p_cmd)
             put_value_u(&writer, p_cmd->arg[0], UNIT, RATE_BITS);
         break;
 
+        case COMMAND_NAV:
+            put_value_u(&writer, p_cmd->arg[0], UNIT, NAV_ARG_BITS);
+        break;
+
         case COMMAND_FF:
             put_value_u(&writer, p_cmd->arg[0], MILLI, GAIN_BITS);
             put_value_u(&writer, p_cmd->arg[1], MILLI, OFFSET_BITS);
@@ -469,6 +474,11 @@ frames_parse_command (uint8_t const * p_buf, uint32_t len, command_t * p_cmd)
             p_cmd->arg[0] = (float32_t) bitpack_get_u(
                 &reader, (COMMAND_SPEED == p_cmd->kind) ? PACKED_CRUISE_BITS
                                                          : RATE_BITS);
+        break;
+
+        case COMMAND_NAV:
+            /* Cast: below 2^3, exact in float32_t. */
+            p_cmd->arg[0] = (float32_t) bitpack_get_u(&reader, NAV_ARG_BITS);
         break;
 
         case COMMAND_FF:

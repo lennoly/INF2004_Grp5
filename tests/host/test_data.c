@@ -389,6 +389,15 @@ test_command_frames (void)
     cmd.arg[0] = 20.0f;
     len        = frames_command(buf, sizeof(buf), &cmd);
     gp_check(!frames_parse_command(buf, len, &out), "command: rate 20 ms rejected");
+    cmd.kind   = COMMAND_NAV;
+    cmd.arg[0] = 2.0f;
+    len        = frames_command(buf, sizeof(buf), &cmd);
+    gp_check((4u == len) && frames_parse_command(buf, len, &out) && (COMMAND_NAV == out.kind)
+                 && near(out.arg[0], 2.0f, TOL_UNIT),
+             "command: nav=2 (right) in 4 bytes");
+    cmd.arg[0] = 6.0f;
+    len        = frames_command(buf, sizeof(buf), &cmd);
+    gp_check(!frames_parse_command(buf, len, &out), "command: nav=6 rejected");
     cmd.kind   = COMMAND_STOP;
     cmd.n_args = 0u;
     len        = frames_command(buf, sizeof(buf), &cmd);

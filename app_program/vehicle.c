@@ -44,7 +44,7 @@
 #define LINE_GAINS         (3u)
 #define REACQ_SPEED        (90.0f)
 #define LINE_SEEN_LEVEL    (0.5f)
-#define CENTRED_ERROR      (0.35f)
+#define CENTRED_ERROR      (0.2f)  /* line search: |L - R| below this */
 #define CENTRED_SUM        (0.6f)
 #define QUARTER_TURN       (90.0f)
 #define HALF_TURN          (180.0f)
@@ -107,6 +107,10 @@ static volatile ID               gh_mbuf = 0;
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
 static float32_t     g_pending_odo        = 0.0f;
+static barcode_decode_nav_t g_nav_request = NAV_NONE; /* nav= command */
+static bool          gb_settling          = false; /* slow after a turn */
+static float32_t     g_settle_end_odo     = 0.0f;
+static uint32_t      g_settle_start_ms    = 0u;
 static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
 static uint32_t      g_seen_impacts       = 0u;
@@ -138,6 +142,7 @@ static bool            forward(float32_t dist_mm, float32_t speed);
 static bool            line_centred(ir_sensor_snapshot_t const * p_ir);
 static search_result_t reacquire_poll(void);
 static bool            reacquire_line(float32_t side);
+static void            start_settling(void);
 static void            execute_nav(barcode_decode_nav_t cmd);
 static bool            pass_obstacle(float32_t side, float32_t offset);
 static bool            seek_line(float32_t max_mm);
@@ -313,7 +318,17 @@ now_ms (void)
 static void
 set_state (vehicle_state_t state, char const * p_reason)
 {
-    UINT imask = 0u;
+    UINT         imask = 0u;
+    imu_status_t imu;
+
+    if ((VS_OBSTACLE == g_st.state) && (VS_OBSTACLE != state))
+    {
+        /* Jolts from the car's own scan, reverse and bypass moves are not
+           collisions: forget them, or the next line step would stop again
+           at once. */
+        imu_get_status(&imu);
+        g_seen_impacts = imu.impacts;
+    }
 
     DI(imask);
     g_st.state = state;
@@ -412,6 +427,14 @@ poll_messages (void)
                                       (float32_t) msg.gain_p / MSG_GAIN_STEP,
                                       (float32_t) msg.gain_i / MSG_GAIN_STEP,
                                       (float32_t) msg.gain_d / MSG_GAIN_STEP);
+            break;
+
+            case VCMD_NAV:
+                /* Cast: the field holds a checked 1..4 (command.c). */
+                g_nav_request = ((msg.arg >= (uint32_t) NAV_LEFT)
+                                 && (msg.arg <= (uint32_t) NAV_UTURN))
+                                    ? (barcode_decode_nav_t) msg.arg
+                                    : NAV_NONE;
             break;
 
             default:
@@ -668,9 +691,26 @@ reacquire_line (float32_t side)
     if (SEARCH_FOUND == result)
     {
         line_follow_init(&g_lf);
+        start_settling();
     }
 
     return (SEARCH_FOUND == result);
+}
+
+/*!
+ * @brief After a turn or a line search the car is rarely aligned with the
+ *        line: follow it at SPEED_SLOW_MM_S for the next LINE_SETTLE_MM so
+ *        the steering can line it up before cruise speed.
+ */
+static void
+start_settling (void)
+{
+    motion_status_t motion;
+
+    motion_get_status(&motion);
+    g_settle_end_odo  = motion.odo_mm + LINE_SETTLE_MM;
+    g_settle_start_ms = now_ms();
+    gb_settling       = true;
 }
 
 /*!
@@ -882,6 +922,7 @@ handle_obstacle (void)
             g_attempts = 0u;
             motion_get_status(&motion);
             g_front_ignore_until = motion.odo_mm + FRONT_IGNORE_MM;
+            start_settling();
             set_state(VS_LINE_FOLLOW, "path clear");
         break;
 
@@ -934,6 +975,14 @@ take_barcode (float32_t odo_mm)
         g_st.barcodes++;
         g_pending_odo = odo_mm;
     }
+
+    /* A nav= command is handled exactly like a barcode (not counted). */
+    if (NAV_NONE != g_nav_request)
+    {
+        g_st.pending_nav = g_nav_request;
+        g_nav_request    = NAV_NONE;
+        g_pending_odo    = odo_mm;
+    }
 }
 
 /*!
@@ -976,7 +1025,7 @@ obstacle_due (float32_t odo_mm)
     imu_get_status(&imu);
     b_ahead = (ULTRASONIC_NO_ECHO != front) && (front < OBST_DETECT_MM)
               && (odo_mm > g_front_ignore_until);
-    b_hit = (imu.impacts > g_seen_impacts);
+    b_hit = (0 != OBST_ON_IMPACT) && (imu.impacts > g_seen_impacts);
 
     /* The IMU clears its impact counter at the start of a run
        (imu_reset_run()); a smaller count is that reset, not an impact. */
@@ -1028,7 +1077,18 @@ handle_line_follow (void)
                                   ir_snap.norm[IR_RIGHT], DT_S);
 
         /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t. */
-        speed = line_follow_speed((float32_t) g_st.cruise_mm_s, g_lf.error);
+        speed = (float32_t) g_st.cruise_mm_s;
+        gb_settling = gb_settling && (motion.odo_mm < g_settle_end_odo)
+                      && ((now_ms() - g_settle_start_ms) < LINE_SETTLE_MAX_MS);
+
+        if (gb_settling)
+        {
+            /* Align, then go: slow, with firm proportional steering. */
+            speed = (speed > SPEED_SLOW_MM_S) ? SPEED_SLOW_MM_S : speed;
+            steer = LINE_SETTLE_KP * g_lf.error;
+        }
+
+        speed = line_follow_speed(speed, g_lf.error);
         g_st.line_error = g_lf.error;
         motion_set_velocity(speed - steer, speed + steer);
     }
@@ -1069,6 +1129,8 @@ start_run (void)
     g_seen_impacts = imu.impacts;
     line_follow_init(&g_lf);
     g_st.pending_nav      = NAV_NONE;
+    g_nav_request         = NAV_NONE; /* a nav= sent while idle is dropped */
+    start_settling(); /* the car is rarely lined up at the start */
     g_st.barcodes         = 0u;
     g_st.obstacles_passed = 0u;
     g_attempts            = 0u;

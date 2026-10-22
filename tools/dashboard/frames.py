@@ -46,10 +46,10 @@ REASONS = ["other", "boot", "start", "stop command", "spin 360", "calibrated",
            "fault: IMU", "fault: sonar no echo"]
 FAULTS = ["motor_stall", "encoder", "imu", "no_echo", "wifi_loss"]
 COMMANDS = ["start", "stop", "calibrate", "gains", "help", "speed", "pid",
-            "ff", "line", "rate", "timing"]
+            "ff", "line", "rate", "timing", "nav"]
 ARG_COUNT = {"start": 0, "stop": 0, "calibrate": 0, "gains": 0, "help": 0,
              "speed": 1, "pid": 3, "ff": 2, "line": 3, "rate": 1,
-             "timing": 0}
+             "timing": 0, "nav": 1}
 ERRORS = ["", "invalid command or value", "not a version-1 command frame",
           "only while IDLE or STOPPED", "not available in this build"]
 TIMING_NAMES = ["motion", "vehicle", "barcode", "imu", "hump", "ir_isr",
@@ -253,6 +253,8 @@ def _command(rd):
         args = [rd.u(9)]
     elif name == "rate":
         args = [rd.u(13)]
+    elif name == "nav":
+        args = [rd.u(3)]
     elif name == "ff":
         args = [rd.u(20) / 1000.0, rd.u(17) / 1000.0]
     elif name in ("pid", "line"):
@@ -300,6 +302,8 @@ def parse_text(text):
     if name == "rate" and not (round(args[0]) == 0
                                or 50 <= round(args[0]) <= 5000):
         raise ValueError("rate: 0 (off) or 50..5000 ms")
+    if name == "nav" and not 1 <= round(args[0]) <= 4:
+        raise ValueError("nav: 1 left, 2 right, 3 straight, 4 U-turn")
     return name, args, req_id
 
 
@@ -311,6 +315,8 @@ def command_frame(name, args=(), req_id=0):
         wr.u(args[0], 9)
     elif name == "rate":
         wr.u(args[0], 13)
+    elif name == "nav":
+        wr.u(round(args[0]), 3)
     elif name == "ff":
         wr.u(args[0] * 1000, 20)
         wr.u(args[1] * 1000, 17)

@@ -352,6 +352,11 @@ execute (command_t const * p_cmd)
             emit_timing();
         break;
 
+        case COMMAND_NAV:
+            /* As if this barcode was read (testing turns on the line). */
+            b_ok = vehicle_command(VCMD_NAV, car_math_round(p_cmd->arg[0]));
+        break;
+
         default:
             /* Refused: the result below says why. */
         break;
@@ -638,6 +643,8 @@ emit_help (void)
                      "offset (pct)\n"
                      "#   line=<kp>,<ki>,<kd> line-following PID\n"
                      "#   rate=<ms>           telemetry period, 0 = off\n"
+                     "#   nav=<1..4>          as if a barcode was read: 1 "
+                     "left, 2 right, 3 straight, 4 U-turn\n"
                      "#   speed=, pid=, ff=, line= only while IDLE or "
                      "STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "
