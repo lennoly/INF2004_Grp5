@@ -19,7 +19,8 @@
 #endif
 
 /* Set by the vehicle task, read by the sonar monitor task: volatile. */
-static volatile int32_t g_angle = SERVO_CENTRE_DEG;
+/* Change Requirement 1: 0..180 degrees in 8 bits. */
+static volatile uint8_t g_angle = SERVO_CENTRE_DEG;
 
 /*!
  * @brief Start the 50 Hz servo PWM and centre the sensor.
@@ -72,7 +73,8 @@ servo_set_angle (int32_t angle_deg)
                + (((uint32_t) physical * (SERVO_MAX_US - SERVO_MIN_US))
                   / (uint32_t) SERVO_RANGE_DEG);
     hal_pwm_set_level(PIN_SERVO, pulse_us); /* 1 count = 1 us */
-    g_angle = limited;
+    /* Cast: limited is clamped to the mount's 0..180 degree range. */
+    g_angle = (uint8_t) limited;
 }
 
 /*!
@@ -83,7 +85,8 @@ servo_set_angle (int32_t angle_deg)
 int32_t
 servo_get_angle (void)
 {
-    return (g_angle);
+    /* Cast: 0..180 widens exactly to int32_t. */
+    return ((int32_t) g_angle);
 }
 
 /*** end of file ***/
