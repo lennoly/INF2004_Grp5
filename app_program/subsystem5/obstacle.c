@@ -26,6 +26,8 @@
 #include "car_math.h"
 #include "servo.h"
 #include "ultrasonic.h"
+#include "fault.h"
+#include "packed.h"
 #include "obstacle.h"
 
 #define TASK_PRIORITY     (9)
@@ -43,20 +45,23 @@
 #define PAUSE_STEPS       (20u) /* wait at most 200 ms for the monitor */
 
 /* Written by the monitor and vehicle tasks, read by the vehicle and
-   telemetry tasks: volatile (Rule 1.8.c). */
-static volatile int32_t             g_front_mm      = ULTRASONIC_NO_ECHO;
-static volatile uint32_t            g_close_count   = 0u;
-static volatile uint32_t            g_fault_count   = 0u;
-static volatile uint32_t            g_fresh_ms      = 0u;
-static volatile bool                gb_monitor      = true;
-static volatile bool                gb_monitor_busy = false;
-static volatile avoidance_profile_t g_last;
-static volatile uint32_t            g_scans = 0u;
-static volatile avoidance_point_t   g_last_points[SCAN_MAX_POINTS];
-static volatile uint32_t            g_last_count = 0u;
+   telemetry tasks: volatile (Rule 1.8.c).  Change Requirement 1: the front
+   reading is one packed 32-bit word (class, distance, time) stored with a
+   single write, so the vehicle reads it without a lock; its time gives the
+   reading's age.  The last profile is packed to 16 bytes. */
+static volatile packed_front_t    g_front         = PACKED_FRONT_NONE;
+static volatile uint32_t          g_close_count   = 0u;
+static volatile uint32_t          g_fault_count   = 0u;
+static volatile bool              gb_monitor      = true;
+static volatile bool              gb_monitor_busy = false;
+static volatile packed_profile_t  g_last;
+static volatile uint32_t          g_scans = 0u;
+static volatile avoidance_point_t g_last_points[SCAN_MAX_POINTS];
+static volatile uint32_t          g_last_count = 0u;
 
-static uint32_t now_ms(void);
-static void     monitor_pause(void);
+static uint32_t       now_ms(void);
+static packed_front_t no_reading_yet(void);
+static void           monitor_pause(void);
 static bool     servo_go(int32_t angle_deg, obstacle_stop_cb_t p_should_stop,
                          bool b_abortable);
 static bool     look(int32_t angle_deg, obstacle_stop_cb_t p_should_stop,
@@ -88,8 +93,8 @@ obstacle_init (void)
     int32_t ercd   = E_OK;
 
     servo_init();
-    ercd       = ultrasonic_init();
-    g_fresh_ms = now_ms();
+    ercd    = ultrasonic_init();
+    g_front = no_reading_yet();
 
     ctsk.tskatr = TA_HLNG | TA_RNG3;
 
@@ -121,7 +126,7 @@ obstacle_init (void)
 int32_t
 obstacle_front_mm (void)
 {
-    return (g_front_mm);
+    return (packed_front_mm(g_front));
 }
 
 /*!
@@ -137,18 +142,6 @@ obstacle_ahead (void)
 }
 
 /*!
- * @brief Whether the front sensor looks broken: OBST_FAULT_LIMIT FAULT
- *        pings in a row (no echo pulse at all, or ECHO stuck high).
- *
- * @return true while the fault lasts.
- */
-bool
-obstacle_sensor_fault (void)
-{
-    return (g_fault_count >= OBST_FAULT_LIMIT);
-}
-
-/*!
  * @brief Whether the front reading is out of date: the monitor is enabled
  *        but has not finished a ping for OBST_STALE_MS (a starved monitor
  *        task, a sensor held by another task, or a servo off centre).
@@ -158,7 +151,8 @@ obstacle_sensor_fault (void)
 bool
 obstacle_front_stale (void)
 {
-    return (gb_monitor && ((now_ms() - g_fresh_ms) > OBST_STALE_MS));
+    return (gb_monitor
+            && (packed_front_age_ms(g_front, now_ms()) > OBST_STALE_MS));
 }
 
 /*!
@@ -177,11 +171,11 @@ obstacle_monitor_enable (bool b_on)
     }
 
     /* Start afresh: earlier readings must not confirm, fault or age the
-       next ones. */
-    g_front_mm    = ULTRASONIC_NO_ECHO;
+       next ones.  The FAULT_NO_ECHO bit is left to the monitor, its only
+       writer, which clears it at the next reading that is not a FAULT. */
+    g_front       = no_reading_yet();
     g_close_count = 0u;
     g_fault_count = 0u;
-    g_fresh_ms    = now_ms();
     gb_monitor    = b_on;
 }
 
@@ -232,6 +226,7 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
     bool              b_complete = false;
     uint32_t          idx        = 0u;
     UINT              imask      = 0u;
+    packed_profile_t  packed;
 
     monitor_pause();
     b_complete = coarse_scan(points, &count, &low, &high, p_should_stop);
@@ -249,9 +244,10 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
     if (b_complete)
     {
         b_found = avoidance_profile(points, count, p_prof);
+        packed_profile_pack(p_prof, &packed);
 
         DI(imask);
-        g_last = *p_prof;
+        g_last = packed;
 
         for (idx = 0u; idx < count; idx++)
         {
@@ -294,12 +290,15 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
 void
 obstacle_get_last (avoidance_profile_t * p_prof, uint32_t * p_scans)
 {
-    UINT imask = 0u;
+    packed_profile_t copy;
+    UINT             imask = 0u;
 
     DI(imask);
-    *p_prof  = g_last;
+    copy     = g_last;
     *p_scans = g_scans;
     EI(imask);
+
+    packed_profile_unpack(&copy, p_prof);
 }
 
 /*!
@@ -344,6 +343,19 @@ now_ms (void)
     (void) tk_get_tim(&tim);
 
     return (tim.lo);
+}
+
+/*!
+ * @brief A front word that holds no reading yet but is dated now, so a
+ *        monitor that has just started is not reported stale.
+ *
+ * @return Packed front word.
+ */
+static packed_front_t
+no_reading_yet (void)
+{
+    return (packed_front_make(packed_front_class(PACKED_FRONT_NONE),
+                              ULTRASONIC_NO_ECHO, now_ms()));
 }
 
 /*!
@@ -648,8 +660,24 @@ monitor_update (ultrasonic_ping_t const * p_ping)
             b_close ? count_up(g_close_count, OBST_CONFIRM_READINGS) : 0u;
         g_fault_count =
             b_fault ? count_up(g_fault_count, OBST_FAULT_LIMIT) : 0u;
-        g_front_mm = b_valid ? p_ping->dist_mm : ULTRASONIC_NO_ECHO;
-        g_fresh_ms = now_ms();
+        g_front = packed_front_make(
+            p_ping->result, b_valid ? p_ping->dist_mm : ULTRASONIC_NO_ECHO,
+            now_ms());
+
+        /* Shared fault mask (fault.h): this task is the only writer of the
+           no-echo bit. */
+        if (g_fault_count >= OBST_FAULT_LIMIT)
+        {
+            fault_raise(FAULT_NO_ECHO);
+        }
+        else if (0u == g_fault_count)
+        {
+            fault_clear(FAULT_NO_ECHO);
+        }
+        else
+        {
+            /* One FAULT ping: wait for the next one. */
+        }
     }
 }
 

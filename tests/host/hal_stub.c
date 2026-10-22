@@ -62,7 +62,7 @@ hal_wifi_join_failed (void)
 char const *
 hal_wifi_state (void)
 {
-    return ("host");
+    return ("joined");
 }
 
 /*** end of file ***/

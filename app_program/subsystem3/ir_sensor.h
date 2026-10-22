@@ -26,11 +26,10 @@ typedef struct
     float32_t norm[IR_COUNT]; /* 0 white .. 1 black            */
 } ir_sensor_snapshot_t;
 
-typedef struct
-{
-    bool     b_bar; /* true = black bar, false = white space */
-    uint32_t width_us;
-} ir_sensor_element_t;
+/* One completed bar / space, packed into 2 bytes (Change Requirement 1):
+   bit 0 bar (1) or space (0), bits 1-8 width in 1 ms sampler ticks, 255 =
+   over-range.  Same layout as packed_ir_element_t (packed.h). */
+typedef uint16_t ir_sensor_element_t;
 
 int32_t  ir_sensor_init(void);
 void     ir_sensor_read(ir_sensor_snapshot_t * p_out);

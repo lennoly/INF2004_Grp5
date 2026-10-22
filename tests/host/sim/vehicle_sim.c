@@ -345,6 +345,11 @@ void motion_set_velocity(float32_t left_mm_s, float32_t right_mm_s)
     gs_vel = 0.5f * (left_mm_s + right_mm_s);
 }
 
+void motion_keep_alive(void)
+{
+    /* The simulated motion never expires a velocity command. */
+}
+
 int32_t motion_wait(int32_t timeout_ms)
 {
     sim_advance((uint32_t) timeout_ms);

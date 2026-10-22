@@ -7,7 +7,7 @@
  *                   |  +--2 front pings < OBST_DETECT_MM or impact--> OBSTACLE
  *                   |       OBSTACLE: scan, plan, bypass, reacquire line
  * any --stop / blocked / line not found--> STOPPED --start--> LINE_FOLLOW
- * LINE_FOLLOW --sonar fault / no fresh front reading--> STOPPED
+ * any running state --fault bit / no fresh front reading--> STOPPED
  * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (360 degree spin)
  *
  * Manoeuvres are sequences of blocking motion moves executed in this task;
@@ -34,6 +34,9 @@
 #include "ultrasonic.h"
 #include "obstacle.h"
 #include "timing.h"
+#include "bitpack.h"
+#include "fault.h"
+#include "packed.h"
 #include "vehicle.h"
 
 #define TASK_PRIORITY      (6)
@@ -70,11 +73,25 @@
    float32_t holds exactly. */
 #define DT_S ((float32_t) LOOP_MS / MS_PER_S)
 
+#define MSG_ARG_BITS  (9u)  /* VCMD_SET_SPEED: mm/s, 0..511     */
+#define MSG_GAIN_BITS (20u) /* line gains: 0..1000.000 in 0.001 */
+#define MSG_GAIN_STEP (1000.0f)
+
+/* Faults that stop a run (Tribunal 1: sonar, motors and IMU leave the car
+   blind or out of control; Wi-Fi loss is report-only). */
+#define STOP_FAULTS                                                         \
+    ((1u << FAULT_MOTOR_STALL) | (1u << FAULT_ENCODER) | (1u << FAULT_IMU) \
+     | (1u << FAULT_NO_ECHO))
+
+/* Queue message to this task, packed (Change Requirement 1): 12 bytes
+   instead of 20.  Gains keep the 3 decimals of the text commands. */
 typedef struct
 {
-    vehicle_cmd_t cmd;
-    int32_t       arg;
-    float32_t     gains[LINE_GAINS]; /* VCMD_SET_LINE_GAINS: kp, ki, kd */
+    uint32_t cmd    : 3;  /* vehicle_cmd_t, 5 values           */
+    uint32_t arg    : 9;  /* MSG_ARG_BITS                      */
+    uint32_t gain_p : 20; /* VCMD_SET_LINE_GAINS: MSG_GAIN_BITS */
+    uint32_t gain_i : 20;
+    uint32_t gain_d : 20;
 } vehicle_msg_t;
 
 typedef enum
@@ -84,9 +101,11 @@ typedef enum
     SEARCH_ABORTED
 } search_result_t;
 
-/* Published status and the command queue, used by other tasks: volatile
-   (Rule 1.8.c). */
+/* Working status (this task) and the packed copy published for other
+   tasks (Change Requirement 1: 16 bytes instead of 48), plus the command
+   queue: volatile (Rule 1.8.c). */
 static volatile vehicle_status_t g_st;
+static volatile packed_vehicle_t g_pub;
 static volatile ID               gh_mbuf = 0;
 
 /* Set by the STOP button interrupt, cleared by the vehicle task: volatile
@@ -103,6 +122,7 @@ static uint32_t      g_seen_impacts       = 0u;
 static uint32_t      g_run_start_ms       = 0u;
 static uint32_t      g_start_down_ms      = 0u;
 static bool          gb_abort             = false;
+static char const *  gp_abort_why         = NULL; /* fault that aborted */
 static bool          gb_start             = false;
 static bool          gb_calib             = false;
 static bool          gb_btn_start_prev    = false;
@@ -124,6 +144,9 @@ static void            poll_messages(void);
 static void            poll_inputs(void);
 static bool            stop_requested(void);
 static void            wait_polled(uint32_t wait_ms);
+static void            check_faults(void);
+static void            publish_status(void);
+static uint32_t        gain_field(float32_t gain);
 static bool            run_move(void);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
@@ -138,7 +161,6 @@ static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
 static bool            nav_due(float32_t odo_mm);
-static char const *    sonar_problem(void);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
 static void            handle_line_search(void);
@@ -177,6 +199,7 @@ vehicle_init (void)
     g_st.cruise_mm_s = car_math_round(SPEED_CRUISE_MM_S);
     g_st.front_mm    = ULTRASONIC_NO_ECHO;
     g_st.p_reason    = hal_watchdog_caused_reset() ? "watchdog reset" : "boot";
+    publish_status();
 
     cmbf.mbfatr = TA_TFIFO;
     cmbf.bufsz  = MBF_MSGS * (sizeof(vehicle_msg_t) + sizeof(UW));
@@ -217,12 +240,13 @@ vehicle_init (void)
 bool
 vehicle_command (vehicle_cmd_t cmd, int32_t arg)
 {
-    vehicle_msg_t msg = {VCMD_START, 0, {0.0f, 0.0f, 0.0f}};
+    vehicle_msg_t msg = {0u, 0u, 0u, 0u, 0u};
 
-    msg.cmd = cmd;
-    msg.arg = arg;
+    /* Cast: enumeration constants are small and non-negative. */
+    msg.cmd = (uint32_t) cmd & bitpack_max_u(3u);
+    msg.arg = bitpack_clamp_u(arg, MSG_ARG_BITS);
 
-    /* Cast: the message is a few dozen bytes, far below INT's range. */
+    /* Cast: the message is 12 bytes, far below INT range. */
     return (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL));
 }
 
@@ -239,13 +263,15 @@ vehicle_command (vehicle_cmd_t cmd, int32_t arg)
 bool
 vehicle_set_line_gains (float32_t gain_p, float32_t gain_i, float32_t gain_d)
 {
-    vehicle_msg_t msg = {VCMD_SET_LINE_GAINS, 0, {0.0f, 0.0f, 0.0f}};
+    vehicle_msg_t msg = {0u, 0u, 0u, 0u, 0u};
 
-    msg.gains[0] = gain_p;
-    msg.gains[1] = gain_i;
-    msg.gains[2] = gain_d;
+    /* Cast: enumeration constants are small and non-negative. */
+    msg.cmd    = (uint32_t) VCMD_SET_LINE_GAINS;
+    msg.gain_p = gain_field(gain_p);
+    msg.gain_i = gain_field(gain_i);
+    msg.gain_d = gain_field(gain_d);
 
-    /* Cast: the message is a few dozen bytes, far below INT's range. */
+    /* Cast: the message is 12 bytes, far below INT range. */
     return (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL));
 }
 
@@ -257,11 +283,14 @@ vehicle_set_line_gains (float32_t gain_p, float32_t gain_i, float32_t gain_d)
 void
 vehicle_get_status (vehicle_status_t * p_out)
 {
-    UINT imask = 0u;
+    packed_vehicle_t copy;
+    UINT             imask = 0u;
 
     DI(imask);
-    *p_out = g_st;
+    copy = g_pub;
     EI(imask);
+
+    packed_vehicle_unpack(&copy, p_out);
 }
 
 /*!
@@ -323,7 +352,6 @@ set_state (vehicle_state_t state, char const * p_reason)
        car, so a stalled loop (a hung or starved task) resets the chip and
        stops the motors.  It is off in IDLE and STOPPED, the only states
        in which the WiFi chip may be restarted, which stalls the cyw43
-
        task above this one. */
     if ((VS_IDLE == state) || (VS_STOPPED == state))
     {
@@ -333,6 +361,8 @@ set_state (vehicle_state_t state, char const * p_reason)
     {
         hal_watchdog_start(WATCHDOG_TIMEOUT_MS);
     }
+
+    publish_status();
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
     (void) tm_printf((UB const *) "[vehicle] -> %s (%s)\n",
@@ -457,12 +487,13 @@ stop_button_isr (uint32_t pin, uint32_t events, uint32_t t_us)
 static void
 poll_messages (void)
 {
-    vehicle_msg_t msg = {VCMD_START, 0, {0.0f, 0.0f, 0.0f}};
+    vehicle_msg_t msg = {0u, 0u, 0u, 0u, 0u};
 
-    /* Cast: the message is a few dozen bytes, far below INT's range. */
+    /* Casts: the message is 12 bytes, far below INT range; the cmd field
+       holds a vehicle_cmd_t written by vehicle_command(). */
     while ((INT) sizeof(msg) == tk_rcv_mbf(gh_mbuf, &msg, TMO_POL))
     {
-        switch (msg.cmd)
+        switch ((vehicle_cmd_t) msg.cmd)
         {
             case VCMD_START:
                 gb_start = true;
@@ -477,12 +508,16 @@ poll_messages (void)
             break;
 
             case VCMD_SET_SPEED:
-                g_st.cruise_mm_s = clamp_speed(msg.arg);
+                /* Cast: the field is below 2^9. */
+                g_st.cruise_mm_s = clamp_speed((int32_t) msg.arg);
             break;
 
             case VCMD_SET_LINE_GAINS:
-                line_follow_set_gains(&g_lf, msg.gains[0], msg.gains[1],
-                                      msg.gains[2]);
+                /* Casts: the fields are below 2^20, exact in float32_t. */
+                line_follow_set_gains(&g_lf,
+                                      (float32_t) msg.gain_p / MSG_GAIN_STEP,
+                                      (float32_t) msg.gain_i / MSG_GAIN_STEP,
+                                      (float32_t) msg.gain_d / MSG_GAIN_STEP);
             break;
 
             default:
@@ -503,6 +538,87 @@ poll_inputs (void)
     hal_watchdog_feed();
     poll_buttons();
     poll_messages();
+    check_faults();
+    publish_status();
+    motion_keep_alive(); /* this loop is alive: keep driving (FR14) */
+}
+
+/*!
+ * @brief Read the shared fault mask (one call) and stop the run on a fault
+ *        that leaves the car blind or out of control.  A stalled owner
+ *        cannot set its own bit (fault.h), so the age of the front reading
+ *        is checked here too: none for OBST_STALE_MS means obstacles can no
+ *        longer be seen.
+ */
+static void
+check_faults (void)
+{
+    uint32_t mask      = fault_mask() & STOP_FAULTS;
+    bool     b_running = (VS_IDLE != g_st.state) && (VS_STOPPED != g_st.state);
+    bool     b_stale   = obstacle_front_stale();
+
+    if (b_running && ((0u != mask) || b_stale) && (!gb_abort))
+    {
+        gb_abort = true;
+
+        if (0u != (mask & (1u << FAULT_MOTOR_STALL)))
+        {
+            gp_abort_why = "fault: motor stall";
+        }
+        else if (0u != (mask & (1u << FAULT_ENCODER)))
+        {
+            gp_abort_why = "fault: encoder";
+        }
+        else if (0u != (mask & (1u << FAULT_IMU)))
+        {
+            gp_abort_why = "fault: IMU";
+        }
+        else if (0u != (mask & (1u << FAULT_NO_ECHO)))
+        {
+            gp_abort_why = "fault: sonar no echo";
+        }
+        else
+        {
+            gp_abort_why = "sonar stale";
+        }
+    }
+}
+
+/*!
+ * @brief Publish the packed status for the other tasks (short DI section).
+ */
+static void
+publish_status (void)
+{
+    vehicle_status_t work;
+    packed_vehicle_t packed;
+    UINT             imask = 0u;
+
+    DI(imask);
+    work = g_st;
+    EI(imask);
+
+    packed_vehicle_pack(&work, &packed);
+
+    DI(imask);
+    g_pub = packed;
+    EI(imask);
+}
+
+/*!
+ * @brief A line gain in 0.001 steps for the queue message.
+ *
+ * @param[in] gain Gain, 0..1000 (checked by the command parser).
+ *
+ * @return Field value.
+ */
+static uint32_t
+gain_field (float32_t gain)
+{
+    /* Casts: 20 bits fit int32_t; the quantised value is in 0..max. */
+    int32_t max = (int32_t) bitpack_max_u(MSG_GAIN_BITS);
+
+    return ((uint32_t) bitpack_quantise(gain, MSG_GAIN_STEP, 0, max));
 }
 
 /*!
@@ -1038,34 +1154,6 @@ nav_due (float32_t odo_mm)
 }
 
 /*!
- * @brief Front sensor health (Week 6 obstacle statechart): OBST_FAULT_LIMIT
- *        FAULT pings in a row, or no fresh front reading for OBST_STALE_MS,
- *        mean obstacles can no longer be seen.
- *
- * @return The stop reason, or NULL while the sensor is healthy.
- */
-static char const *
-sonar_problem (void)
-{
-    char const * p_reason = NULL;
-
-    if (obstacle_sensor_fault())
-    {
-        p_reason = "sonar fault";
-    }
-    else if (obstacle_front_stale())
-    {
-        p_reason = "sonar stale";
-    }
-    else
-    {
-        /* Healthy. */
-    }
-
-    return (p_reason);
-}
-
-/*!
  * @brief Whether an obstacle is ahead (front sonar, confirmed by
  *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
  *        Both triggers are ignored while the IMU reports the car on a hump:
@@ -1110,9 +1198,8 @@ handle_line_follow (void)
 {
     ir_sensor_snapshot_t ir_snap;
     motion_status_t      motion;
-    float32_t            steer     = 0.0f;
-    float32_t            speed     = 0.0f;
-    char const *         p_problem = sonar_problem();
+    float32_t            steer = 0.0f;
+    float32_t            speed = 0.0f;
 
     ir_sensor_read(&ir_snap);
     motion_get_status(&motion);
@@ -1122,13 +1209,7 @@ handle_line_follow (void)
     g_prev_odo      = motion.odo_mm;
     take_barcode(motion.odo_mm);
 
-    if (NULL != p_problem)
-    {
-        /* Obstacles can no longer be seen: stop (obstacle statechart). */
-        motion_stop();
-        set_state(VS_STOPPED, p_problem);
-    }
-    else if (nav_due(motion.odo_mm))
+    if (nav_due(motion.odo_mm))
     {
         motion_stop();
         set_state(VS_NAV_TURN, barcode_decode_command_name(g_st.pending_nav));
@@ -1245,7 +1326,9 @@ handle_requests (void)
         gb_start = false;
         motion_stop();
         servo_set_angle(SERVO_CENTRE_DEG);
-        set_state(VS_STOPPED, "stop command");
+        set_state(VS_STOPPED,
+                  (NULL != gp_abort_why) ? gp_abort_why : "stop command");
+        gp_abort_why = NULL;
     }
 
     if ((VS_IDLE == g_st.state) || (VS_STOPPED == g_st.state))
