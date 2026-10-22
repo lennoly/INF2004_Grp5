@@ -1,0 +1,169 @@
+
+# [logger] port closed: read failed: [Errno 6] Device not configured
+
+# [logger] connected /dev/cu.usbmodemMTK3PICO1 at 20:16:00
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,43,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+a9,VALID,44,7
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT with no target: use 5 V + divider)
+# front=-1 mm
+[scan] pts=5 found=0 d=4000 w=0 cl=0 cr=0
+# found=0 closest=4000@0 edges L=0 R=0 width=0 clear L=0 R=0 -> CONTINUE offset=0
+# points=5 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,30,-1
+pt,60,-1
+pt,90,-1
+pt,120,-1
+pt,150,-1
+# test done
+# press START (GP20)
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,42,7
+a9,VALID,42,7
+a9,VALID,42,7
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+a9,VALID,13,2
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT with no target: use 5 V + divider)
+# front=-1 mm
+[scan] pts=5 found=0 d=4000 w=0 cl=0 cr=0
+# found=0 closest=4000@0 edges L=0 R=0 width=0 clear L=0 R=0 -> CONTINUE offset=0
+# points=5 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,30,-1
+pt,60,-1
+pt,90,-1
+pt,120,-1
+pt,150,-1
+# test done
+# press START (GP20)
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+a9,VALID,9,1
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT with no target: use 5 V + divider)
+# front=-1 mm
+[scan] pts=5 found=0 d=4000 w=0 cl=0 cr=0
+# found=0 closest=4000@0 edges L=0 R=0 width=0 clear L=0 R=0 -> CONTINUE offset=0
+# points=5 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,30,-1
+pt,60,-1
+pt,90,-1
+pt,120,-1
+pt,150,-1
+# test done
+# press START (GP20)
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,49,8
+a9,VALID,50,8
+a9,VALID,49,8
+a9,VALID,46,7
+a9,VALID,46,7
+a9,VALID,48,8
+a9,VALID,49,8
+a9,VALID,48,8
+a9,VALID,49,8
+a9,VALID,43,7
+a9,VALID,15,2
+a9,VALID,50,8
+a9,VALID,49,8
+a9,VALID,15,2
+a9,VALID,56,9
+a9,VALID,57,9
+a9,VALID,54,9
+a9,VALID,54,9
+a9,VALID,57,9
+a9,VALID,49,8
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT with no target: use 5 V + divider)
+# front=-1 mm
+[scan] pts=5 found=0 d=4000 w=0 cl=0 cr=0
+# found=0 closest=4000@0 edges L=0 R=0 width=0 clear L=0 R=0 -> CONTINUE offset=0
+# points=5 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,30,-1
+pt,60,-1
+pt,90,-1
+pt,120,-1
+pt,150,-1
+# test done
+# press START (GP20)
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+a9,VALID,12,2
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT with no target: use 5 V + divider)
+# front=-1 mm
+[scan] pts=5 found=0 d=4000 w=0 cl=0 cr=0
+# found=0 closest=4000@0 edges L=0 R=0 width=0 clear L=0 R=0 -> CONTINUE offset=0
+# points=5 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,30,-1
+pt,60,-1
+pt,90,-1
+pt,120,-1
+pt,150,-1
+# test done
+# press START (GP20)

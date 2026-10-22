@@ -43,7 +43,8 @@ REASONS = ["other", "boot", "start", "stop command", "spin 360", "calibrated",
            "obstacle ahead / impact", "path clear", "obstacle bypassed",
            "bypass: line not found", "path blocked", "LEFT", "RIGHT",
            "STRAIGHT", "UTURN", "fault: motor stall", "fault: encoder",
-           "fault: IMU", "fault: sonar no echo"]
+           "fault: IMU", "fault: sonar no echo", "sonar stale",
+           "watchdog reset"]
 FAULTS = ["motor_stall", "encoder", "imu", "no_echo", "wifi_loss"]
 COMMANDS = ["start", "stop", "calibrate", "gains", "help", "speed", "pid",
             "ff", "line", "rate", "timing", "nav"]
