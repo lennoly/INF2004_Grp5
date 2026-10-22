@@ -16,6 +16,8 @@ mqtt_config.h
 # Firmware build output.
 *.uf2
 !firmware/*.uf2
+# WiFi builds hold the WiFi password (template/config): never commit them
+firmware/*_wifi.uf2
 *.elf
 *.bin
 *.map

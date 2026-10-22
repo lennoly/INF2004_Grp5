@@ -13,6 +13,9 @@
  *   ff=<kf>,<offset_pct>         speed feed-forward + static-friction offset
  *   line=<kp>,<ki>,<kd>          line-following PID
  *   rate=<ms>                    telemetry period, 0 = off, 50..5000
+ *   nav=<1..4>                   as if a barcode was read: 1 left,
+ *                                2 right, 3 straight, 4 U-turn (testing
+ *                                turns without barcodes; while running)
  *
  * Numbers are plain decimals ("0.08", "-1.5", "12"), without exponents.
  * The tuning commands (speed=, pid=, ff=, line=) are accepted only while
@@ -34,6 +37,8 @@
 #define COMMAND_OFFSET_MAX  (100.0f)
 #define COMMAND_RATE_MIN_MS (50)
 #define COMMAND_RATE_MAX_MS (5000)
+#define COMMAND_NAV_MIN     (1) /* NAV_LEFT  */
+#define COMMAND_NAV_MAX     (4) /* NAV_UTURN */
 
 typedef enum
 {
@@ -48,6 +53,7 @@ typedef enum
     COMMAND_LINE,
     COMMAND_RATE,
     COMMAND_TIMING,
+    COMMAND_NAV,
     COMMAND_INVALID
 } command_id_t;
 

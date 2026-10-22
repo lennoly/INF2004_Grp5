@@ -50,7 +50,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"ff", COMMAND_FF, 2u},
                                          {"line", COMMAND_LINE, 3u},
                                          {"rate", COMMAND_RATE, 1u},
-                                         {"timing", COMMAND_TIMING, 0u}};
+                                         {"timing", COMMAND_TIMING, 0u},
+                                         {"nav", COMMAND_NAV, 1u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -659,6 +660,16 @@ validate (command_t const * p_cmd)
             b_ok = (p_cmd->arg[0] >= (float32_t) SPEED_CMD_MIN_MM_S)
                    && (p_cmd->arg[0] <= (float32_t) SPEED_CMD_MAX_MM_S);
             gp_error = b_ok ? gp_error : "speed: 60..300 mm/s";
+        break;
+
+        case COMMAND_NAV:
+            /* Casts: the limits are small integers, exact in float32_t;
+               only < and > on floats (Rule 5.4.b.iv), then the rounded
+               value must be a whole command number. */
+            b_ok = (p_cmd->arg[0] > ((float32_t) COMMAND_NAV_MIN - 0.5f))
+                   && (p_cmd->arg[0] < ((float32_t) COMMAND_NAV_MAX + 0.5f));
+            gp_error = b_ok ? gp_error
+                            : "nav: 1 left, 2 right, 3 straight, 4 U-turn";
         break;
 
         default:

@@ -71,11 +71,12 @@
 /* Chassis geometry [CALIBRATE]                                             */
 /* ------------------------------------------------------------------------ */
 #define WHEEL_DIAMETER_MM           (65.0f)
-#define ENCODER_SLOTS               (20u)    /* slots on the encoder disc   */
-#define TRACK_WIDTH_MM              (130.0f) /* wheel centre to wheel centre*/
+#define ENCODER_SLOTS               (559u)    /* slots on the encoder disc   */
+/* [CALIBRATE] effective (tyres scrub in turns): 110 under, 147 over.   */
+#define TRACK_WIDTH_MM              (138.0f) /* wheel centre to wheel centre*/
 #define CAR_WIDTH_MM                (160.0f)
 #define CAR_LENGTH_MM               (200.0f)
-#define LINE_SENSOR_AHEAD_MM        (70.0f)  /* IR row ahead of the axle    */
+#define LINE_SENSOR_AHEAD_MM        (140.0f) /* IR row ahead of the axle    */
 
 /* Set to 1 if a motor spins backwards for a "forward" command.             */
 #define MOTOR_L_INVERT              (0)
@@ -86,21 +87,22 @@
 /* ------------------------------------------------------------------------ */
 #define MOTOR_PWM_FREQ_HZ           (10000u)  /* Robo Pico max is 20 kHz    */
 #define CONTROL_PERIOD_MS           (20u)     /* 50 Hz control loop         */
-#define ENCODER_GLITCH_US           (300u)    /* ignore faster edges        */
+/* 100 let motor noise through on the floor (fake speed spikes).          */
+#define ENCODER_GLITCH_US           (180u)    /* ignore faster edges        */
 /* [CALIBRATE] fastest wheel speed (TEST_MOTOR sweep at 100 % duty); the
    glitch filter must stay below the shortest half-period at this speed.   */
-#define SPEED_WHEEL_MAX_MM_S        (600.0f)
+#define SPEED_WHEEL_MAX_MM_S        (900.0f)
 #define ENCODER_TIMEOUT_US          (200000u) /* no edge => wheel stopped   */
 
 #define SPEED_KP                    (0.08f)   /* [CALIBRATE] %duty/(mm/s)   */
 #define SPEED_KI                    (0.60f)
 #define SPEED_KD                    (0.0f)
-#define SPEED_KF                    (0.10f)   /* feed-forward %duty/(mm/s)  */
-#define SPEED_OFFSET_PCT            (18.0f)   /* static friction offset     */
+#define SPEED_KF                    (0.104f)  /* feed-forward %duty/(mm/s)  */
+#define SPEED_OFFSET_PCT            (2.3f)    /* static friction offset     */
 #define STRAIGHT_KP                 (2.0f)    /* (mm/s) per mm L-R mismatch */
 
-#define SPEED_CRUISE_MM_S           (180.0f)
-#define SPEED_SLOW_MM_S             (100.0f)
+#define SPEED_CRUISE_MM_S           (300.0f)
+#define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
 #define SPEED_TURN_MM_S             (120.0f)
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
@@ -113,12 +115,12 @@
 /* ------------------------------------------------------------------------ */
 #define IR_SAMPLE_PERIOD_US         (1000u)   /* 1 kHz sampler ISR          */
 #define IR_BLACK_IS_HIGH            (1)       /* A0 rises over black        */
-#define IR_DEFAULT_WHITE            (400u)    /* [CALIBRATE] raw ADC counts */
-#define IR_DEFAULT_BLACK            (3000u)   /* [CALIBRATE]                */
+#define IR_DEFAULT_WHITE            (200u)    /* [CALIBRATE] raw ADC counts */
+#define IR_DEFAULT_BLACK            (2400u)   /* [CALIBRATE] TEST_IR 22 Oct */
 
-#define LINE_KP                     (160.0f)  /* (mm/s) per unit error      */
+#define LINE_KP                     (20.0f)   /* (mm/s) per unit error      */
 #define LINE_KI                     (0.0f)
-#define LINE_KD                     (12.0f)
+#define LINE_KD                     (0.0f)
 #define LINE_LOST_LEVEL             (0.15f)   /* both below => off line     */
 #define LINE_JUNCTION_LEVEL         (0.75f)   /* both above => junction     */
 #define LINE_JUNCTION_MIN_MM        (10.0f)
@@ -130,6 +132,11 @@
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
 #define NAV_EXECUTE_AT_JUNCTION     (1)       /* 0 = act immediately        */
 #define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => act anyway  */
+/* After a junction turn or a line search: follow at SPEED_SLOW_MM_S for    */
+/* this distance so the steering lines the car up, then cruise.             */
+#define LINE_SETTLE_MM              (150.0f)
+#define LINE_SETTLE_KP              (40.0f)   /* steering (mm/s) meanwhile  */
+#define LINE_SETTLE_MAX_MS          (1500u)   /* ...but never longer        */
 
 /* ------------------------------------------------------------------------ */
 /* IMU / terrain (Buddy 4)                                                  */
@@ -141,7 +148,8 @@
 #define HUMP_PITCH_ON_DEG           (6.0f)
 #define HUMP_PITCH_OFF_DEG          (3.0f)
 #define HUMP_MIN_HEIGHT_MM          (5.0f)
-#define IMPACT_JERK_MG              (700.0f)  /* sample-to-sample change    */
+/* [CALIBRATE] 700 mg counted motor starts and reverses as impacts.        */
+#define IMPACT_JERK_MG              (1500.0f) /* sample-to-sample change    */
 #define IMPACT_HOLDOFF_MS           (500u)
 #define TURN_RATE_EVENT_DPS         (40.0f)
 #define ACCEL_EVENT_MM_S2           (250.0f)
@@ -157,6 +165,9 @@
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
 #define OBST_DETECT_MM              (300)     /* start profiling below this */
+/* 1: an IMU impact also starts the obstacle routine.  0 while tuning line   */
+/* following: impacts are still counted and reported, but do not stop.     */
+#define OBST_ON_IMPACT              (0)
 #define OBST_TOO_CLOSE_MM           (90)      /* reverse below this         */
 #define OBST_CLUSTER_DEPTH_MM       (150)
 #define OBST_MARGIN_MM              (60.0f)

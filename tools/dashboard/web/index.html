@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PicoCar Dashboard</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1c2330; --muted: #6b7380;
+  --line: #e2e5ea; --accent: #2457c5; --ok: #1f8a4c; --bad: #c4332b;
+  --warn: #b7791f; --left: #2563eb; --right: #dc2626; --err: #1c2330;
+  --irl: #16a34a; --irr: #9333ea; --grid: #eceef2; --btn: #eef1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #8d95a3;
+    --line: #2b3240; --accent: #6b9bff; --ok: #3fbf74; --bad: #ef5b52;
+    --warn: #e0a94a; --left: #6b9bff; --right: #ff6b6b; --err: #e6e9ef;
+    --irl: #4ade80; --irr: #c084fc; --grid: #232a35; --btn: #252c38;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0 8px 0 0; }
+.pill { padding: 2px 9px; border-radius: 999px; background: var(--btn);
+  color: var(--muted); font-weight: 600; white-space: nowrap; }
+.pill.ok { color: #fff; background: var(--ok); }
+.pill.bad { color: #fff; background: var(--bad); }
+.pill.warn { color: #fff; background: var(--warn); }
+main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 340px;
+  gap: 12px; padding: 12px 16px; }
+@media (max-width: 1150px) { main { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 8px; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+button { font: inherit; padding: 6px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--btn); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--ok); color: #fff; border-color: transparent; }
+button.stop { background: var(--bad); color: #fff; border-color: transparent; }
+.tune { display: grid; grid-template-columns: 56px repeat(3, minmax(0, 1fr)) 58px;
+  gap: 4px; align-items: center; margin-bottom: 6px; }
+.tune label { color: var(--muted); }
+input { font: inherit; width: 100%; padding: 5px 6px; border: 1px solid var(--line);
+  border-radius: 5px; background: var(--bg); color: var(--ink); min-width: 0; }
+.cmd { display: flex; gap: 6px; }
+.note { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 700px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+canvas { width: 100%; height: 190px; display: block; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 14px; height: 3px; margin-right: 4px;
+  vertical-align: middle; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.bar { height: 7px; background: var(--grid); border-radius: 4px; overflow: hidden; margin: 2px 0 6px; }
+.bar b { display: block; height: 100%; width: 0; background: var(--accent); }
+.big { font-size: 22px; font-weight: 700; }
+.list { max-height: 300px; overflow-y: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; }
+.list div { padding: 1px 0; border-bottom: 1px solid var(--grid); white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.list .hot { color: var(--bad); }
+#feedback { color: var(--muted); min-height: 1.4em; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PicoCar</h1>
+  <span class="pill" id="p-link">link …</span>
+  <span class="pill" id="p-car">car …</span>
+  <span class="pill" id="p-state">state –</span>
+  <span class="pill" id="p-rate">0 msg/s</span>
+  <span class="pill" id="p-faults" hidden>faults</span>
+  <span class="note" id="where"></span>
+</header>
+
+<main>
+  <!-- Controls -->
+  <div>
+    <section>
+      <h2>Run</h2>
+      <div class="row">
+        <button class="primary" data-cmd="start">Start</button>
+        <button class="stop" data-cmd="stop">Stop</button>
+        <button data-cmd="calibrate">Calibration spin</button>
+      </div>
+      <div class="row">
+        <button data-cmd="rate=50">Fast 20 Hz</button>
+        <button data-cmd="rate=200">Normal 5 Hz</button>
+        <button data-cmd="gains">Gains</button>
+      </div>
+    </section>
+    <section>
+      <h2>Turn as if a barcode was read</h2>
+      <div class="row">
+        <button data-cmd="nav=1">Left</button>
+        <button data-cmd="nav=2">Right</button>
+        <button data-cmd="nav=3">Straight</button>
+        <button data-cmd="nav=4">U-turn</button>
+      </div>
+      <p class="note">At the next junction or after 400 mm; U-turn at once. Only while running.</p>
+    </section>
+    <section>
+      <h2>Tuning (car stopped)</h2>
+      <div class="tune"><label>Speed</label>
+        <input id="pid0" placeholder="Kp"><input id="pid1" placeholder="Ki"><input id="pid2" placeholder="Kd">
+        <button data-tune="pid">Apply</button></div>
+      <div class="tune"><label>FF</label>
+        <input id="ff0" placeholder="Kf"><input id="ff1" placeholder="offset %"><span></span>
+        <button data-tune="ff">Apply</button></div>
+      <div class="tune"><label>Line</label>
+        <input id="line0" placeholder="Kp"><input id="line1" placeholder="Ki"><input id="line2" placeholder="Kd">
+        <button data-tune="line">Apply</button></div>
+      <div class="tune"><label>Cruise</label>
+        <input id="speed0" placeholder="mm/s"><span></span><span></span>
+        <button data-tune="speed">Set</button></div>
+    </section>
+    <section>
+      <h2>Command</h2>
+      <div class="cmd">
+        <input id="cmd" placeholder="e.g. line=60,0,0   help" autocomplete="off">
+        <button id="send">Send</button>
+      </div>
+      <p id="feedback"></p>
+    </section>
+  </div>
+
+  <!-- Charts and values -->
+  <div>
+    <div class="charts">
+      <section>
+        <h2>Wheel speed (mm/s)</h2>
+        <canvas id="c-speed"></canvas>
+        <div class="legend"><span><i style="background:var(--left)"></i>left</span>
+          <span><i style="background:var(--right)"></i>right</span>
+          <span>dashed = target</span></div>
+      </section>
+      <section>
+        <h2>Line error and IR</h2>
+        <canvas id="c-line"></canvas>
+        <div class="legend"><span><i style="background:var(--err)"></i>error (+ line to the left)</span>
+          <span><i style="background:var(--irl)"></i>IR left</span>
+          <span><i style="background:var(--irr)"></i>IR right</span></div>
+      </section>
+    </div>
+    <div class="cards">
+      <section><h2>Motion</h2><dl class="kv">
+        <dt>Speed L / R</dt><dd id="v-spd">–</dd>
+        <dt>Target L / R</dt><dd id="v-tgt">–</dd>
+        <dt>PWM L / R</dt><dd id="v-pwm">–</dd>
+        <dt>Encoder L / R</dt><dd id="v-enc">–</dd>
+        <dt>Odometer</dt><dd id="v-odo">–</dd>
+        <dt>Heading</dt><dd id="v-hdg">–</dd>
+        <dt>Run time</dt><dd id="v-t">–</dd></dl></section>
+      <section><h2>Line and barcode</h2>
+        <dl class="kv"><dt>Line</dt><dd id="v-ls">–</dd>
+          <dt>Error</dt><dd id="v-le">–</dd></dl>
+        <div class="bar"><b id="b-le"></b></div>
+        <dl class="kv"><dt>IR left</dt><dd id="v-irl">–</dd></dl><div class="bar"><b id="b-irl"></b></div>
+        <dl class="kv"><dt>IR right</dt><dd id="v-irr">–</dd></dl><div class="bar"><b id="b-irr"></b></div>
+        <dl class="kv"><dt>IR barcode</dt><dd id="v-irb">–</dd></dl><div class="bar"><b id="b-irb"></b></div>
+        <dl class="kv"><dt>Last barcode</dt><dd id="v-bc">–</dd>
+          <dt>Pending turn</dt><dd id="v-pend">–</dd></dl></section>
+      <section><h2>IMU and humps</h2><dl class="kv">
+        <dt>Pitch / roll</dt><dd id="v-pr">–</dd>
+        <dt>Turn rate</dt><dd id="v-rate">–</dd>
+        <dt>Event</dt><dd id="v-ev">–</dd>
+        <dt>Hump now</dt><dd id="v-h">–</dd>
+        <dt>Last peak</dt><dd id="v-pk">–</dd>
+        <dt>Highest peak</dt><dd id="v-max" class="big">–</dd>
+        <dt>Humps</dt><dd id="v-n">–</dd></dl></section>
+      <section><h2>Obstacles</h2><dl class="kv">
+        <dt>Front</dt><dd id="v-front" class="big">–</dd>
+        <dt>Last action</dt><dd id="v-act">–</dd>
+        <dt>Passed</dt><dd id="v-nobs">–</dd></dl></section>
+      <section><h2>Link (heartbeat)</h2><dl class="kv">
+        <dt>MQTT</dt><dd id="v-hlink">–</dd>
+        <dt>WiFi</dt><dd id="v-wifi">–</dd>
+        <dt>Car IP</dt><dd id="v-ip">–</dd>
+        <dt>Sent / dropped</dt><dd id="v-pub">–</dd>
+        <dt>Reconnects</dt><dd id="v-recon">–</dd>
+        <dt>Re-joins / chip resets</dt><dd id="v-rejoin">–</dd>
+        <dt>IMU</dt><dd id="v-imu">–</dd></dl></section>
+    </div>
+  </div>
+
+  <!-- Events and console -->
+  <div>
+    <section><h2>Events</h2><div class="list" id="events"></div></section>
+    <section><h2>Car console</h2><div class="list" id="console"></div></section>
+  </div>
+</main>
+
+<script>
+"use strict";
+const HISTORY_S = 30, MAX_ROWS = 150;
+const $ = id => document.getElementById(id);
+const series = [];                 // [t, spdL, spdR, tgtL, tgtR, le, irL, irR]
+let dirty = false, lastGains = "", nTelPrev = 0, rateT = performance.now();
+
+// ---------- commands ----------
+function send(text) {
+  text = text.trim();
+  if (!text) return;
+  fetch("/cmd", { method: "POST", body: text })
+    .then(() => { $("feedback").textContent = "sent: " + text; })
+    .catch(() => { $("feedback").textContent = "not sent: dashboard stopped?"; });
+}
+document.querySelectorAll("[data-cmd]").forEach(b =>
+  b.addEventListener("click", () => send(b.dataset.cmd)));
+document.querySelectorAll("[data-tune]").forEach(b =>
+  b.addEventListener("click", () => {
+    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1 }[k];
+    const vals = [];
+    for (let i = 0; i < n; i++) vals.push($(k + i).value.trim() || "0");
+    send(k + "=" + vals.join(","));
+  }));
+$("send").addEventListener("click", () => { send($("cmd").value); $("cmd").select(); });
+$("cmd").addEventListener("keydown", e => { if (e.key === "Enter") $("send").click(); });
+
+// ---------- helpers ----------
+const fmt = (v, d = 0, unit = "") => (v === null || v === undefined || Number.isNaN(v))
+  ? "–" : Number(v).toFixed(d) + unit;
+const two = (a, d = 0) => (Array.isArray(a) ? fmt(a[0], d) + " / " + fmt(a[1], d) : "–");
+const scaled = (v, f) => (v === null || v === undefined) ? null : v * f;
+function setText(id, text) { const el = $(id); if (el.textContent !== text) el.textContent = text; }
+function bar(id, frac) { $(id).style.width = Math.max(0, Math.min(1, frac)) * 100 + "%"; }
+function pill(id, text, cls) { const el = $(id); el.textContent = text; el.className = "pill " + (cls || ""); }
+function addRows(listId, rows, hot) {
+  const box = $(listId);
+  for (const r of rows) {
+    const div = document.createElement("div");
+    div.textContent = r;
+    if (hot && hot.test(r)) div.className = "hot";
+    box.prepend(div);
+  }
+  while (box.childNodes.length > MAX_ROWS) box.lastChild.remove();
+}
+
+// ---------- updates from the dashboard server ----------
+function update(m) {
+  const L = m.link || {}, o = m.tel || {}, hb = m.hb || {};
+  pill("p-link", L.up ? "link up" : "link down", L.up ? "ok" : "bad");
+  pill("p-car", "car " + (L.car || "?"), L.car === "online" ? "ok" : (L.car === "offline" ? "bad" : ""));
+  setText("where", L.where + "  ·  " + L.msg + (m.age_s !== null ? "  ·  last data " + m.age_s + " s ago" : ""));
+  const st = o.st || "–";
+  pill("p-state", st, st === "STOPPED" ? "bad" : (st === "OBSTACLE" || st === "LINE_SEARCH" ? "warn" : ""));
+  const now = performance.now();
+  if (now - rateT >= 1000) {
+    pill("p-rate", Math.round((m.n_tel - nTelPrev) * 1000 / (now - rateT)) + " msg/s");
+    nTelPrev = m.n_tel; rateT = now;
+  }
+  const faults = (o.faults && o.faults.length) ? o.faults : (hb.faults || []);
+  $("p-faults").hidden = !faults.length;
+  if (faults.length) pill("p-faults", "faults: " + faults.join(", "), "bad");
+
+  setText("v-spd", two(o.spd)); setText("v-tgt", two(o.tgt));
+  setText("v-pwm", two(o.pwm)); setText("v-enc", two(o.enc));
+  setText("v-odo", fmt(o.odo, 0, " mm")); setText("v-hdg", fmt(scaled(o.hdg, 0.1), 1, "°"));
+  setText("v-t", fmt(scaled(o.t, 0.001), 1, " s"));
+  setText("v-ls", o.ls || "–");
+  const le = scaled(o.le, 0.001);
+  setText("v-le", fmt(le, 2)); bar("b-le", le === null ? 0 : (le + 1) / 2);
+  const ir = o.ir || [];
+  [["irl", 0], ["irr", 1], ["irb", 2]].forEach(([k, i]) => {
+    const v = scaled(ir[i], 0.001); setText("v-" + k, fmt(v, 2)); bar("b-" + k, v || 0);
+  });
+  setText("v-bc", (o.bc || "–") + "  (" + fmt(o.nbc) + " read)");
+  setText("v-pend", o.pend || "–");
+  setText("v-pr", fmt(scaled(o.pitch, 0.1), 1, "°") + " / " + fmt(scaled(o.roll, 0.1), 1, "°"));
+  setText("v-rate", fmt(scaled(o.rate, 0.1), 1, " °/s"));
+  setText("v-ev", o.ev || "–");
+  const h = o.hump || {};
+  setText("v-h", fmt(h.h, 1, " mm")); setText("v-pk", fmt(h.pk, 1, " mm"));
+  setText("v-max", fmt(h.max, 1, " mm")); setText("v-n", fmt(h.n));
+  setText("v-front", (o.front === null || o.front === undefined || o.front < 0) ? "no echo" : fmt(o.front, 0, " mm"));
+  setText("v-act", o.act || "–"); setText("v-nobs", fmt(o.nobs));
+  setText("v-hlink", hb.link || "–"); setText("v-wifi", hb.wifi || "–");
+  setText("v-ip", hb.ip || "–");
+  setText("v-pub", hb.pub === undefined ? "–" : hb.pub + " / " + hb.drop);
+  setText("v-recon", fmt(hb.recon));
+  setText("v-rejoin", hb.rejoin === undefined ? "–" : hb.rejoin + " / " + hb.wreset);
+  setText("v-imu", hb.imu === undefined ? "–" : (hb.imu ? "ok" : "NOT OK") + ", i2c errors " + hb.i2cerr);
+
+  if (m.gains) {
+    const key = JSON.stringify(m.gains);
+    if (key !== lastGains) {
+      lastGains = key;
+      const g = m.gains;
+      const put = (id, v) => { const el = $(id); if (document.activeElement !== el && v !== undefined) el.value = +(+v).toFixed(3); };
+      [0, 1, 2].forEach(i => { put("pid" + i, (g.pid || [])[i]); put("line" + i, (g.line || [])[i]); });
+      [0, 1].forEach(i => put("ff" + i, (g.ff || [])[i]));
+      put("speed0", g.speed);
+    }
+  }
+  if (m.events.length) addRows("events", m.events, /IMPACT|STOPPED|FAILED|OBSTACLE|offline/);
+  if (m.console.length) addRows("console", m.console);
+  if (m.samples.length) {
+    for (const s of m.samples) series.push(s);
+    const tEnd = series[series.length - 1][0];
+    while (series.length && tEnd - series[0][0] > HISTORY_S) series.shift();
+    dirty = true;
+  }
+}
+
+// ---------- charts (plain canvas) ----------
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function chart(canvas, lines, fixed) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+  const g = canvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const padL = 38, padB = 16, pw = w - padL - 6, ph = h - padB - 6;
+  let lo = fixed ? fixed[0] : Infinity, hi = fixed ? fixed[1] : -Infinity;
+  if (!fixed) {
+    for (const s of series) for (const ln of lines) {
+      const v = s[ln.i]; if (v === null || v === undefined) continue;
+      if (v < lo) lo = v; if (v > hi) hi = v;
+    }
+    if (!Number.isFinite(lo)) { lo = 0; hi = 200; }
+    lo = Math.min(lo, 0); hi = Math.max(hi, lo + 50);
+    const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  }
+  const tEnd = series.length ? series[series.length - 1][0] : 0, t0 = tEnd - HISTORY_S;
+  const X = t => padL + (t - t0) / HISTORY_S * pw;
+  const Y = v => 6 + (hi - v) / (hi - lo) * ph;
+  g.font = "11px system-ui, sans-serif"; g.fillStyle = css("--muted");
+  g.strokeStyle = css("--grid"); g.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) {
+    const v = lo + (hi - lo) * k / 4, y = Y(v);
+    g.beginPath(); g.moveTo(padL, y); g.lineTo(padL + pw, y); g.stroke();
+    g.fillText(Math.abs(hi - lo) < 5 ? v.toFixed(1) : Math.round(v), 2, y + 4);
+  }
+  if (lo < 0 && hi > 0) { g.strokeStyle = css("--muted"); g.beginPath(); g.moveTo(padL, Y(0)); g.lineTo(padL + pw, Y(0)); g.stroke(); }
+  g.fillText("-30 s", padL, h - 3); g.fillText("now", padL + pw - 22, h - 3);
+  for (const ln of lines) {
+    g.strokeStyle = css(ln.color); g.lineWidth = ln.width || 1.6;
+    g.setLineDash(ln.dash ? [5, 4] : []);
+    g.beginPath(); let pen = false;
+    for (const s of series) {
+      const v = s[ln.i];
+      if (v === null || v === undefined) { pen = false; continue; }
+      const x = X(s[0]), y = Y(v);
+      if (pen) g.lineTo(x, y); else { g.moveTo(x, y); pen = true; }
+    }
+    g.stroke();
+  }
+  g.setLineDash([]);
+}
+function draw() {
+  if (dirty) {
+    dirty = false;
+    chart($("c-speed"), [
+      { i: 3, color: "--left", dash: true, width: 1.2 }, { i: 4, color: "--right", dash: true, width: 1.2 },
+      { i: 1, color: "--left" }, { i: 2, color: "--right" }]);
+    chart($("c-line"), [
+      { i: 6, color: "--irl", width: 1.2 }, { i: 7, color: "--irr", width: 1.2 },
+      { i: 5, color: "--err", width: 1.8 }], [-1.05, 1.05]);
+  }
+  requestAnimationFrame(draw);
+}
+window.addEventListener("resize", () => { dirty = true; });
+requestAnimationFrame(draw);
+
+// ---------- live stream ----------
+function connect() {
+  const es = new EventSource("/stream");
+  es.onmessage = e => update(JSON.parse(e.data));
+  es.onerror = () => { pill("p-link", "dashboard stopped?", "bad"); };
+}
+connect();
+</script>
+</body>
+</html>

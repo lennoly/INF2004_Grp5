@@ -215,13 +215,13 @@ IDLE or STOPPED".
 
 ### Laptop dashboard and telemetry demonstration
 
-`tools/dashboard/picocar_dashboard.py` (Python: matplotlib, paho-mqtt, pyserial) connects over MQTT (`--mqtt <broker>`) or over the USB cable (`--serial auto` finds the Pico by its USB vendor ID 0x2E8A).
+`tools/dashboard/picocar_dashboard.py` (Python: paho-mqtt, pyserial; the web server is the standard library) connects over MQTT (`--mqtt <broker>`) or over the USB cable (`--serial auto` finds the Pico by its USB vendor ID 0x2E8A) and serves one web page at `http://127.0.0.1:8050`. The page gets at most five updates a second (Server-Sent Events) and redraws a chart only when new data arrived, so it stays smooth at 20 Hz telemetry.
 
 ![Dashboard with the car simulator](img/dashboard.png){width=100%}
 
-- **Live plots of the last 30 s:** wheel speed against target, line error and IR, pitch and hump height, and front distance against the 300 mm threshold.
+- **Live charts of the last 30 s:** wheel speed against target, and line error with the left and right IR sensors; live values for pitch, hump height and peak, and front distance.
 - **Status panel:** state, barcode, run-maximum hump peak, obstacles, and link health (heartbeat, reconnects, dropped messages).
-- **Controls:** Start, Stop, Calibrate, a 20 Hz telemetry button, and tuning boxes pre-filled from the car's `gains` event, each with an Apply button.
+- **Controls:** Start, Stop, Calibrate, 20 Hz / 5 Hz telemetry buttons, turn buttons (`nav=1..4`, as if a barcode was read), and tuning boxes pre-filled from the car's `gains` event, each with an Apply button.
 - **Logging:** every session is saved to `logs/<date_time>/`: `telemetry.csv` (33 columns in engineering units), `events.csv`, `heartbeat.csv`, `commands.log` and `console.log`. These files are the raw evidence for the tables in this report, and **Save PNG** stores the plots alongside them.
 
 `tools/dashboard/sim_car.py` publishes the firmware's exact message formats and obeys the same commands. Its wheel model uses the firmware's PID law, so a `pid=` change visibly alters the response. It was used to verify the dashboard end to end against a Mosquitto broker: commands, acks, rejected commands, rate changes and logging. The serial path was verified against an emulated console on a pseudo-terminal.

@@ -2,17 +2,20 @@
 
 Checked on 22 Oct 2026 against `main` at `9213b98` (Change Requirement 1),
 plus the unmerged branches `origin/Raees` and `origin/max`.
+**Updated 22 Oct evening (Kent) after a day of testing on the car: see §5a.
+None of the 22 Oct changes are committed yet (working tree on Kent's laptop).**
 Brief: `Project Write-up.pdf` (10 mission requirements, expected behaviour,
 per-buddy tasks, assessment criteria).
 
 ## 1. Where we stand in one paragraph
 
 The **code** for all 10 mission requirements exists on `main`, builds with
-0 warnings (MISSION and every TEST mode), and passes **187/187 host tests**.
+0 warnings (MISSION and every TEST mode), and passes **191/191 host tests**.
 Change Requirement 1 (minimum-bit data, binary MQTT, fault mask) is merged.
 What is missing is almost entirely **evidence from the real car**: every
 Results table in `testing/` is empty, every `___` in `docs/REPORT.md` is
-blank, and every `[CALIBRATE]` value in `car_config.h` is still a default.
+blank. Motion, IR levels, the IMU sign and the line PID were calibrated on the
+car on 22 Oct (§5a); the servo, humps and barcodes still need real runs.
 Two branches with real fixes (`Raees`, `max`) are **not merged and conflict
 with `main`**. A few verified logic gaps are listed in section 4.
 
@@ -29,10 +32,24 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] INT-08: barcode reaches the dashboard as a binary frame; INT-02: MQTT `stop` brakes within 100 ms (§2)
 - [x] Highest hump peak over WiFi: **no code needed**. The run maximum is already in every telemetry frame (`max`, 0.1 mm) and every hump event frame, and the dashboard shows "MAX". It only needs proving in SYS-03 (§6)
 - [ ] Measure the message sizes on the wire for the CR1 Week 13 table (§7)
+- [x] WiFi works on battery: WiFi builds use `CONSOLE=uart`; no-IP re-join, 5 s re-join, WiFi chip restart after 10 s (heartbeat `wreset`) (§5a)
+- [x] Web dashboard replaces the matplotlib one; `nav=1..4` command + Nav buttons; `encoder_cal.py` (§5a)
 
 **Buddy 2: motors, encoders, motion**
-- [ ] Calibrate wheel diameter, track width, slots, top speed, speed PID; fill in the REPORT PID and accuracy tables (§5)
+- [x] Slots, top speed, speed feed-forward/PID calibrated on 22 Oct (§5a). Wheel diameter and track width measured with a ruler
+- [x] TEST_MOTION turns: track width tuned to 138 (effective) until 90° / 180° looked right (§5a)
+- [ ] Tape-measure TEST_MOTION "forward 500" (encoders said 497) to confirm the wheel diameter; fill in the REPORT PID and accuracy tables (§5)
+- [ ] Junction left/right: re-test with `LINE_SENSOR_AHEAD_MM` = 140 (measured; was 70, so the car turned ~7 cm short of the junction, crossed the branch halfway through the turn and then drove off diagonally)
 - [ ] Run S2-U02..U06; INT-07 (packed encoder data under load) (§2, §6)
+- [ ] **Encoder speed at low speed is wrong on the floor:** `encoder_read()` times the last 4
+  rising-edge periods. Below ~100 mm/s the wheels stick-slip, the burst of fast edges in each
+  lurch reads 400–900 mm/s while the tick count shows ~11 mm/s, the PID cuts power to 2 % and
+  the car crawls. **Fixed and checked on the car (23 Oct 00:31, TEST_MOTOR on the floor: no
+  speed spikes, 160 → 159/160 and 300 → 298/301 mm/s):** `encoder_read()` now also
+  computes the speed from the tick count over the last ~60–160 ms and uses it when the
+  period speed claims more than 2× that + 60 mm/s (`counted_speed()`; not in the host tests,
+  encoder.c is hardware code). `SPEED_SLOW_MM_S` 160 kept as well. Feed-forward 0.104 / 2.3 is
+  fine on the floor too: the PID adds only ~4–5 % duty on top
 - [x] 100 ms velocity-expiry brake (FR14): done, uncommitted (§4.1). Run the new S2-U06 on the car
 - [x] Clear the BARR findings in `subsystem2_test.c` and `hal.c` from the TEST_WHEELS commit: done, firmware BARR now 0 (§4.8)
 
@@ -40,19 +57,28 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] Merge `origin/max` into `main` (resolve the CR1 conflicts) and move the PDFs out of git (§3)
 - [ ] Barcode retry after a failed window, if `max` doesn't already fix it (§4.4)
 - [ ] With integration: barcode command after 400 mm (§4.2) and old commands surviving into a new run (§4.3)
-- [ ] Calibrate IR on the real track; run S3-U02, U03 and the new lighting/speed robustness test (§5, §6)
+- [x] IR levels on the track (white ~200, black ~2400 raw); front sensors moved to ~10–12 mm apart so a centred line reads ~0.5 on both (§5a)
+- [ ] Line PID: 20/0/0 at 300 mm/s saved (74 % centred); check on curves
+- [ ] **Barcode sensor reads raw ~40 constant (below white): check its wires on Grove 7** before barcode tests
+- [ ] Run S3-U02, U03 and the new lighting/speed robustness test (§5, §6)
 
 **Buddy 4: IMU, terrain, humps**
 - [ ] Decide on the hump estimator (6° `ds·sin` vs front-contact 10 mm). This is a team decision, not code; REPORT §4.4 already matches the code (§4.5)
 - [x] Add the timeout to the I2C FIFO wait in `hal_i2c_read()`: done, uncommitted (§4.6)
 - [x] IMU recovers after a re-plug or a boot failure: done, uncommitted (§4.9)
 - [ ] Run S4-U02..U06 (U04 events, U05 impact, U06 unplug are newly defined); save the logs (§6, §7)
-- [ ] Pitch sign, magnetometer spin calibration, hump heights vs ruler (§5)
+- [x] Pitch sign (+1, front up = positive) (§5a)
+- [ ] Hump heights vs ruler: 12 mm gave a 9 mm peak, run not completed (push it 10 cm past the hump); magnetometer spin
+- [ ] `IMPACT_JERK_MG` raised to 1500 and `OBST_ON_IMPACT` set to 0 while tuning: set it back to 1 and re-check impacts before the demo (§5a)
+- [ ] Event stays CLIMBING when the car stops on a hump (hump state is checked before "stationary" in `terrain_classify()`); decide whether to reorder
+- [ ] IMU `ok` drops to 0 when the car moves: check the Grove 3 wires
 
 **Buddy 5: ultrasonic, servo, avoidance**
 - [ ] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1)
 - [ ] Calibrate the servo; run S5-U02..U04; measure the lateral deviation during a bypass (§5, §6)
 - [ ] INT-10 fault injection with the other buddies (FAULT_PATHS.md)
+- [ ] The sonar sees part of the car at ~60–65° (66–83 mm) during scans: move the sensor or the part in its way
+- [ ] `avoidance_profile()` leaves angle/edges/clearances uninitialised when nothing is found (scans print `cl=70647`): zero `*p_out` at the top
 
 **Everyone / integration owner**
 - [ ] SMP guard (§4.7); the 138 BARR findings in `tests/host/test_data.c` and `fault_stub.c` (§4.8)
@@ -187,7 +213,7 @@ already measure everything. Put the result in `car_config.h` and reflash:
 |---|---|---|
 | `WHEEL_DIAMETER_MM` | TEST_MOTION "forward 500", measure with a tape | new = old × tape mm / printed mm |
 | `TRACK_WIDTH_MM` | TEST_MOTION "left 90", measure with a protractor | new = old × 90 / measured degrees |
-| `ENCODER_SLOTS` | turn one wheel exactly once by hand, read `enc` in the dashboard (S2-U05) | ticks for one turn |
+| `ENCODER_SLOTS` | turn one wheel 10 times by hand: `python tools/dashboard/encoder_cal.py` (or the dashboard's `ENC` line) (S2-U05) | ticks per turn ÷ 2 (both edges are counted) |
 | `SPEED_WHEEL_MAX_MM_S` | TEST_MOTOR open-loop sweep, speed at 100 % | read directly |
 | speed PID / feed-forward | TEST_MOTOR, then `ff=` and `pid=` live, START repeats the steps | copy the final `gains` |
 | `IR_DEFAULT_WHITE/BLACK`, `line=` | TEST_IR (S3-U02); `line=` live in MISSION | read directly |
@@ -205,6 +231,70 @@ Do the wheel diameter before the track width, because the turn uses the diameter
 | Buddy 5 | Servo pulse at 0°/180° (`SERVO_MIN_US`); sonar on known boxes | REPORT profile table; bypass ___/10, re-acquisition ___/10 |
 | Buddy 1 | WiFi soak (10 min), broker and AP outage recovery, message sizes on the wire | S1 results; INT-08 |
 | All | CPU load and jitter, before/after CR1 | INT-06, INT-11 (`timing` command) |
+
+## 5a. Calibration and fixes on the car (22 Oct, Kent)
+
+All in the working tree on Kent's laptop, **not committed**. Values now in `car_config.h`:
+
+| Value | Old | Now | How / why |
+|---|---|---|---|
+| `ENCODER_SLOTS` | 20 | **559** | 1118 ticks per wheel turn by hand (`encoder_cal.py`); slots = ticks ÷ 2 |
+| `ENCODER_GLITCH_US` | 300 | **180** | 300 would reject real edges above ~600 mm/s; 100 let motor PWM noise through on the floor (fake 1000 mm/s spikes, the loop then starved the motors) |
+| `SPEED_WHEEL_MAX_MM_S` | 600 | **900** | TEST_MOTOR sweep at 100 %: 925 / 902 mm/s (boot check only) |
+| `SPEED_KF`, `SPEED_OFFSET_PCT` | 0.10, 18 | **0.104, 2.3** | sweep: speed ≈ 9.6 × (duty − 2.3). 18 % made the car run ~80 mm/s too fast and the loop could not slow it (integrator stops at 0). Now 100 → 101, 180 → 182, settles in ~0.3 s. PID 0.08 / 0.6 / 0 kept |
+| `TRACK_WIDTH_MM` | 130 | **138** | effective, not the ruler (110): tyres scrub in turns. 110 turned short (U-turn ~135°), 147 over |
+| `WHEEL_DIAMETER_MM` | 65 | 65 | ruler; TEST_MOTION forward 500 not tape-checked yet |
+| `SPEED_CRUISE_MM_S` | 180 | **300** | upper end of NFR2 (60–300) |
+| `SPEED_TURN_MM_S` | 120 | 120 | 200 was tried; junction turns then missed the branch (likely overshoot: `TRACK_WIDTH_MM` 138 was tuned at 120) |
+| `LINE_KP / KI / KD` | 160 / 0 / 12 | **20 / 0 / 0** | 10 was too weak to correct (line centred 44 % of the time); 20 gave 74 % centred, never saturated; 60 pivoted on one wheel and zig-zagged; Kd reacts badly to the fast IR transitions |
+| `IR_DEFAULT_WHITE / BLACK` | 400 / 3000 | **200 / 2400** | TEST_IR on the track (used until the calibration spin) |
+| `IMPACT_JERK_MG` | 700 | **1500** | 700 fired on every motor start and reverse |
+| `OBST_ON_IMPACT` (new) | – | **0** | impacts are counted and reported but do not start the obstacle routine. **Set back to 1 before the demo** |
+| `LINE_SENSOR_AHEAD_MM` | 70 | **140** | measured: wheel centre to the front IR sensors. Used for the forward step before a junction turn and in obstacle line recovery |
+| `IMU_FORWARD_SIGN` | +1 | +1 | front lifted → pitch positive |
+
+Hardware findings:
+- **Front IR spacing:** at 18 mm between sensor midpoints (= line width) a centred line read
+  white on both ("line lost"); these sensors read almost white when half over the edge. Now
+  ~10–12 mm: a centred line reads ~0.5–0.7 on both (must stay below the 0.75 junction level).
+- **Barcode IR** reads raw ~40 constant since the sensors were moved: probably unplugged (Grove 7).
+- **IMU** `ok` drops out for up to 1.5 s while the car is handled: loose Grove 3 wire likely.
+- **Sonar** sees part of the car at ~60–65°; real objects ~30 cm ahead stop line following,
+  so test on a clear path (≥1.5 m).
+- **Possible power dip:** the car restarted once during an obstacle manoeuvre (gains back to
+  defaults) — watch the battery.
+
+Code changes (all build with 0 warnings, 191/191 host tests, BARR 0):
+- **WiFi on battery** (Buddy 1): WiFi builds use `CONSOLE=uart` — with the USB console the
+  board only joined while a computer was on the port. `mqtt_lwip.c`: re-join when joined but
+  no IP for 15 s (DHCP restart), failed joins retried every 5 s, WiFi chip power-cycled after
+  10 s without a link while the car is idle/stopped (`hal_wifi_restart()`, heartbeat `wreset`).
+- **`nav=1..4`** (1 left, 2 right, 3 straight, 4 U-turn): handled exactly like a barcode just
+  read (next junction or after 400 mm; U-turn at once). Text, binary frame, host tests;
+  accepted while driving, dropped at START. Lets INT-01 and turn tests run without barcodes.
+- **Slow start ("align mode"):** at START, after an obstacle "path clear", after a junction
+  turn and after any line search that finds the line,
+  the car follows at `SPEED_SLOW_MM_S` (100) for `LINE_SETTLE_MM` (150 mm) with firm steering
+  (`LINE_SETTLE_KP` 40, P only), then cruises with the normal line gains. The line search now
+  only counts the line as found when |L - R| < 0.2 (was 0.35; `CENTRED_ERROR` in vehicle.c).
+  Align mode also ends after `LINE_SETTLE_MAX_MS` (1.5 s), and `SPEED_SLOW_MM_S` is now 160
+  (100 stick-slipped on the floor, see the encoder speed issue under Buddy 2).
+  The car cannot sense its angle to the line while still (two side-by-side sensors), so it
+  aligns while creeping forward.
+  With 140 mm the junction turns were accurate (90.5°, branch reached at ~85°) but at
+  300 mm/s with Kp 10 the car lost the line within 13 cm of the turn. Not tested yet.
+- **Impacts during the car's own obstacle manoeuvre** are ignored when it leaves OBSTACLE
+  (`set_state()` in `vehicle.c`), so it no longer stops again at once.
+- **Dashboard is now a web page:** `tools/dashboard/picocar_dashboard.py` runs a small
+  standard-library server and opens http://127.0.0.1:8050 (live values, two charts, events,
+  console, buttons incl. Nav, tuning boxes). Same `--serial auto` / `--mqtt <ip>`, same
+  `logs/<date_time>/` CSVs. matplotlib and the old window / `--headless` modes are gone.
+- **`tools/dashboard/encoder_cal.py`:** counts ticks while you turn a wheel by hand and
+  prints `ENCODER_SLOTS` and the glitch-filter check.
+
+Still to do on the car: line following on curves, then raise speed only if still reliable;
+tape-check forward 500 and re-check turns at 200 mm/s; barcode sensor wiring and barcode runs;
+a full hump run; servo range; `OBST_ON_IMPACT` back to 1 and re-check impacts; WiFi soak test.
 
 ## 6. Do the existing tests help?
 
@@ -268,11 +358,13 @@ Tests still to add, because the brief asks for these and nothing checks them:
 
 ```
 sh setup.sh                                   # after every pull that touches the template patch
-make -C tests/host                            # host tests: expect 187 passed, 0 failed
+make -C tests/host                            # host tests: expect 191 passed, 0 failed
 gmake -C template/build_make -j8 APP_MODE=TEST_IMU CONSOLE=usb_cdc   # make on WSL
 python3 tools/barr_check.py app_program/*.[ch] app_program/subsystem*/*.[ch] tests/host/*.[ch]
 screen /dev/cu.usbmodemMTK3PICO1 115200       # macOS console; Windows: PuTTY on the COM port
-python tools/dashboard/picocar_dashboard.py --serial auto
+python tools/dashboard/picocar_dashboard.py --serial auto      # web page on http://127.0.0.1:8050
+python tools/dashboard/picocar_dashboard.py --mqtt 172.20.10.3   # WiFi builds (mosquitto running)
+python tools/dashboard/encoder_cal.py                           # ENCODER_SLOTS by hand
 ```
 Record every test as described in `testing/README.md`: commit hash, PASS or FAIL, and
 the saved log file.
