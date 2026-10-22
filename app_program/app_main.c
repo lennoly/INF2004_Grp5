@@ -34,6 +34,7 @@
 #include "vehicle.h"
 #include "app_tests.h"
 #include "timing.h"
+#include "fault.h"
 #include "app_main.h"
 
 /* Status snapshots shared between tasks are copied with interrupts disabled
@@ -85,6 +86,9 @@ usermain (void)
 
     /* Task times, control jitter and CPU load: "timing" command. */
     report_init("timing", timing_init());
+
+    /* Shared fault bitmask (Change Requirement 1): before any owner task. */
+    report_init("fault", fault_init());
 
 #if APP_MODE == APP_MODE_TEST_TELEMETRY
     /* Buddy 1 WiFi / MQTT test: telemetry only, no robot hardware, so it
