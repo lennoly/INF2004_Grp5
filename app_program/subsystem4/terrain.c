@@ -121,7 +121,7 @@ terrain_hump_update (terrain_hump_t * p_hump, float32_t pitch_deg,
  *
  * @param[in] speed_mm_s    Forward speed.
  * @param[in] accel_mm_s2   Forward acceleration.
- * @param[in] turn_rate_dps Heading rate of change.
+ * @param[in] turn_rate_dps Turn rate both the encoders and compass agree on.
  * @param[in] hump          Hump tracker state.
  * @param[in] b_impact      true if an impact was detected.
  *
@@ -195,6 +195,109 @@ terrain_event_name (terrain_event_t event)
 }
 
 /*!
+ * @brief Direction the car is driving, for the impact detector.
+ *
+ * @param[in] pwm_pct    Mean motor duty, signed (forward positive).
+ * @param[in] speed_mm_s Mean wheel speed.
+ * @param[in] last_sign  Result of the previous sample.
+ *
+ * @return +1 forward, -1 reversing, 0 parked.  With the motors off but the
+ *         wheels still turning (coasting, braking) the last direction holds.
+ */
+float32_t
+terrain_travel_sign (float32_t pwm_pct, float32_t speed_mm_s,
+                     float32_t last_sign)
+{
+    float32_t sign = 0.0f;
+
+    if (pwm_pct > IMPACT_DRIVE_PCT)
+    {
+        sign = 1.0f;
+    }
+    else if (pwm_pct < -IMPACT_DRIVE_PCT)
+    {
+        sign = -1.0f;
+    }
+    else if (car_math_abs(speed_mm_s) >= STATIONARY_MM_S)
+    {
+        sign = last_sign;
+    }
+    else
+    {
+        sign = 0.0f;
+    }
+
+    return (sign);
+}
+
+/*!
+ * @brief The part of a sample-to-sample acceleration change that can be a
+ *        collision.
+ *
+ * Parked, any jolt counts (knocked by something).  Driving, only the jolt
+ * against the direction of travel: a crash slows the car, while its own
+ * motors starting push it the way it is going (forward when starting,
+ * backward when reversing), which by size alone looks like a crash.
+ *
+ * @param[in] delta_fwd_mg  Change along the car's forward axis.
+ * @param[in] delta_side_mg Change sideways.
+ * @param[in] delta_up_mg   Change vertically.
+ * @param[in] travel_sign   From terrain_travel_sign().
+ *
+ * @return Jerk to compare with IMPACT_JERK_MG, in mg (never negative).
+ */
+float32_t
+terrain_impact_jerk (float32_t delta_fwd_mg, float32_t delta_side_mg,
+                     float32_t delta_up_mg, float32_t travel_sign)
+{
+    float32_t jerk = 0.0f;
+
+    if (car_math_abs(travel_sign) > 0.0f)
+    {
+        jerk = -travel_sign * delta_fwd_mg;
+        jerk = (jerk > 0.0f) ? jerk : 0.0f;
+    }
+    else
+    {
+        jerk = car_math_sqrt((delta_fwd_mg * delta_fwd_mg)
+                             + (delta_side_mg * delta_side_mg)
+                             + (delta_up_mg * delta_up_mg));
+    }
+
+    return (jerk);
+}
+
+/*!
+ * @brief Time left in which impacts are ignored, updated once per IMU step.
+ *
+ * Starting, stopping, braking and reversing jump the car's own motor duty
+ * and jolt it, braking even against the direction of travel.  A crash
+ * comes while the duty is steady, so it still counts.
+ *
+ * @param[in] blank_ms        Time left from the previous step.
+ * @param[in] duty_change_pct Change of the mean motor duty since then.
+ *
+ * @return IMPACT_BLANK_MS after a jump of more than IMPACT_DUTY_STEP_PCT,
+ *         else the time left, one IMU step less (never below 0).
+ */
+uint32_t
+terrain_impact_blank (uint32_t blank_ms, float32_t duty_change_pct)
+{
+    uint32_t left = 0u;
+
+    if (car_math_abs(duty_change_pct) > IMPACT_DUTY_STEP_PCT)
+    {
+        left = IMPACT_BLANK_MS;
+    }
+    else
+    {
+        left = (blank_ms > IMU_PERIOD_MS) ? (blank_ms - IMU_PERIOD_MS) : 0u;
+    }
+
+    return (left);
+}
+
+/*!
  * @brief While flat: accumulate pre-roll height and start a hump once the
  *        pitch passes HUMP_PITCH_ON_DEG, or the roll HUMP_ROLL_ON_DEG,
  *        while the wheels are turning.
@@ -261,17 +364,17 @@ hump_track (terrain_hump_t * p_hump, bool b_level, float32_t delta_h,
     p_hump->peak_mm = (p_hump->height_mm > p_hump->peak_mm) ? p_hump->height_mm
                                                             : p_hump->peak_mm;
 
-    if (delta_h > 0.0f)
-    {
-        p_hump->state = HUMP_CLIMBING;
-    }
-    else if (delta_h < 0.0f)
+    if (p_hump->height_mm < (p_hump->peak_mm - HUMP_STATE_HYST_MM))
     {
         p_hump->state = HUMP_DESCENDING;
     }
+    else if (p_hump->height_mm >= p_hump->peak_mm)
+    {
+        p_hump->state = HUMP_CLIMBING;
+    }
     else
     {
-        /* Stationary on the hump: keep the state. */
+        /* Near the peak (noise, or stopped): keep the state. */
     }
 
     p_hump->level_mm =

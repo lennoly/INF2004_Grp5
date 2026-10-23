@@ -100,6 +100,8 @@
 #define JOLT_FIRST      (20u)    /* roll step starts at sample 20       */
 #define JOLT_SAMPLES    (5u)     /* 15 mm: a hand-push jolt             */
 #define LEAN_SAMPLES    (8u)     /* 24 mm: a 1 cm one-wheel hump        */
+/* 300 ms ignore window: 14 steady 20 ms steps leave 20 ms. */
+#define BLANK_STEADY_STEPS ((IMPACT_BLANK_MS / IMU_PERIOD_MS) - 1u)
 
 /* Obstacle scan. */
 #define SCAN_FIRST_DEG  (10)
@@ -636,19 +638,43 @@ simulate_hump (float32_t height, float32_t length, float32_t noise_deg,
 }
 
 /*!
+ * @brief Impact ignore time left after a duty jump and then count steps
+ *        of steady duty.
+ *
+ * @param[in] count IMU steps after the jump.
+ *
+ * @return Time left, ms.
+ */
+static uint32_t
+blank_steps (uint32_t count)
+{
+    uint32_t blank_ms = terrain_impact_blank(0u, 50.0f);
+    uint32_t step     = 0u;
+
+    for (step = 0u; step < count; step++)
+    {
+        blank_ms = terrain_impact_blank(blank_ms, 0.0f);
+    }
+
+    return (blank_ms);
+}
+
+/*!
  * @brief Drive one wheel over a raised-cosine hump (the other stays on
  *        the floor): the car rolls by atan(z / lever) and dips its nose
  *        by atan(z / 2 caster), with noisy readings.
  *
- * @param[in]  height  Hump height in mm.
- * @param[out] p_humps Humps counted.
+ * @param[in]  height    Hump height in mm.
+ * @param[out] p_humps   Humps counted.
+ * @param[out] p_changes CLIMBING / DESCENDING switches (1 = no flicker).
  *
  * @return Highest estimated peak in mm.
  */
 static float32_t
-simulate_one_wheel (float32_t height, uint32_t * p_humps)
+simulate_one_wheel (float32_t height, uint32_t * p_humps, uint32_t * p_changes)
 {
-    terrain_hump_t hump;
+    terrain_hump_t       hump;
+    terrain_hump_state_t last = HUMP_FLAT;
     float32_t      step_mm = HUMP_SPEED_MM_S * PID_DT_S; /* 50 Hz */
     float32_t      pos_mm  = -HUMP_LEAD_MM;
     float32_t      wheel_z = 0.0f;
@@ -656,6 +682,7 @@ simulate_one_wheel (float32_t height, uint32_t * p_humps)
     float32_t      pitch   = 0.0f;
 
     terrain_hump_init(&hump);
+    *p_changes = 0u;
 
     while (pos_mm < (HUMP_LENGTH_MM + HUMP_TAIL_MM))
     {
@@ -672,6 +699,11 @@ simulate_one_wheel (float32_t height, uint32_t * p_humps)
         pitch = (-atanf(wheel_z / (2.0f * CASTER_MM)) * DEG_PER_RAD)
                 + (PITCH_NOISE_DEG * random_unit());
         terrain_hump_update(&hump, pitch, roll, step_mm);
+        *p_changes += ((HUMP_FLAT != last) && (HUMP_FLAT != hump.state)
+                       && (last != hump.state))
+                          ? 1u
+                          : 0u;
+        last    = hump.state;
         pos_mm += step_mm;
     }
 
@@ -780,6 +812,7 @@ test_terrain (void)
     float32_t const heights[HEIGHT_COUNT] = {20.0f, 30.0f, 40.0f, 60.0f};
     float32_t const wheel_heights[WHEEL_COUNT] = {10.0f, 20.0f};
     uint32_t        humps                 = 0u;
+    uint32_t        changes               = 0u;
     uint32_t        idx                   = 0u;
     float32_t       estimate              = 0.0f;
 
@@ -805,10 +838,12 @@ test_terrain (void)
 
     for (idx = 0u; idx < WHEEL_COUNT; idx++)
     {
-        estimate = simulate_one_wheel(wheel_heights[idx], &humps);
-        (void) printf("   %4.0f mm -> %5.1f mm, humps=%" PRIu32 "\n",
-                      wide(wheel_heights[idx]), wide(estimate), humps);
+        estimate = simulate_one_wheel(wheel_heights[idx], &humps, &changes);
+        (void) printf("   %4.0f mm -> %5.1f mm, humps=%" PRIu32
+                      ", state changes=%" PRIu32 "\n",
+                      wide(wheel_heights[idx]), wide(estimate), humps, changes);
         check(1u == humps, "one-wheel hump detected");
+        check(1u == changes, "climbing then descending, no flicker");
         check(nearly(estimate, wheel_heights[idx],
                      (HEIGHT_FRACTION * wheel_heights[idx]) + HEIGHT_SLACK_MM),
               "one-wheel peak within 10 %");
@@ -816,7 +851,7 @@ test_terrain (void)
 
     (void) simulate_hump(0.0f, HUMP_LENGTH_MM, PITCH_NOISE_DEG, &humps);
     check(0u == humps, "flat floor with noise: no hump");
-    (void) simulate_one_wheel(0.0f, &humps);
+    (void) simulate_one_wheel(0.0f, &humps, &changes);
     check(0u == humps, "flat floor with roll noise: no hump");
     check(0u == roll_step_humps(7.0f, JOLT_SAMPLES),
           "15 mm roll jolt while pushing: no hump");
@@ -841,6 +876,39 @@ test_terrain (void)
     check(EVT_TURNING
               == terrain_classify(0.0f, 0.0f, 90.0f, HUMP_DESCENDING, false),
           "pivoting with a hump open: turning");
+
+    /* Impacts: TEST_CRASH jolts (mg) on the car's forward axis. */
+    check(nearly(terrain_impact_jerk(-1014.0f, 300.0f, 200.0f, 1.0f),
+                 1014.0f, 0.1f),
+          "wall hit driving forward: counts");
+    check(nearly(terrain_impact_jerk(1453.0f, 300.0f, 200.0f, 1.0f), 0.0f,
+                 0.1f),
+          "forward motor start: ignored");
+    check(nearly(terrain_impact_jerk(-1797.0f, 300.0f, 200.0f, -1.0f),
+                 0.0f, 0.1f),
+          "reverse motor start: ignored");
+    check(nearly(terrain_impact_jerk(1200.0f, 0.0f, 0.0f, -1.0f), 1200.0f,
+                 0.1f),
+          "hit while reversing: counts");
+    check(nearly(terrain_impact_jerk(300.0f, 400.0f, 0.0f, 0.0f), 500.0f,
+                 0.1f),
+          "parked: any jolt counts");
+    check(nearly(terrain_travel_sign(70.0f, 0.0f, 0.0f), 1.0f, 0.0f)
+              && nearly(terrain_travel_sign(-50.0f, 0.0f, 1.0f), -1.0f, 0.0f),
+          "driving: direction from the duty");
+    check(nearly(terrain_travel_sign(0.0f, 400.0f, 1.0f), 1.0f, 0.0f)
+              && nearly(terrain_travel_sign(0.0f, 5.0f, 1.0f), 0.0f, 0.0f),
+          "motors off: coasting keeps the direction, stopped is parked");
+    check(IMPACT_BLANK_MS == terrain_impact_blank(0u, -50.0f),
+          "braking from 50 % duty: impacts ignored");
+    check(IMPACT_BLANK_MS == terrain_impact_blank(0u, 70.0f),
+          "motor start: impacts ignored");
+    check(0u == terrain_impact_blank(0u, 5.0f),
+          "steering correction: impacts still count");
+    check(blank_steps(BLANK_STEADY_STEPS) > 0u,
+          "just after the jump: still ignored");
+    check(0u == blank_steps(BLANK_STEADY_STEPS + 1u),
+          "300 ms of steady duty: impacts count again");
 }
 
 /*!

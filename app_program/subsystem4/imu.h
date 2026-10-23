@@ -35,6 +35,7 @@ void    imu_get_status(imu_status_t * p_out);
 void    imu_mag_calib_begin(void);
 void    imu_mag_calib_end(void);
 void    imu_reset_run(void);
+float32_t imu_take_peak_jerk(void);
 
 #endif /* IMU_H */
 

@@ -1,7 +1,8 @@
 /** @file subsystem4_test.c
  *
- * @brief Buddy 4 test program: tilt, rates, hump height and motion events
- *        (TEST_IMU).  Angles are printed in tenths of a degree.
+ * @brief Buddy 4 test programs: tilt, rates, hump height and motion events
+ *        (TEST_IMU; angles in tenths of a degree), and impact detection
+ *        by driving into a wall (TEST_CRASH).
  */
 
 #include <stdint.h>
@@ -24,7 +25,39 @@
 #define SCAN_MAX_FOUND   (16u)
 #define ID_REG_COUNT     (3u) /* chip-ID registers read per device */
 
-#if APP_MODE == APP_MODE_TEST_IMU
+/* TEST_CRASH: start 20-30 cm from a wall, facing it. */
+#define CRASH_TRIALS        (10u)
+/* Fixed duty, no speed PID: at low speed the PID hunted (stuttered). */
+#define CRASH_DUTY_PCT      (70.0f)  /* drive at the wall               */
+#define CRASH_BACK_PCT      (-50.0f) /* reverse, also fixed duty        */
+#define CRASH_MAX_MS        (6000u)  /* give up if it never gets there  */
+#define CRASH_RUN_MM        (600.0f) /* longest drive towards the wall  */
+#define CRASH_BACK_MM       (150.0f) /* reverse after each try          */
+#define CRASH_START_MM      (50.0f)  /* first part of a drive: start   */
+#define CRASH_MOVED_MM      (20.0f)  /* rolling: now watch for a stop   */
+#define CRASH_BLOCKED_MS    (500u)   /* no travel this long: at the wall*/
+#define CRASH_POLL_MS       (20)
+#define CRASH_SETTLE_MS     (600u)   /* past the impact hold-off        */
+
+#if (APP_MODE == APP_MODE_TEST_IMU) || (APP_MODE == APP_MODE_TEST_CRASH)
+typedef struct
+{
+    bool      b_hit;         /* an impact past CRASH_START_MM ended it */
+    float32_t travel_mm;     /* driven before it stopped             */
+    float32_t speed_mm_s;    /* speed on the sample before the stop  */
+    uint32_t  start_impacts; /* impacts in the first CRASH_START_MM  */
+    float32_t start_jerk_mg; /* peak jerk while starting             */
+    float32_t wall_jerk_mg;  /* peak jerk after that (the wall)      */
+} crash_result_t;
+
+typedef struct
+{
+    float32_t back_mm;  /* distance reversed            */
+    uint32_t  impacts;  /* impacts while reversing      */
+    float32_t jerk_mg;  /* peak jerk while reversing    */
+    float32_t stop_mg;  /* peak jerk braking to a stop  */
+} crash_back_t;
+
 /* Boot scan result, printed again when START is pressed. */
 static uint8_t  g_found[SCAN_MAX_FOUND];
 static uint8_t  g_ids[SCAN_MAX_FOUND][ID_REG_COUNT];
@@ -38,6 +71,8 @@ static bool     gb_scl_high   = false;
 static int32_t  g_imu_ercd    = E_OK;
 
 static void print_scan(void);
+static void drive_to_wall(crash_result_t * p_result);
+static void back_off(crash_back_t * p_back);
 
 /*!
  * @brief Scan I2C0 (the IMU's GP4 / GP5) for devices, then start the IMU,
@@ -153,6 +188,174 @@ subsystem4_test_imu (void)
                          (UINT) motion.ticks_l, (UINT) motion.ticks_r);
         (void) tk_dly_tsk(PRINT_MS);
     }
+}
+
+/*!
+ * @brief Buddy 4 impact test: drive at the wall CRASH_TRIALS times,
+ *        reversing after each try.  Each row: WALL (impact at the wall) or
+ *        MISS (stopped by the wall, no impact), the impacts and peak impact
+ *        jerk (mg, terrain_impact_jerk()) while starting, at the wall,
+ *        while reversing and braking after it.  IMPACT_JERK_MG belongs
+ *        above the start, reverse and stop jerks and below the wall jerks.
+ */
+void
+subsystem4_test_crash (void)
+{
+    crash_result_t result;
+    crash_back_t   back;
+    uint32_t       trial = 0u;
+    uint32_t       walls = 0u;
+
+    print_scan();
+    imu_reset_run();
+
+    /* Casts in the messages: tm_printf() takes the kernel's UB string
+       type (the literals are ASCII); the counters fit UINT. */
+    (void) tm_printf((UB const *) "# trial,result,travel,speed,startImpacts,"
+                                  "startJerk,wallJerk,back,backImpacts,"
+                                  "backJerk,stopJerk\n");
+
+    for (trial = 1u; trial <= CRASH_TRIALS; trial++)
+    {
+        drive_to_wall(&result);
+        back_off(&back);
+        walls += result.b_hit ? 1u : 0u;
+
+        (void) tm_printf((UB const *) "%u,%s,%d,%d,%u,%d,%d,", (UINT) trial,
+                         result.b_hit ? "WALL" : "MISS",
+                         app_tests_print_int(result.travel_mm),
+                         app_tests_print_int(result.speed_mm_s),
+                         (UINT) result.start_impacts,
+                         app_tests_print_int(result.start_jerk_mg),
+                         app_tests_print_int(result.wall_jerk_mg));
+        (void) tm_printf((UB const *) "%d,%u,%d,%d\n",
+                         app_tests_print_int(back.back_mm),
+                         (UINT) back.impacts,
+                         app_tests_print_int(back.jerk_mg),
+                         app_tests_print_int(back.stop_mg));
+    }
+
+    (void) tm_printf((UB const *) "# walls %u of %u\n", (UINT) walls,
+                     (UINT) CRASH_TRIALS);
+}
+
+/*!
+ * @brief Drive towards the wall at CRASH_DUTY_PCT until an impact past
+ *        CRASH_START_MM (one sooner is the motor start, counted apart), until
+ *        the car stops moving (against the wall), or for CRASH_RUN_MM or
+ *        CRASH_MAX_MS; then stop.
+ *
+ * @param[out] p_result How the drive ended.
+ */
+static void
+drive_to_wall (crash_result_t * p_result)
+{
+    imu_status_t    imu_state;
+    motion_status_t motion;
+    uint32_t        last_impacts = 0u;
+    uint32_t        still_ms     = 0u;
+    uint32_t        elapsed_ms   = 0u;
+    float32_t       start_mm     = 0.0f;
+    float32_t       last_mm      = 0.0f;
+    float32_t       jerk         = 0.0f;
+    bool            b_starting   = true;
+
+    imu_get_status(&imu_state);
+    motion_get_status(&motion);
+    last_impacts             = imu_state.impacts;
+    start_mm                 = motion.odo_mm;
+    last_mm                  = motion.odo_mm;
+    p_result->b_hit          = false;
+    p_result->speed_mm_s     = 0.0f;
+    p_result->start_impacts  = 0u;
+    p_result->start_jerk_mg  = 0.0f;
+    p_result->wall_jerk_mg   = 0.0f;
+    (void) imu_take_peak_jerk();
+    motion_set_open_loop(CRASH_DUTY_PCT, CRASH_DUTY_PCT);
+
+    while ((!p_result->b_hit) && (still_ms < CRASH_BLOCKED_MS)
+           && ((motion.odo_mm - start_mm) < CRASH_RUN_MM)
+           && (elapsed_ms < CRASH_MAX_MS))
+    {
+        (void) tk_dly_tsk(CRASH_POLL_MS);
+        elapsed_ms += (uint32_t) CRASH_POLL_MS;
+        imu_get_status(&imu_state);
+        jerk = imu_take_peak_jerk();
+
+        /* Speed before this sample: the hit sample has already slowed. */
+        p_result->speed_mm_s = 0.5f * (motion.speed_l_mm_s + motion.speed_r_mm_s);
+        motion_get_status(&motion);
+        b_starting = ((motion.odo_mm - start_mm) < CRASH_START_MM);
+
+        if (b_starting)
+        {
+            p_result->start_impacts += imu_state.impacts - last_impacts;
+            p_result->start_jerk_mg = (jerk > p_result->start_jerk_mg)
+                                          ? jerk
+                                          : p_result->start_jerk_mg;
+        }
+        else
+        {
+            p_result->b_hit        = (imu_state.impacts != last_impacts);
+            p_result->wall_jerk_mg = (jerk > p_result->wall_jerk_mg)
+                                         ? jerk
+                                         : p_result->wall_jerk_mg;
+        }
+
+        last_impacts = imu_state.impacts;
+
+        /* Count still time only once rolling, so the start is not a stop. */
+        still_ms = ((motion.odo_mm > last_mm)
+                    || ((motion.odo_mm - start_mm) < CRASH_MOVED_MM))
+                       ? 0u
+                       : (still_ms + (uint32_t) CRASH_POLL_MS);
+        last_mm  = motion.odo_mm;
+    }
+
+    motion_stop();
+    p_result->travel_mm = motion.odo_mm - start_mm;
+}
+
+/*!
+ * @brief Let the car settle, back CRASH_BACK_MM away from the wall at a
+ *        fixed duty (the speed PID stuttered) and pause.
+ *
+ * @param[out] p_back Distance, impacts and peak jerk while reversing (a
+ *                    motor start, not a wall) and braking to a stop.
+ */
+static void
+back_off (crash_back_t * p_back)
+{
+    imu_status_t    imu_state;
+    motion_status_t motion;
+    uint32_t        start_impacts = 0u;
+    uint32_t        elapsed_ms    = 0u;
+    float32_t       start_mm      = 0.0f;
+
+    (void) tk_dly_tsk(CRASH_SETTLE_MS);
+    imu_get_status(&imu_state);
+    motion_get_status(&motion);
+    start_impacts = imu_state.impacts;
+    start_mm      = motion.odo_mm;
+    (void) imu_take_peak_jerk();
+    motion_set_open_loop(CRASH_BACK_PCT, CRASH_BACK_PCT);
+
+    /* The odometer counts down: its sign follows the duty. */
+    while (((start_mm - motion.odo_mm) < CRASH_BACK_MM)
+           && (elapsed_ms < CRASH_MAX_MS))
+    {
+        (void) tk_dly_tsk(CRASH_POLL_MS);
+        elapsed_ms += (uint32_t) CRASH_POLL_MS;
+        motion_get_status(&motion);
+    }
+
+    p_back->jerk_mg = imu_take_peak_jerk();
+    motion_stop();
+    p_back->back_mm = start_mm - motion.odo_mm;
+    (void) tk_dly_tsk(CRASH_SETTLE_MS);
+    imu_get_status(&imu_state);
+    p_back->impacts = imu_state.impacts - start_impacts;
+    p_back->stop_mg = imu_take_peak_jerk();
 }
 
 /*!

@@ -69,7 +69,7 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] Run S4-U02..U06 (U04 events, U05 impact, U06 unplug are newly defined); save the logs (§6, §7)
 - [x] Pitch sign (+1, front up = positive) (§5a)
 - [ ] Hump heights vs ruler: 12 mm gave a 9 mm peak, run not completed (push it 10 cm past the hump); magnetometer spin
-- [ ] `IMPACT_JERK_MG` raised to 1500 and `OBST_ON_IMPACT` set to 0 while tuning: set it back to 1 and re-check impacts before the demo (§5a)
+- [ ] Impacts: while driving only the jolt against the direction of travel counts, `IMPACT_JERK_MG` 800, ignored for 300 ms after the motor duty jumps more than 15 % (TEST_CRASH, S4-U05). Also check line following in MISSION does not keep it ignored. Confirm with TEST_CRASH that starts, reverses and braking stay under it, then set `OBST_ON_IMPACT` back to 1 before the demo (§5a)
 - [ ] Event stays CLIMBING when the car stops on a hump (hump state is checked before "stationary" in `terrain_classify()`); decide whether to reorder
 - [ ] IMU `ok` drops to 0 when the car moves: check the Grove 3 wires
 
@@ -249,7 +249,7 @@ All in the working tree on Kent's laptop, **not committed**. Values now in `car_
 | `SPEED_TURN_MM_S` | 120 | 120 | 200 was tried; junction turns then missed the branch (likely overshoot: `TRACK_WIDTH_MM` 138 was tuned at 120) |
 | `LINE_KP / KI / KD` | 160 / 0 / 12 | **20 / 0 / 0** | 10 was too weak to correct (line centred 44 % of the time); 20 gave 74 % centred, never saturated; 60 pivoted on one wheel and zig-zagged; Kd reacts badly to the fast IR transitions |
 | `IR_DEFAULT_WHITE / BLACK` | 400 / 3000 | **200 / 2400** | TEST_IR on the track (used until the calibration spin) |
-| `IMPACT_JERK_MG` | 700 | **1500** | 700 fired on every motor start and reverse |
+| `IMPACT_JERK_MG` | 700 | **800** | by size alone wall hits (1014–2885 mg) overlapped motor starts (up to 1797); now only the jolt against the direction of travel counts while driving (S4-U05) |
 | `OBST_ON_IMPACT` (new) | – | **0** | impacts are counted and reported but do not start the obstacle routine. **Set back to 1 before the demo** |
 | `LINE_SENSOR_AHEAD_MM` | 70 | **140** | measured: wheel centre to the front IR sensors. Used for the forward step before a junction turn and in obstacle line recovery |
 | `IMU_FORWARD_SIGN` | +1 | +1 | front lifted → pitch positive |
