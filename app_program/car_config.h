@@ -26,6 +26,7 @@
 #define APP_MODE_TEST_ULTRASONIC    (6)  /* Buddy 5: scan + profile + plan */
 #define APP_MODE_TEST_TELEMETRY     (7)  /* Buddy 1: MQTT telemetry        */
 #define APP_MODE_TEST_WHEELS        (8)  /* Buddy 2: raw motor pin check   */
+#define APP_MODE_TEST_CRASH         (9)  /* Buddy 4: drive into a wall     */
 
 #ifndef APP_MODE
 #define APP_MODE                    APP_MODE_MISSION
@@ -148,6 +149,9 @@
 #define HUMP_PITCH_ON_DEG           (6.0f)
 #define HUMP_PITCH_OFF_DEG          (3.0f)
 #define HUMP_MIN_HEIGHT_MM          (5.0f)
+/* DESCENDING once this far below the peak, CLIMBING again only at a new
+   peak: roll noise moves the height about 1 mm either way.               */
+#define HUMP_STATE_HYST_MM          (2.0f)
 /* One-wheel humps (the barcode sensor leaves room for only one wheel):
    the car rolls instead of pitching; 3 deg is about 5 mm under a wheel. */
 #define HUMP_ROLL_ON_DEG            (3.0f)
@@ -156,10 +160,19 @@
 #define HUMP_ROLL_LEVER_MM          (100.0f)
 /* A 1 cm hump leans past the trigger for about 25 mm, a hand jolt 15. */
 #define HUMP_ROLL_MIN_MM            (20.0f)   /* rolled this far: not a jolt */
-/* [CALIBRATE] 700 mg counted motor starts and reverses as impacts.        */
-#define IMPACT_JERK_MG              (1500.0f) /* sample-to-sample change    */
+/* [CALIBRATE] Driving, only the jolt against the direction of travel
+   counts (TEST_CRASH): by size alone, wall hits (1014-2885 mg) overlapped
+   motor starts (up to 1453 forward, 1797 reversing).  Parked: any jolt.  */
+#define IMPACT_JERK_MG              (800.0f)  /* sample-to-sample change    */
+#define IMPACT_DRIVE_PCT            (5.0f)    /* duty above this: driving   */
+/* Braking (up to 1011 mg) and the rock after a reverse start (1074) also
+   jolt against travel: ignore jolts just after the car's own duty jumps. */
+#define IMPACT_DUTY_STEP_PCT        (15.0f)   /* mean duty change per step  */
+#define IMPACT_BLANK_MS             (300u)    /* then ignore jolts this long*/
 #define IMPACT_HOLDOFF_MS           (500u)
-#define TURN_RATE_EVENT_DPS         (40.0f)
+/* Encoders and compass must both turn: straight pushes read up to 12 deg/s
+   on the encoders and 9 on the compass, a hand turn 12-39 and 26-81.     */
+#define TURN_RATE_EVENT_DPS         (10.0f)
 #define ACCEL_EVENT_MM_S2           (250.0f)
 
 /* ------------------------------------------------------------------------ */

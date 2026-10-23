@@ -92,7 +92,7 @@ git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../d
 ## Build and flash
 1. `gmake -C template/build_make -j8 APP_MODE=TEST_MOTOR CONSOLE=usb_cdc`
    (modes: MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE,
-   TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY).
+   TEST_IMU, TEST_CRASH, TEST_ULTRASONIC, TEST_TELEMETRY).
 2. Hold BOOTSEL, plug USB, copy `template/build_make/*.uf2` (or one from
    `firmware/`). Open the USB serial port.
 3. Press **GP20 (START)** to run a test / the mission. **GP21 (STOP)**

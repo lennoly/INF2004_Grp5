@@ -1,6 +1,6 @@
 /** @file subsystem4_test.h
  *
- * @brief Buddy 4 test program (make APP_MODE=TEST_IMU), run by
+ * @brief Buddy 4 test programs (make APP_MODE=TEST_IMU or TEST_CRASH), run by
  *        app_tests.c each time START is pressed.
  */
 
@@ -11,6 +11,7 @@
 
 int32_t subsystem4_test_init(void);
 void    subsystem4_test_imu(void);
+void    subsystem4_test_crash(void);
 
 #endif /* SUBSYSTEM4_TEST_H */
 
