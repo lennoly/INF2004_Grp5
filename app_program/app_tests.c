@@ -73,7 +73,7 @@ app_tests_start (void)
     (void) motion_init();
     (void) ir_sensor_init();
     (void) barcode_init();
-#elif APP_MODE == APP_MODE_TEST_IMU
+#elif (APP_MODE == APP_MODE_TEST_IMU) || (APP_MODE == APP_MODE_TEST_CRASH)
     (void) encoder_init();
     (void) motion_init();
     (void) subsystem4_test_init(); /* I2C scan, then imu_init() */
@@ -178,6 +178,8 @@ run_test (void)
     subsystem3_test_barcode();
 #elif APP_MODE == APP_MODE_TEST_IMU
     subsystem4_test_imu();
+#elif APP_MODE == APP_MODE_TEST_CRASH
+    subsystem4_test_crash();
 #else
     subsystem5_test_ultrasonic();
 #endif

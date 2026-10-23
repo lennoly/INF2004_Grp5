@@ -62,6 +62,14 @@ terrain_event_t terrain_classify(float32_t speed_mm_s, float32_t accel_mm_s2,
                                  float32_t            turn_rate_dps,
                                  terrain_hump_state_t hump, bool b_impact);
 char const *    terrain_event_name(terrain_event_t event);
+float32_t       terrain_travel_sign(float32_t pwm_pct, float32_t speed_mm_s,
+                                    float32_t last_sign);
+float32_t       terrain_impact_jerk(float32_t delta_fwd_mg,
+                                    float32_t delta_side_mg,
+                                    float32_t delta_up_mg,
+                                    float32_t travel_sign);
+uint32_t        terrain_impact_blank(uint32_t  blank_ms,
+                                     float32_t duty_change_pct);
 
 #endif /* TERRAIN_H */
 
