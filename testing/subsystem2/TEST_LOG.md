@@ -1,6 +1,6 @@
 # Subsystem 2 — test log
 
-**Subsystem:** Motors, encoders, wheel PID, moves  ·  **Student ID:**  ·  **Code:** `app_program/subsystem2/`
+**Subsystem:** Motors, encoders, wheel PID, moves  ·  **Student ID:** 2503109  ·  **Code:** `app_program/subsystem2/`
 
 See `testing/README.md` for how to run tests and record results.
 
