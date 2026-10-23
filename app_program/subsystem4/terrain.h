@@ -9,6 +9,10 @@
  * using pitch from the (acceleration-compensated) accelerometer and ds
  * from the wheel encoders.  Integration only runs while on a hump, which
  * keeps drift bounded.
+ *
+ * A hump under one wheel only rolls the car, so its height is read
+ * directly from the roll instead: h = HUMP_ROLL_LEVER_MM * tan(|roll|),
+ * and it counts only if the roll lasted HUMP_ROLL_MIN_MM of travel.
  */
 
 #ifndef TERRAIN_H
@@ -34,6 +38,8 @@ typedef struct
     float32_t            active_mm;   /* distance travelled on this hump  */
     float32_t            level_mm;    /* distance travelled level again   */
     float32_t            preroll_mm;  /* height gained before the trigger */
+    bool                 b_one_wheel; /* height read from the roll       */
+    float32_t            roll_mm;     /* travel rolled past the trigger  */
     uint32_t             humps;       /* humps completed                  */
 } terrain_hump_t;
 
@@ -51,7 +57,7 @@ typedef enum
 
 void terrain_hump_init(terrain_hump_t * p_hump);
 void terrain_hump_update(terrain_hump_t * p_hump, float32_t pitch_deg,
-                         float32_t ds_mm);
+                         float32_t roll_deg, float32_t ds_mm);
 terrain_event_t terrain_classify(float32_t speed_mm_s, float32_t accel_mm_s2,
                                  float32_t            turn_rate_dps,
                                  terrain_hump_state_t hump, bool b_impact);

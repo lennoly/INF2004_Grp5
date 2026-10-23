@@ -11,6 +11,7 @@
 #include "car_config.h" /* APP_MODE_* names: without it every #if is true */
 #include "hal.h"
 #include "imu.h"
+#include "motion.h"
 #include "terrain.h"
 #include "app_tests.h"
 #include "subsystem4_test.h"
@@ -94,28 +95,37 @@ subsystem4_test_init (void)
 }
 
 /*!
- * @brief Buddy 4 IMU test: push or drive the car over a hump; prints tilt
- *        (tenths of a degree), rates, hump height and motion events.
+ * @brief Buddy 4 IMU test: push the car forward by hand (over a hump if
+ *        one is placed ahead); prints tilt (tenths of a degree), rates,
+ *        hump height, motion events and the wheel readings for 30 s.
  */
 void
 subsystem4_test_imu (void)
 {
-    imu_status_t imu_state;
-    uint32_t     elapsed_ms = 0u;
+    imu_status_t    imu_state;
+    motion_status_t motion;
+    uint32_t        elapsed_ms = 0u;
 
     print_scan();
+
+    /* Start each run flat with no impacts: tilting the car to press START
+       must not leave a hump open (the mission does the same at START). */
+    imu_reset_run();
 
     /* Casts in the messages: tm_printf() takes the kernel's UB string
        type; the literals are ASCII. */
     (void) tm_printf((UB const *) "# ok,pitch,roll,yaw,encRate,magRate,h,"
-                                  "peak,max,n,event,impacts\n");
+                                  "peak,max,n,event,impacts,"
+                                  "tgtL,vL,pwmL,tgtR,vR,pwmR,odo,"
+                                  "ticksL,ticksR\n");
 
     for (elapsed_ms = 0u; elapsed_ms < TEST_DURATION_MS; elapsed_ms += PRINT_MS)
     {
         imu_get_status(&imu_state);
+        motion_get_status(&motion);
 
         /* Casts: the counters are 32-bit unsigned like UINT. */
-        (void) tm_printf((UB const *) "%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,%s,%u\n",
+        (void) tm_printf((UB const *) "%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,%s,%u,",
                          imu_state.b_ok ? 1 : 0,
                          app_tests_print_int(imu_state.pitch_deg * TENTHS),
                          app_tests_print_int(imu_state.roll_deg * TENTHS),
@@ -128,6 +138,19 @@ subsystem4_test_imu (void)
                          (UINT) imu_state.hump.humps,
                          terrain_event_name(imu_state.event),
                          (UINT) imu_state.impacts);
+
+        /* Wheel columns: target and measured speed (mm/s), duty (%),
+           odometer (mm) and raw tick counts.  Casts: as above (UB string,
+           32-bit counters as UINT). */
+        (void) tm_printf((UB const *) "%d,%d,%d,%d,%d,%d,%d,%u,%u\n",
+                         app_tests_print_int(motion.target_l_mm_s),
+                         app_tests_print_int(motion.speed_l_mm_s),
+                         app_tests_print_int(motion.pwm_l_pct),
+                         app_tests_print_int(motion.target_r_mm_s),
+                         app_tests_print_int(motion.speed_r_mm_s),
+                         app_tests_print_int(motion.pwm_r_pct),
+                         app_tests_print_int(motion.odo_mm),
+                         (UINT) motion.ticks_l, (UINT) motion.ticks_r);
         (void) tk_dly_tsk(PRINT_MS);
     }
 }

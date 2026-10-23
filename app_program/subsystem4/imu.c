@@ -688,7 +688,7 @@ imu_step (imu_history_t * p_hist)
         b_impact = detect_impact(acc, p_hist);
 
         start_us = timing_start();
-        terrain_hump_update(&g_hump, g_work.pitch_deg,
+        terrain_hump_update(&g_hump, g_work.pitch_deg, g_work.roll_deg,
                             motion.odo_mm - p_hist->odo);
         timing_stop(TIMING_HUMP, start_us);
         g_work.hump = g_hump;
