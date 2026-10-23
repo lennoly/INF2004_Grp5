@@ -85,6 +85,7 @@
 
 /* Terrain. */
 #define HUMP_SPEED_MM_S (150.0f)
+#define LIFT_SAMPLES    (100u) /* 2 s at 50 Hz */
 #define HUMP_LENGTH_MM  (250.0f)
 #define HUMP_LEAD_MM    (200.0f)
 #define HUMP_TAIL_MM    (300.0f)
@@ -93,6 +94,12 @@
 #define HEIGHT_FRACTION (0.1f)
 #define HEIGHT_SLACK_MM (2.0f)
 #define PI_F            (3.14159f)
+#define ROLL_NOISE_DEG  (0.5f)   /* roll is low-pass filtered           */
+#define CASTER_MM       (100.0f) /* drive axle to caster (one-wheel sim) */
+#define WHEEL_COUNT     (2u)     /* one-wheel hump heights tested       */
+#define JOLT_FIRST      (20u)    /* roll step starts at sample 20       */
+#define JOLT_SAMPLES    (5u)     /* 15 mm: a hand-push jolt             */
+#define LEAN_SAMPLES    (8u)     /* 24 mm: a 1 cm one-wheel hump        */
 
 /* Obstacle scan. */
 #define SCAN_FIRST_DEG  (10)
@@ -619,7 +626,7 @@ simulate_hump (float32_t height, float32_t length, float32_t noise_deg,
         pitch = (theta * DEG_PER_RAD) + (noise_deg * random_unit());
 
         /* The encoders measure the arc length. */
-        terrain_hump_update(&hump, pitch, step_mm);
+        terrain_hump_update(&hump, pitch, 0.0f, step_mm);
         pos_mm += step_mm * cosf(theta);
     }
 
@@ -629,12 +636,149 @@ simulate_hump (float32_t height, float32_t length, float32_t noise_deg,
 }
 
 /*!
+ * @brief Drive one wheel over a raised-cosine hump (the other stays on
+ *        the floor): the car rolls by atan(z / lever) and dips its nose
+ *        by atan(z / 2 caster), with noisy readings.
+ *
+ * @param[in]  height  Hump height in mm.
+ * @param[out] p_humps Humps counted.
+ *
+ * @return Highest estimated peak in mm.
+ */
+static float32_t
+simulate_one_wheel (float32_t height, uint32_t * p_humps)
+{
+    terrain_hump_t hump;
+    float32_t      step_mm = HUMP_SPEED_MM_S * PID_DT_S; /* 50 Hz */
+    float32_t      pos_mm  = -HUMP_LEAD_MM;
+    float32_t      wheel_z = 0.0f;
+    float32_t      roll    = 0.0f;
+    float32_t      pitch   = 0.0f;
+
+    terrain_hump_init(&hump);
+
+    while (pos_mm < (HUMP_LENGTH_MM + HUMP_TAIL_MM))
+    {
+        wheel_z = 0.0f;
+
+        if ((pos_mm > 0.0f) && (pos_mm < HUMP_LENGTH_MM))
+        {
+            wheel_z = 0.5f * height
+                      * (1.0f - cosf((2.0f * PI_F * pos_mm) / HUMP_LENGTH_MM));
+        }
+
+        roll  = (atanf(wheel_z / HUMP_ROLL_LEVER_MM) * DEG_PER_RAD)
+               + (ROLL_NOISE_DEG * random_unit());
+        pitch = (-atanf(wheel_z / (2.0f * CASTER_MM)) * DEG_PER_RAD)
+                + (PITCH_NOISE_DEG * random_unit());
+        terrain_hump_update(&hump, pitch, roll, step_mm);
+        pos_mm += step_mm;
+    }
+
+    *p_humps = hump.humps;
+
+    return (hump.max_peak_mm);
+}
+
+/*!
+ * @brief Roll on the flat with a roll step of roll_deg for count samples
+ *        (3 mm each), then level again.
+ *
+ * @param[in] roll_deg Roll during the step.
+ * @param[in] count    Samples in the step.
+ *
+ * @return Humps counted.
+ */
+static uint32_t
+roll_step_humps (float32_t roll_deg, uint32_t count)
+{
+    terrain_hump_t hump;
+    uint32_t       idx = 0u;
+
+    terrain_hump_init(&hump);
+
+    for (idx = 0u; idx < LIFT_SAMPLES; idx++)
+    {
+        terrain_hump_update(&hump, 0.0f,
+                            ((idx >= JOLT_FIRST) && (idx < (JOLT_FIRST + count)))
+                                ? roll_deg
+                                : 0.0f,
+                            HUMP_SPEED_MM_S * PID_DT_S);
+    }
+
+    return (hump.humps);
+}
+
+/*!
+ * @brief Stop on a one-wheel hump (5 deg roll) and tilt the car 15 deg
+ *        sideways by hand: the peak must not change.
+ *
+ * @return true if the peak stayed at the rolling value.
+ */
+static bool
+lift_on_hump_holds_peak (void)
+{
+    terrain_hump_t hump;
+    float32_t      peak = 0.0f;
+    uint32_t       idx  = 0u;
+
+    terrain_hump_init(&hump);
+
+    for (idx = 0u; idx < (LIFT_SAMPLES / 2u); idx++)
+    {
+        terrain_hump_update(&hump, 0.0f, 5.0f, HUMP_SPEED_MM_S * PID_DT_S);
+    }
+
+    peak = hump.peak_mm;
+
+    for (idx = 0u; idx < (LIFT_SAMPLES / 2u); idx++)
+    {
+        terrain_hump_update(&hump, 0.0f, 15.0f, 0.0f);
+    }
+
+    return ((HUMP_FLAT != hump.state) && nearly(hump.peak_mm, peak, 0.01f));
+}
+
+/*!
+ * @brief Lift the front 15 deg and the back 15 deg with the wheels still,
+ *        one side tilted 10 deg, then roll on the flat: the tracker must
+ *        never leave HUMP_FLAT.
+ *
+ * @return true if it stayed flat and counted nothing.
+ */
+static bool
+lifted_stays_flat (void)
+{
+    terrain_hump_t hump;
+    bool           b_flat = true;
+    uint32_t       idx    = 0u;
+
+    terrain_hump_init(&hump);
+
+    for (idx = 0u; idx < LIFT_SAMPLES; idx++)
+    {
+        terrain_hump_update(&hump, (idx < (LIFT_SAMPLES / 2u)) ? 15.0f : -15.0f,
+                            10.0f, 0.0f);
+        b_flat = b_flat && (HUMP_FLAT == hump.state);
+    }
+
+    for (idx = 0u; idx < LIFT_SAMPLES; idx++)
+    {
+        terrain_hump_update(&hump, 0.0f, 0.0f, HUMP_SPEED_MM_S * PID_DT_S);
+        b_flat = b_flat && (HUMP_FLAT == hump.state);
+    }
+
+    return (b_flat && (0u == hump.humps));
+}
+
+/*!
  * @brief Hump height estimation and motion-event classification.
  */
 static void
 test_terrain (void)
 {
     float32_t const heights[HEIGHT_COUNT] = {20.0f, 30.0f, 40.0f, 60.0f};
+    float32_t const wheel_heights[WHEEL_COUNT] = {10.0f, 20.0f};
     uint32_t        humps                 = 0u;
     uint32_t        idx                   = 0u;
     float32_t       estimate              = 0.0f;
@@ -657,8 +801,29 @@ test_terrain (void)
               "peak within 10 %");
     }
 
+    (void) printf("terrain: one-wheel hump, true height -> estimated peak\n");
+
+    for (idx = 0u; idx < WHEEL_COUNT; idx++)
+    {
+        estimate = simulate_one_wheel(wheel_heights[idx], &humps);
+        (void) printf("   %4.0f mm -> %5.1f mm, humps=%" PRIu32 "\n",
+                      wide(wheel_heights[idx]), wide(estimate), humps);
+        check(1u == humps, "one-wheel hump detected");
+        check(nearly(estimate, wheel_heights[idx],
+                     (HEIGHT_FRACTION * wheel_heights[idx]) + HEIGHT_SLACK_MM),
+              "one-wheel peak within 10 %");
+    }
+
     (void) simulate_hump(0.0f, HUMP_LENGTH_MM, PITCH_NOISE_DEG, &humps);
     check(0u == humps, "flat floor with noise: no hump");
+    (void) simulate_one_wheel(0.0f, &humps);
+    check(0u == humps, "flat floor with roll noise: no hump");
+    check(0u == roll_step_humps(7.0f, JOLT_SAMPLES),
+          "15 mm roll jolt while pushing: no hump");
+    check(1u == roll_step_humps(4.0f, LEAN_SAMPLES),
+          "24 mm lean (1 cm one-wheel hump): one hump");
+    check(lift_on_hump_holds_peak(), "lifted on a hump: peak held");
+    check(lifted_stays_flat(), "tilted with the wheels still: no hump");
     check(EVT_IMPACT == terrain_classify(0.0f, 0.0f, 0.0f, HUMP_FLAT, true),
           "impact");
     check(EVT_TURNING
@@ -667,6 +832,15 @@ test_terrain (void)
     check(EVT_STATIONARY
               == terrain_classify(5.0f, 0.0f, 0.0f, HUMP_FLAT, false),
           "still");
+    check(EVT_STATIONARY
+              == terrain_classify(0.0f, 0.0f, 0.0f, HUMP_CLIMBING, false),
+          "stopped with a hump open: still");
+    check(EVT_CLIMBING
+              == terrain_classify(150.0f, 0.0f, 0.0f, HUMP_CLIMBING, false),
+          "rolling up a hump: climbing");
+    check(EVT_TURNING
+              == terrain_classify(0.0f, 0.0f, 90.0f, HUMP_DESCENDING, false),
+          "pivoting with a hump open: turning");
 }
 
 /*!

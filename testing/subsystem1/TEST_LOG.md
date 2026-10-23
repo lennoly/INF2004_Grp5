@@ -1,6 +1,6 @@
 # Subsystem 1 — test log
 
-**Subsystem:** WiFi, MQTT, telemetry, commands  ·  **Student ID:**  ·  **Code:** `app_program/subsystem1/`
+**Subsystem:** WiFi, MQTT, telemetry, commands  ·  **Student ID:** 2500343  ·  **Code:** `app_program/subsystem1/`
 
 See `testing/README.md` for how to run tests and record results.
 

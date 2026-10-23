@@ -148,6 +148,14 @@
 #define HUMP_PITCH_ON_DEG           (6.0f)
 #define HUMP_PITCH_OFF_DEG          (3.0f)
 #define HUMP_MIN_HEIGHT_MM          (5.0f)
+/* One-wheel humps (the barcode sensor leaves room for only one wheel):
+   the car rolls instead of pitching; 3 deg is about 5 mm under a wheel. */
+#define HUMP_ROLL_ON_DEG            (3.0f)
+#define HUMP_ROLL_OFF_DEG           (1.5f)
+/* [CALIBRATE] height = lever * tan(roll): 1 cm rolled 5.6 deg, 2 cm 11.5. */
+#define HUMP_ROLL_LEVER_MM          (100.0f)
+/* A 1 cm hump leans past the trigger for about 25 mm, a hand jolt 15. */
+#define HUMP_ROLL_MIN_MM            (20.0f)   /* rolled this far: not a jolt */
 /* [CALIBRATE] 700 mg counted motor starts and reverses as impacts.        */
 #define IMPACT_JERK_MG              (1500.0f) /* sample-to-sample change    */
 #define IMPACT_HOLDOFF_MS           (500u)

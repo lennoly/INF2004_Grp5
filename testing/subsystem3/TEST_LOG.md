@@ -1,6 +1,6 @@
 # Subsystem 3 — test log
 
-**Subsystem:** IR sensors, line following, barcode  ·  **Student ID:**  ·  **Code:** `app_program/subsystem3/`
+**Subsystem:** IR sensors, line following, barcode  ·  **Student ID:** 2501660  ·  **Code:** `app_program/subsystem3/`
 
 See `testing/README.md` for how to run tests and record results.
 
