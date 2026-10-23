@@ -63,15 +63,17 @@ whoever owns `vehicle.c`, together with the buddy named.
 - [ ] Run S3-U02, U03 and the new lighting/speed robustness test (§5, §6)
 
 **Buddy 4: IMU, terrain, humps**
-- [ ] Decide on the hump estimator (6° `ds·sin` vs front-contact 10 mm). This is a team decision, not code; REPORT §4.4 already matches the code (§4.5)
-- [x] Add the timeout to the I2C FIFO wait in `hal_i2c_read()`: done, uncommitted (§4.6)
-- [x] IMU recovers after a re-plug or a boot failure: done, uncommitted (§4.9)
-- [ ] Run S4-U02..U06 (U04 events, U05 impact, U06 unplug are newly defined); save the logs (§6, §7)
+- [x] Hump estimator: on the track the barcode sensor leaves room for only one wheel, so the car rolls instead of pitching; one-wheel humps are read from the roll (h = 100 mm × tan(roll), lean must last 20 mm), the 6° `ds·sin` pitch path is kept for two-wheel humps (S4-U03, 23 Oct)
+- [x] Add the timeout to the I2C FIFO wait in `hal_i2c_read()` (§4.6)
+- [x] IMU recovers after a re-plug or a boot failure (§4.9; S4-U06 PASS)
+- [x] Run S4-U02..U06: all PASS on 23 Oct, logged in testing/subsystem4/TEST_LOG.md (U05 now uses TEST_CRASH, driving into a wall, instead of hand taps)
 - [x] Pitch sign (+1, front up = positive) (§5a)
-- [ ] Hump heights vs ruler: 12 mm gave a 9 mm peak, run not completed (push it 10 cm past the hump); magnetometer spin
-- [ ] Impacts: while driving only the jolt against the direction of travel counts, `IMPACT_JERK_MG` 800, ignored for 300 ms after the motor duty jumps more than 15 % (TEST_CRASH, S4-U05). Also check line following in MISSION does not keep it ignored. Confirm with TEST_CRASH that starts, reverses and braking stay under it, then set `OBST_ON_IMPACT` back to 1 before the demo (§5a)
-- [ ] Event stays CLIMBING when the car stops on a hump (hump state is checked before "stationary" in `terrain_classify()`); decide whether to reorder
-- [ ] IMU `ok` drops to 0 when the car moves: check the Grove 3 wires
+- [x] Hump heights vs ruler: 1 cm read 10–12 mm, 2 cm read 15–19 mm, 5 of 5 each (S4-U03)
+- [ ] Magnetometer spin calibration (TURNING now also needs the compass rate above 10 °/s; it worked uncalibrated in S4-U04)
+- [ ] Impacts: while driving only the jolt against the direction of travel counts, `IMPACT_JERK_MG` 800, ignored for 300 ms after the motor duty jumps more than 15 % (TEST_CRASH, S4-U05). Also check line following in MISSION does not keep it ignored. TEST_CRASH passed 10 of 10 with no false impacts (S4-U05). Not tested: a collision at the 300 mm/s cruise speed (the slowest test hits, about 400 mm/s, read 826–922 mg). Set `OBST_ON_IMPACT` back to 1 before the demo (§5a)
+- [x] Event stays CLIMBING when the car stops on a hump: a hump is now reported only while the car moves, so a stop reads STATIONARY (S4-U04)
+- [x] IMU `ok` drops to 0 when the car moves: `ok` stayed 1 through every driven and pushed run on 23 Oct
+- [ ] REPORT §4.4 is out of date (impact = 700 mg vector jerk; no one-wheel humps, direction rule or TURNING rule): update last, with the other report work
 
 **Buddy 5: ultrasonic, servo, avoidance**
 - [x] Merge `origin/Raees` into `main` first (STOP during scans, watchdog, sonar stale) (§3, §4.1): merged 22 Oct, with the narrow scan (the mount lets the sensor turn only about ±25°)
