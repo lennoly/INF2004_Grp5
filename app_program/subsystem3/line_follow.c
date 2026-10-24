@@ -31,6 +31,8 @@ line_follow_init (line_follow_t * p_follow)
     p_follow->error           = 0.0f;
     p_follow->last_seen_error = 0.0f;
     p_follow->junction_mm     = 0.0f;
+    p_follow->clear_mm        = 0.0f;
+    p_follow->b_junction_seen = false;
     p_follow->lost_ms         = 0u;
     p_follow->state           = LINE_ON;
 }
@@ -85,7 +87,9 @@ line_follow_get_gains (float32_t * p_gain_p, float32_t * p_gain_i,
  *
  * LOST needs LINE_LOST_CONFIRM_MS of both sensors on white; JUNCTION needs
  * LINE_JUNCTION_MIN_MM of travel with both on black, so a single noisy
- * sample cannot trigger a turn.
+ * sample cannot trigger a turn.  A junction is reported once: after it,
+ * both sensors must leave black for LINE_JUNCTION_REARM_MM before the
+ * next one counts, so a flickering line does not keep re-triggering.
  *
  * @param[in,out] p_follow    Follower state.
  * @param[in]     left        Left sensor, 0 (white) .. 1 (black).
@@ -107,14 +111,25 @@ line_follow_classify (line_follow_t * p_follow, float32_t left, float32_t right,
     p_follow->junction_mm =
         b_both_black ? (p_follow->junction_mm + car_math_abs(distance_mm))
                      : 0.0f;
+    p_follow->clear_mm =
+        b_both_black ? 0.0f : (p_follow->clear_mm + car_math_abs(distance_mm));
+
+    if (p_follow->clear_mm >= LINE_JUNCTION_REARM_MM)
+    {
+        p_follow->b_junction_seen = false;
+    }
 
     if (p_follow->lost_ms >= LINE_LOST_CONFIRM_MS)
     {
         p_follow->state = LINE_LOST;
     }
-    else if (p_follow->junction_mm >= LINE_JUNCTION_MIN_MM)
+    else if ((p_follow->junction_mm >= LINE_JUNCTION_MIN_MM)
+             && ((!p_follow->b_junction_seen)
+                 || (LINE_JUNCTION == p_follow->state)))
     {
-        p_follow->state = LINE_JUNCTION;
+        /* New junction, or still on the one already reported. */
+        p_follow->state           = LINE_JUNCTION;
+        p_follow->b_junction_seen = true;
     }
     else
     {

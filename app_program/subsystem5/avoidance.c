@@ -45,8 +45,8 @@ static avoidance_plan_t choose_side(avoidance_profile_t const * p_prof,
  *
  * @param[in]  p_points Scan points, sorted by angle.
  * @param[in]  count    Number of points.
- * @param[out] p_out    Profile; only b_found and closest_mm are written
- *                      when nothing is found.
+ * @param[out] p_out    Profile; when nothing is found every field but
+ *                      closest_mm is zero (no stale or random edges).
  *
  * @return true if an obstacle closer than OBST_DETECT_MM was found.
  */
@@ -54,10 +54,14 @@ bool
 avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
                    avoidance_profile_t * p_out)
 {
-    uint32_t best = 0u;
-    uint32_t low  = 0u;
-    uint32_t high = 0u;
+    avoidance_profile_t const empty = {false, 0, 0,    0.0f, 0.0f,
+                                       0.0f,  0.0f, 0, 0};
+    uint32_t                  best  = 0u;
+    uint32_t                  low   = 0u;
+    uint32_t                  high  = 0u;
 
+    /* Scans printed cl=70647 when nothing was found: start from zero. */
+    *p_out            = empty;
     p_out->closest_mm = find_closest(p_points, count, &best);
     p_out->b_found    = (0u != count) && (p_out->closest_mm < OBST_DETECT_MM);
 
@@ -70,6 +74,14 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
         p_out->closest_angle = p_points[best].angle_deg;
         measure_extent(p_points, low, high, p_out);
         measure_clearance(p_points, count, low, high, p_out);
+
+        /* An edge on the first or last point is where the sweep ends,
+           not the obstacle (the mount turns only 25 degrees each way):
+           no known room on that side, so no pass there.  Neither side
+           seen: avoidance_plan() passes wide on OBST_BLIND_LEFT's side. */
+        p_out->clear_left_mm  = (high == (count - 1u)) ? 0
+                                                      : p_out->clear_left_mm;
+        p_out->clear_right_mm = (0u == low) ? 0 : p_out->clear_right_mm;
     }
 
     return (p_out->b_found);
@@ -139,12 +151,15 @@ avoidance_action_name (avoidance_action_t action)
  *
  * @param[in] p_point Scan point.
  *
- * @return true if the distance is inside the sensor's range.
+ * @return true if the distance is inside the sensor's range and closer
+ *         than the floor (OBST_FLOOR_MM): the sensor cannot tilt up, and
+ *         the floor echo looked like an object beside the box.
  */
 static bool
 point_is_valid (avoidance_point_t const * p_point)
 {
-    return ((p_point->dist_mm >= US_MIN_MM) && (p_point->dist_mm <= US_MAX_MM));
+    return ((p_point->dist_mm >= US_MIN_MM)
+            && (p_point->dist_mm < OBST_FLOOR_MM));
 }
 
 /*!
@@ -237,6 +252,7 @@ measure_extent (avoidance_point_t const * p_points, uint32_t low, uint32_t high,
 {
     uint32_t  idx     = 0u;
     float32_t lateral = 0.0f;
+    float32_t beam_mm = 0.0f;
 
     p_out->left_edge_mm  = point_lateral(&p_points[low]);
     p_out->right_edge_mm = p_out->left_edge_mm;
@@ -250,8 +266,15 @@ measure_extent (avoidance_point_t const * p_points, uint32_t low, uint32_t high,
             (lateral > p_out->right_edge_mm) ? lateral : p_out->right_edge_mm;
     }
 
-    p_out->width_mm  = p_out->right_edge_mm - p_out->left_edge_mm;
     p_out->centre_mm = 0.5f * (p_out->left_edge_mm + p_out->right_edge_mm);
+
+    /* Reported width only: the edges stay as seen, so the pass keeps the
+       cone as extra margin.  Cast: closest_mm is below US_MAX_MM. */
+    beam_mm = 2.0f * (float32_t) p_out->closest_mm
+              * (car_math_sin(OBST_BEAM_HALF_DEG * CAR_MATH_RAD_PER_DEG)
+                 / car_math_cos(OBST_BEAM_HALF_DEG * CAR_MATH_RAD_PER_DEG));
+    p_out->width_mm = p_out->right_edge_mm - p_out->left_edge_mm - beam_mm;
+    p_out->width_mm = (p_out->width_mm > 0.0f) ? p_out->width_mm : 0.0f;
 }
 
 /*!
@@ -347,6 +370,18 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     {
         plan.action    = AVOID_TURN_RIGHT;
         plan.offset_mm = off_right;
+        plan.pass_mm   = pass;
+    }
+    else if ((0 == p_prof->clear_left_mm) && (0 == p_prof->clear_right_mm))
+    {
+        /* Neither edge seen: wide enough for the largest box either way;
+           the front sensor still watches the pass. */
+#if OBST_BLIND_LEFT
+        plan.action = AVOID_TURN_LEFT;
+#else
+        plan.action = AVOID_TURN_RIGHT;
+#endif
+        plan.offset_mm = OBST_BLIND_OFFSET_MM;
         plan.pass_mm   = pass;
     }
     else

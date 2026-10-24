@@ -23,6 +23,8 @@ void     vehicle_sim_front_ambient(ultrasonic_class_t result, int32_t mm);
 void     vehicle_sim_monitor_starve(bool b_starve);
 void     vehicle_sim_box(bool b_present);
 void     vehicle_sim_line(bool b_on_line);
+void     vehicle_sim_junction(void);
+void     vehicle_sim_bar_black(bool b_black);
 void     vehicle_sim_hump(terrain_hump_state_t state);
 void     vehicle_sim_impact(void);
 void     vehicle_sim_barcode(barcode_decode_nav_t cmd);

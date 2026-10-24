@@ -6,8 +6,10 @@
  *                  (median of 3 each).  The sensor mount only lets the
  *                  sensor turn about 25 degrees each way, so the brief's
  *                  example angles (30 .. 150) cannot be reached.
- * Stage 2 fine   : +-OBST_FINE_PAD_DEG around the detected region in
- *                  OBST_FINE_STEP_DEG steps, inside the same limits.
+ * Stage 2 fine   : the whole SERVO_MIN_DEG..SERVO_MAX_DEG range in
+ *                  OBST_FINE_STEP_DEG steps (11 points): a window around
+ *                  the coarse echo missed the inner edge of an off-centre
+ *                  box, the side the car passes on (S5-U07).
  * Stage 3 profile: avoidance_profile() on the fine points.
  *
  * The caller's stop callback is polled every SETTLE_STEP_MS while the servo
@@ -93,7 +95,6 @@ static bool     coarse_scan(avoidance_point_t * p_points, uint32_t * p_count,
                             int32_t * p_low, int32_t * p_high,
                             obstacle_stop_cb_t p_should_stop);
 static bool     fine_scan(avoidance_point_t * p_points, uint32_t * p_count,
-                          int32_t low, int32_t high,
                           obstacle_stop_cb_t p_should_stop);
 static void     monitor_task(INT stacd, void * p_exinf);
 
@@ -226,10 +227,10 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
     monitor_pause();
     b_complete = coarse_scan(points, &count, &low, &high, p_should_stop);
 
-    /* Something in range: refine around it. */
+    /* Something in range: scan the whole range finely. */
     if (b_complete && (low <= high))
     {
-        b_complete = fine_scan(points, &count, low, high, p_should_stop);
+        b_complete = fine_scan(points, &count, p_should_stop);
     }
 
     /* Always re-centre fully, so the monitor's pings point ahead. */
@@ -590,31 +591,26 @@ coarse_scan (avoidance_point_t * p_points, uint32_t * p_count, int32_t * p_low,
 }
 
 /*!
- * @brief Stage 2: fine scan around the region found by the coarse scan.
+ * @brief Stage 2: fine scan of the whole range the mount allows.
  *
  * @param[out] p_points      Scan points.
  * @param[out] p_count       Number of points taken.
- * @param[in]  low           Lowest coarse angle with a close echo.
- * @param[in]  high          Highest coarse angle with a close echo.
  * @param[in]  p_should_stop Stop callback, or NULL.
  *
  * @return false if the scan was stopped early.
  */
 static bool
-fine_scan (avoidance_point_t * p_points, uint32_t * p_count, int32_t low,
-           int32_t high, obstacle_stop_cb_t p_should_stop)
+fine_scan (avoidance_point_t * p_points, uint32_t * p_count,
+           obstacle_stop_cb_t p_should_stop)
 {
-    int32_t first   = low - OBST_FINE_PAD_DEG;
-    int32_t last    = high + OBST_FINE_PAD_DEG;
     int32_t angle   = 0;
     int32_t dist_mm = ULTRASONIC_NO_ECHO;
     bool    b_go    = true;
 
-    first    = (first < FINE_MIN_DEG) ? FINE_MIN_DEG : first;
-    last     = (last > FINE_MAX_DEG) ? FINE_MAX_DEG : last;
     *p_count = 0u;
 
-    for (angle = first; b_go && (angle <= last) && (*p_count < SCAN_MAX_POINTS);
+    for (angle = FINE_MIN_DEG;
+         b_go && (angle <= FINE_MAX_DEG) && (*p_count < SCAN_MAX_POINTS);
          angle += OBST_FINE_STEP_DEG)
     {
         b_go = look(angle, p_should_stop, &dist_mm);
