@@ -116,6 +116,10 @@ static volatile bool gb_stop_latched = false;
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
 static float32_t     g_pending_odo        = 0.0f;
+static bool          gb_left_junction     = false; /* since the command */
+static bool          gb_bar_black         = false; /* barcode IR on black */
+static float32_t     g_bar_start_odo      = 0.0f;
+static bool          gb_bar_junction      = false; /* junction line passed */
 static barcode_decode_nav_t g_nav_request = NAV_NONE; /* nav= command */
 static bool          gb_settling          = false; /* slow after a turn */
 static float32_t     g_settle_end_odo     = 0.0f;
@@ -166,6 +170,7 @@ static bool            bypass(avoidance_plan_t const * p_plan);
 static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
+static void            watch_junction_bar(float32_t odo_mm);
 static bool            nav_due(float32_t odo_mm);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
@@ -1149,7 +1154,9 @@ take_barcode (float32_t odo_mm)
     {
         g_st.pending_nav = event.cmd;
         g_st.barcodes++;
-        g_pending_odo = odo_mm;
+        g_pending_odo    = odo_mm;
+        gb_left_junction = false;
+        gb_bar_junction  = false;
     }
 
     /* A nav= command is handled exactly like a barcode (not counted). */
@@ -1158,12 +1165,58 @@ take_barcode (float32_t odo_mm)
         g_st.pending_nav = g_nav_request;
         g_nav_request    = NAV_NONE;
         g_pending_odo    = odo_mm;
+        gb_left_junction = false;
+        gb_bar_junction  = false;
+    }
+
+    /* Only a junction met after the command counts: the barcode's own bars
+       (or a junction the car is still on) must not trigger the turn. */
+    if (LINE_JUNCTION != g_st.line_state)
+    {
+        gb_left_junction = true;
     }
 }
 
 /*!
+ * @brief Measure each black stretch under the barcode sensor.  One of
+ *        NAV_JUNCTION_BAR_MIN_MM..MAX_MM is the junction line; it counts
+ *        once the sensor is past it (on white again).
+ *
+ * @param[in] odo_mm Current odometer reading.
+ */
+static void
+watch_junction_bar (float32_t odo_mm)
+{
+    bool      b_black = ir_sensor_barcode_is_black();
+    float32_t width   = odo_mm - g_bar_start_odo;
+
+    if (b_black && (!gb_bar_black))
+    {
+        g_bar_start_odo = odo_mm;
+    }
+    else if ((!b_black) && gb_bar_black && (width >= NAV_JUNCTION_BAR_MIN_MM)
+             && (width <= NAV_JUNCTION_BAR_MAX_MM))
+    {
+        gb_bar_junction = true;
+
+        /* Casts: tm_printf() takes the kernel's UB string type (ASCII);
+           the width is a few tens of mm, so it fits INT. */
+        (void) tm_printf((UB const *) "[vehicle] junction line %d mm\n",
+                         (INT) width);
+    }
+    else
+    {
+        /* Still on the same colour, or a bar of another width. */
+    }
+
+    gb_bar_black = b_black;
+}
+
+/*!
  * @brief Whether the pending navigation command should run now: at the
- *        next junction (or at once, if so configured), immediately for a
+ *        next junction reached after the command (the barcode sensor
+ *        past the junction line, or with NAV_LINE_JUNCTION the line
+ *        sensors on one; or at once, if so configured), immediately for a
  *        U-turn, or after NAV_PENDING_MAX_MM without a junction.
  *
  * @param[in] odo_mm Current odometer reading.
@@ -1177,7 +1230,9 @@ nav_due (float32_t odo_mm)
 
     return ((NAV_NONE != pending)
             && ((0 == NAV_EXECUTE_AT_JUNCTION) || (NAV_UTURN == pending)
-                || (LINE_JUNCTION == g_st.line_state)
+                || gb_bar_junction
+                || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
+                    && (LINE_JUNCTION == g_st.line_state))
                 || ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM)));
 }
 
@@ -1227,6 +1282,7 @@ handle_line_follow (void)
 {
     ir_sensor_snapshot_t ir_snap;
     motion_status_t      motion;
+    imu_status_t         imu;
     float32_t            steer = 0.0f;
     float32_t            speed = 0.0f;
 
@@ -1237,6 +1293,7 @@ handle_line_follow (void)
                                            motion.odo_mm - g_prev_odo, LOOP_MS);
     g_prev_odo      = motion.odo_mm;
     take_barcode(motion.odo_mm);
+    watch_junction_bar(motion.odo_mm);
 
     if (nav_due(motion.odo_mm))
     {
@@ -1257,8 +1314,12 @@ handle_line_follow (void)
         steer = line_follow_steer(&g_lf, ir_snap.norm[IR_LEFT],
                                   ir_snap.norm[IR_RIGHT], DT_S);
 
-        /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t. */
-        speed = (float32_t) g_st.cruise_mm_s;
+        /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t.
+           On a hump: a push up the ramp, held back coming down. */
+        imu_get_status(&imu);
+        speed = (HUMP_CLIMBING == imu.hump.state)     ? SPEED_HUMP_UP_MM_S
+                : (HUMP_DESCENDING == imu.hump.state) ? SPEED_HUMP_DOWN_MM_S
+                                                      : (float32_t) g_st.cruise_mm_s;
         gb_settling = gb_settling && (motion.odo_mm < g_settle_end_odo)
                       && ((now_ms() - g_settle_start_ms) < LINE_SETTLE_MAX_MS);
 

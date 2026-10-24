@@ -137,7 +137,8 @@ ir_sensor_calib_begin (void)
  * @brief Stop the capture and apply it per channel (polarity from the
  *        configuration).
  *
- * A channel that saw too little contrast keeps its old calibration.
+ * A channel that saw too little contrast keeps its old calibration.  The
+ * barcode channel always keeps the defaults.
  *
  * @return false if a line channel saw too little contrast.
  */
@@ -159,7 +160,14 @@ ir_sensor_calib_end (void)
         b_span_ok = ((uint32_t) g_cal_max[idx]
                      >= ((uint32_t) g_cal_min[idx] + MIN_CAL_SPAN));
 
-        if (b_span_ok)
+        if (IR_BARCODE == idx)
+        {
+            /* Kept at the defaults: BARCODE_BLACK/WHITE_LEVEL were tuned
+               on them (TEST_BARCODE never calibrates).  The spin's floor
+               and line extremes moved the levels so narrow bars no longer
+               reached BARCODE_BLACK_LEVEL in MISSION. */
+        }
+        else if (b_span_ok)
         {
 #if IR_BLACK_IS_HIGH
             g_white[idx] = g_cal_min[idx];
@@ -169,13 +177,9 @@ ir_sensor_calib_end (void)
             g_black[idx] = g_cal_min[idx];
 #endif
         }
-        else if (IR_BARCODE != idx)
-        {
-            b_ok = false;
-        }
         else
         {
-            /* The barcode channel may miss a bar during the sweep. */
+            b_ok = false;
         }
     }
 

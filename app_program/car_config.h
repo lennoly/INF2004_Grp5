@@ -102,7 +102,9 @@
 #define SPEED_OFFSET_PCT            (2.3f)    /* static friction offset     */
 #define STRAIGHT_KP                 (2.0f)    /* (mm/s) per mm L-R mismatch */
 
-#define SPEED_CRUISE_MM_S           (300.0f)
+#define SPEED_CRUISE_MM_S           (100.0f)  /* [CALIBRATE] barcode: 100 */
+#define SPEED_HUMP_UP_MM_S          (125.0f)  /* [CALIBRATE] climbing      */
+#define SPEED_HUMP_DOWN_MM_S        (75.0f)   /* [CALIBRATE] descending    */
 #define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
 #define SPEED_TURN_MM_S             (120.0f)
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
@@ -125,14 +127,29 @@
 #define LINE_LOST_LEVEL             (0.15f)   /* both below => off line     */
 #define LINE_JUNCTION_LEVEL         (0.75f)   /* both above => junction     */
 #define LINE_JUNCTION_MIN_MM        (10.0f)
+#define LINE_JUNCTION_REARM_MM      (100.0f)  /* [CALIBRATE] off black before the next junction */
 #define LINE_LOST_CONFIRM_MS        (150u)
 
-#define BARCODE_BLACK_LEVEL         (0.60f)   /* hysteresis thresholds      */
-#define BARCODE_WHITE_LEVEL         (0.40f)
+/* 14 cm barcode (S3-U03): narrow bars peak at 190-810 permille driving at
+   100 mm/s, white paper reads 0-21. */
+#define BARCODE_BLACK_LEVEL         (0.20f)   /* [CALIBRATE] hysteresis     */
+#define BARCODE_WHITE_LEVEL         (0.10f)
 #define BARCODE_QUIET_MS            (250u)    /* white gap ending a frame   */
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
+/* Letter for each command; set on the day.  Must differ (a repeat is a
+   duplicate case and will not compile).  Other letters do nothing. */
+#define BARCODE_LEFT_SYMBOL         ('A')     /* [CALIBRATE]                */
+#define BARCODE_RIGHT_SYMBOL        ('B')     /* [CALIBRATE]                */
+#define BARCODE_STRAIGHT_SYMBOL     ('C')     /* [CALIBRATE]                */
+#define BARCODE_UTURN_SYMBOL        ('D')     /* [CALIBRATE]                */
 #define NAV_EXECUTE_AT_JUNCTION     (1)       /* 0 = act immediately        */
 #define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => act anyway  */
+/* Junctions seen by the barcode sensor: the junction line (18 mm) crosses */
+/* under it; barcode bars are at most about 8 mm.  The turn starts once    */
+/* the sensor is past the line.                                            */
+#define NAV_JUNCTION_BAR_MIN_MM     (12.0f)   /* [CALIBRATE]                */
+#define NAV_JUNCTION_BAR_MAX_MM     (30.0f)   /* [CALIBRATE]                */
+#define NAV_LINE_JUNCTION           (0)       /* 1 = line-sensor junctions too */
 /* After a junction turn or a line search: follow at SPEED_SLOW_MM_S for    */
 /* this distance so the steering lines the car up, then cruise.             */
 #define LINE_SETTLE_MM              (150.0f)
@@ -193,10 +210,14 @@
 #define US_SEM_TIMEOUT_MS           (100u)    /* NFR9: sensor wait limit    */
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
-#define OBST_DETECT_MM              (300)     /* start profiling below this */
+#define OBST_DETECT_MM              (200)     /* start profiling below this */
+/* The floor echoes at about 300-380 mm (the sensor is low and cannot tilt
+   up): the profile treats echoes this far or further as no echo.  The
+   front sensor still watches the pass for real objects. */
+#define OBST_FLOOR_MM               (280)     /* [CALIBRATE]               */
 /* 1: an IMU impact also starts the obstacle routine.  0 while tuning line   */
 /* following: impacts are still counted and reported, but do not stop.     */
-#define OBST_ON_IMPACT              (0)
+#define OBST_ON_IMPACT              (1)
 #define OBST_CONFIRM_READINGS       (2u)      /* close front pings in a row */
 #define OBST_FAULT_LIMIT            (2u)      /* FAULT pings in a row: stop */
 #define OBST_STALE_MS               (300u)    /* no front reading: stop     */
@@ -205,9 +226,17 @@
 #define OBST_MARGIN_MM              (60.0f)
 #define OBST_MAX_CLEARANCE_MM       (1000)
 #define OBST_FINE_STEP_DEG          (5)
-#define OBST_FINE_PAD_DEG           (20)
 #define OBST_DEPTH_MAX_MM           (250.0f)  /* [CALIBRATE] deepest box    */
 #define OBST_MAX_ATTEMPTS           (2u)
+/* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
+   pass this far to one side, enough for the largest obstacle, a 150 mm
+   box up to 60 mm off the line either way (75 + 60 + corridor 140). */
+#define OBST_BLIND_OFFSET_MM        (280.0f)  /* [CALIBRATE]               */
+/* Sonar cone: the box still echoes this far past each edge, so the
+   reported width is narrowed by 2 x closest x tan(beam).  0 until set from
+   TEST_ULTRASONIC scans of 100 and 150 mm boxes (obstacles are 10-15 cm). */
+#define OBST_BEAM_HALF_DEG          (0.0f)    /* [CALIBRATE]               */
+#define OBST_BLIND_LEFT             (1)       /* 0: blind pass on the right*/
 
 /* ------------------------------------------------------------------------ */
 /* Vehicle controller (Buddy 5)                                             */

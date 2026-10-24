@@ -16,6 +16,7 @@
 #define LINE_FOLLOW_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "car_types.h"
 #include "pid.h"
 
@@ -32,6 +33,8 @@ typedef struct
     float32_t           error;           /* latest error                    */
     float32_t           last_seen_error; /* error when the line was visible */
     float32_t           junction_mm;     /* distance with both on black     */
+    float32_t           clear_mm;        /* distance off black since then   */
+    bool                b_junction_seen; /* wait for clear_mm to re-arm     */
     uint32_t            lost_ms;         /* time with both on white         */
     line_follow_state_t state;
 } line_follow_t;

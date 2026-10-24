@@ -67,6 +67,10 @@
 #define LINE_DT_S      (0.02f)
 #define LOST_SAMPLES   (10u) /* 200 ms of white                */
 #define JUNCTION_EXTRA (3u)  /* 4 samples x 4 mm >= 10 mm      */
+#define BAR_NARROW_MS  (40u)  /* about 7 mm at the sim speed    */
+#define BAR_JUNCTION_MS (100u) /* about 18 mm                     */
+#define FLICKER_SAMPLES (10u) /* 10 x 4 mm, below the re-arm     */
+#define REARM_SAMPLES  (25u)  /* 25 x 4 mm = 100 mm              */
 
 /* Barcode. */
 #define PHOTO_ELEMENTS  (29u)
@@ -82,6 +86,10 @@
 #define DRIFT_KINDS     (3u)
 #define FLAT_WIDTH      (100u)
 #define SHORT_ELEMENTS  (12u)
+#define BIAS_MM         (2.0f)  /* bars read thinner, spaces wider */
+#define BIAS_NOISE      (0.10f)
+#define BIAS_TRIALS     (20u)
+#define ARRAY_LEN(a)    (sizeof(a) / sizeof((a)[0]))
 
 /* Terrain. */
 #define HUMP_SPEED_MM_S (150.0f)
@@ -99,6 +107,8 @@
 #define WHEEL_COUNT     (2u)     /* one-wheel hump heights tested       */
 #define JOLT_FIRST      (20u)    /* roll step starts at sample 20       */
 #define JOLT_SAMPLES    (5u)     /* 15 mm: a hand-push jolt             */
+#define JUNK_MM         (70647)  /* what an empty scan printed (cl=)    */
+#define NO_ECHO_POINTS  (5u)
 #define LEAN_SAMPLES    (8u)     /* 24 mm: a 1 cm one-wheel hump        */
 /* 300 ms ignore window: 14 steady 20 ms steps leave 20 ms. */
 #define BLANK_STEADY_STEPS ((IMPACT_BLANK_MS / IMU_PERIOD_MS) - 1u)
@@ -109,8 +119,18 @@
 #define SCAN_STEP_DEG   (5)
 #define NO_ECHO_MM      (9999.0f)
 #define BOX_WIDTH_MM    (100.0f)
-#define BOX_RANGE_MM    (250.0f)
+#define BOX_RANGE_MM    (150.0f)
 #define WIDTH_TOLERANCE (45.0f)
+#define LARGEST_BOX_MM  (150.0f) /* obstacles are 10-15 cm wide   */
+#define WIDE_BOX_MM     (235.0f) /* S5-U07 box                         */
+#define WIDE_BOX_OFFSET_MM (60.0f)
+#define NEAR_BOX_MM     (150.0f)
+#define FLOOR_SCAN_POINTS (11u)
+#if OBST_BLIND_LEFT
+#define BLIND_ACTION    (AVOID_TURN_LEFT)
+#else
+#define BLIND_ACTION    (AVOID_TURN_RIGHT)
+#endif
 
 /* Command parser. */
 #define GAIN_TOLERANCE (1e-6f)
@@ -132,8 +152,8 @@
 #define TAP_AT_MS (20u)
 #define TAP_MS    (40u)
 #define DRIVE_MS  (1500u)
-#define NEAR_MM   (250)
-#define NEARER_MM (240)
+#define NEAR_MM   (150)
+#define NEARER_MM (140)
 #define FAR_MM    (500)
 #define CENTRE_US (1500u) /* servo pulse at 90 degrees */
 
@@ -152,8 +172,61 @@ static c39_pattern_t const g_c39[] = {{'A', "100001001"},
                                       {'B', "001001001"},
                                       {'C', "101001000"},
                                       {'D', "000011001"},
+                                      {'E', "100011000"},
+                                      {'F', "001011000"},
+                                      {'G', "000001101"},
+                                      {'H', "100001100"},
+                                      {'I', "001001100"},
+                                      {'J', "000011100"},
+                                      {'K', "100000011"},
+                                      {'L', "001000011"},
+                                      {'M', "101000010"},
+                                      {'N', "000010011"},
+                                      {'O', "100010010"},
+                                      {'P', "001010010"},
+                                      {'Q', "000000111"},
+                                      {'R', "100000110"},
+                                      {'S', "001000110"},
+                                      {'T', "000010110"},
+                                      {'U', "110000001"},
+                                      {'V', "011000001"},
+                                      {'W', "111000000"},
+                                      {'X', "010010001"},
+                                      {'Y', "110010000"},
+                                      {'Z', "011010000"},
                                       {'*', "010010100"}};
 
+/* TEST_BARCODE over the 14 cm *B* at 100 mm/s (24 Oct), widths in ms at
+   the 35 % / 20 % levels: narrow bars 10-20 ms, narrow spaces up to 60,
+   wide bars 80, so the 3 widest elements mix bars and spaces. */
+static uint32_t const g_car_trace[PHOTO_ELEMENTS] = {
+    20u, 100u, 10u, 60u, 80u, 40u, 80u, 60u, 10u, 60u, 10u, 40u, 90u, 50u, 20u,
+    110u, 20u, 60u, 60u, 60u, 20u, 100u, 20u, 60u, 80u, 40u, 100u, 40u, 20u};
+
+/* MISSION line following over the 14 cm *A* at 100 mm/s (24 Oct, ms): the
+   first narrow bars are missed, so 23-27 elements instead of 29. */
+static uint32_t const g_drive_27a[] = {
+    13u, 207u, 86u, 64u,  82u, 59u, 9u,   56u, 88u, 56u, 10u, 57u, 17u, 114u,
+    21u, 55u,  104u, 41u, 22u, 135u, 21u, 49u, 94u, 49u, 109u, 52u, 18u};
+static uint32_t const g_drive_25[] = {
+    115u, 66u, 86u, 56u, 8u,   63u, 98u, 58u, 14u, 54u, 19u, 134u, 29u,
+    46u,  97u, 52u, 21u, 126u, 18u, 58u, 96u, 57u, 94u, 56u, 12u};
+static uint32_t const g_drive_27b[] = {
+    20u, 229u, 106u, 60u, 85u, 68u, 11u, 79u, 86u, 57u, 11u, 49u, 20u, 121u,
+    21u, 49u,  93u,  58u, 25u, 122u, 19u, 46u, 100u, 49u, 88u, 50u, 17u};
+static uint32_t const g_drive_23[] = {
+    86u, 87u, 94u, 139u, 98u,  59u, 14u, 55u, 16u, 196u, 19u, 51u,
+    93u, 66u, 13u, 130u, 15u,  61u, 104u, 57u, 87u, 61u, 6u};
+
+/* MISSION over the *B* (24 Oct, ms): start '*' and B complete, the stop
+   '*' lost its first two narrow bars (the 249 merges gap and spaces). */
+static uint32_t const g_drive_b25[] = {
+    6u,  122u, 7u,  58u, 87u,  57u, 95u, 58u, 18u, 59u, 16u, 54u, 80u,
+    57u, 10u, 130u, 6u, 65u, 89u, 249u, 77u, 51u, 80u, 59u, 10u};
+
+/* TEST_ULTRASONIC scan, 65..115 deg: box right, floor on the left. */
+static int16_t const g_floor_scan_mm[FLOOR_SCAN_POINTS] = {
+    173, 160, 160, 173, 173, 173, 186, 224, 369, 364, 301};
 static uint32_t g_pass = 0u;
 static uint32_t g_fail = 0u;
 
@@ -165,6 +238,8 @@ static void         test_math(void);
 static void         test_pid(void);
 static void         test_line(void);
 static char const * find_bars(char symbol);
+static void         test_barcode_bias(void);
+static void         test_barcode_lost_start(void);
 static uint32_t     make_frame(char data, uint32_t * p_widths, float32_t noise,
                                float32_t ramp);
 static void reverse(uint32_t const * p_src, uint32_t * p_dst, uint32_t count);
@@ -174,7 +249,8 @@ static float32_t simulate_hump(float32_t height, float32_t length,
 static void      test_terrain(void);
 static uint32_t  scan_box(avoidance_point_t * p_points, float32_t centre_x,
                           float32_t range_y, float32_t width,
-                          float32_t wall_left);
+                          float32_t wall_left, int32_t first,
+                          int32_t last);
 static void      test_obstacle(void);
 static void      test_bridge(void);
 static void      test_mqtt_client(void);
@@ -423,12 +499,38 @@ test_line (void)
     }
 
     check(LINE_JUNCTION == follower.state, "junction after 10 mm");
+
+    /* Flicker off black for 40 mm, then black again: same junction. */
+    for (idx = 0u; idx < FLICKER_SAMPLES; idx++)
+    {
+        (void) line_follow_classify(&follower, 0.5f, 0.5f, 4.0f, LINE_DT_MS);
+    }
+
+    for (idx = 0u; idx <= JUNCTION_EXTRA; idx++)
+    {
+        (void) line_follow_classify(&follower, 0.9f, 0.9f, 4.0f, LINE_DT_MS);
+    }
+
+    check(LINE_ON == follower.state, "junction reported once");
+
+    /* 100 mm off black re-arms it. */
+    for (idx = 0u; idx < REARM_SAMPLES; idx++)
+    {
+        (void) line_follow_classify(&follower, 0.5f, 0.5f, 4.0f, LINE_DT_MS);
+    }
+
+    for (idx = 0u; idx <= JUNCTION_EXTRA; idx++)
+    {
+        (void) line_follow_classify(&follower, 0.9f, 0.9f, 4.0f, LINE_DT_MS);
+    }
+
+    check(LINE_JUNCTION == follower.state, "next junction after 100 mm");
 }
 
 /*!
  * @brief Code 39 bar pattern of a symbol used by the tests.
  *
- * @param[in] symbol 'A'..'D' or '*'.
+ * @param[in] symbol 'A'..'Z' or '*'.
  *
  * @return Nine characters, '1' = wide (narrow pattern if unknown).
  */
@@ -576,9 +678,14 @@ test_barcode (void)
                   "(20%% noise, speed drift, both directions)\n",
                   decoded, total);
     check(decoded == total, "all synthetic frames decode");
-    check(NAV_RIGHT == barcode_decode_to_command('B'), "B = right");
-    check(NAV_STRAIGHT == barcode_decode_to_command('C'), "C = straight");
-    check(NAV_UTURN == barcode_decode_to_command('D'), "D = u-turn");
+    check(NAV_LEFT == barcode_decode_to_command(BARCODE_LEFT_SYMBOL), "left");
+    check(NAV_RIGHT == barcode_decode_to_command(BARCODE_RIGHT_SYMBOL),
+          "right");
+    check(NAV_STRAIGHT == barcode_decode_to_command(BARCODE_STRAIGHT_SYMBOL),
+          "straight");
+    check(NAV_UTURN == barcode_decode_to_command(BARCODE_UTURN_SYMBOL),
+          "u-turn");
+    check(NAV_NONE == barcode_decode_to_command('*'), "* is no command");
 
     for (count = 0u; count < PHOTO_ELEMENTS; count++)
     {
@@ -589,6 +696,134 @@ test_barcode (void)
           "flat widths rejected");
     check(barcode_decode_frame(g_photo, SHORT_ELEMENTS, text, TEXT_SIZE) < 0,
           "short frame rejected");
+    test_barcode_bias();
+}
+
+/*!
+ * @brief Barcode read by the car: bars thinner and spaces wider than
+ *        printed.  The car trace, then A..Z with a 2 mm bias.
+ */
+static void
+test_barcode_bias (void)
+{
+    char      text[TEXT_SIZE];
+    uint32_t  widths[FRAME_MAX];
+    uint32_t  reversed[FRAME_MAX];
+    uint32_t  count   = 0u;
+    uint32_t  idx     = 0u;
+    uint32_t  trial   = 0u;
+    uint32_t  decoded = 0u;
+    uint32_t  total   = 0u;
+    int32_t   result  = 0;
+    char      letter  = 'A';
+
+    result = barcode_decode_frame(g_car_trace, PHOTO_ELEMENTS, text, TEXT_SIZE);
+    check((1 == result) && ('B' == text[0]), "car trace of the 14 cm *B*");
+    reverse(g_car_trace, reversed, PHOTO_ELEMENTS);
+    result = barcode_decode_frame(reversed, PHOTO_ELEMENTS, text, TEXT_SIZE);
+    check((1 == result) && ('B' == text[0]), "car trace read backwards");
+
+    for (letter = 'A'; letter <= 'Z'; letter++)
+    {
+        for (trial = 0u; trial < BIAS_TRIALS; trial++)
+        {
+            count = make_frame(letter, widths, BIAS_NOISE, 1.0f);
+
+            /* Even elements are bars.  Casts: the bias is 10 000 us. */
+            for (idx = 0u; idx < count; idx++)
+            {
+                widths[idx] = (0u == (idx % 2u))
+                                  ? (widths[idx] - (uint32_t) (BIAS_MM * US_PER_MM))
+                                  : (widths[idx] + (uint32_t) (BIAS_MM * US_PER_MM));
+            }
+
+            if (0u != (trial % 2u))
+            {
+                reverse(widths, reversed, count);
+                (void) memcpy(widths, reversed, count * sizeof(uint32_t));
+            }
+
+            result = barcode_decode_frame(widths, count, text, TEXT_SIZE);
+            total++;
+            decoded += ((1 == result) && (letter == text[0])) ? 1u : 0u;
+        }
+    }
+
+    (void) printf("barcode: %" PRIu32 "/%" PRIu32 " A-Z frames decoded "
+                  "(bars -2 mm, spaces +2 mm, 10%% noise)\n",
+                  decoded, total);
+    check(decoded == total, "A-Z decode with thin bars and wide spaces");
+    test_barcode_lost_start();
+}
+
+/*!
+ * @brief Frames missing their first elements (MISSION, 24 Oct): the car's
+ *        four frames, then A..Z with 1-10 leading elements dropped in both
+ *        directions.  A frame cut at the end must never give a letter.
+ */
+static void
+test_barcode_lost_start (void)
+{
+    char     text[TEXT_SIZE];
+    uint32_t widths[FRAME_MAX];
+    uint32_t reversed[FRAME_MAX];
+    uint32_t count   = 0u;
+    uint32_t drop    = 0u;
+    uint32_t decoded = 0u;
+    uint32_t total   = 0u;
+    uint32_t wrong   = 0u;
+    int32_t  result  = 0;
+    char     letter  = 'A';
+
+    result = barcode_decode_frame(g_drive_27a, (uint32_t) ARRAY_LEN(g_drive_27a),
+                                  text, TEXT_SIZE);
+    check((1 == result) && ('A' == text[0]), "drive frame 27a is A");
+    result = barcode_decode_frame(g_drive_25, (uint32_t) ARRAY_LEN(g_drive_25),
+                                  text, TEXT_SIZE);
+    check((1 == result) && ('A' == text[0]), "drive frame 25 is A");
+    result = barcode_decode_frame(g_drive_27b, (uint32_t) ARRAY_LEN(g_drive_27b),
+                                  text, TEXT_SIZE);
+    check((1 == result) && ('A' == text[0]), "drive frame 27b is A");
+    result = barcode_decode_frame(g_drive_23, (uint32_t) ARRAY_LEN(g_drive_23),
+                                  text, TEXT_SIZE);
+    check((1 == result) && ('A' == text[0]), "drive frame 23 is A");
+    result = barcode_decode_frame(g_drive_b25, (uint32_t) ARRAY_LEN(g_drive_b25),
+                                  text, TEXT_SIZE);
+    check((1 == result) && ('B' == text[0]), "drive frame with a broken end is B");
+    reverse(g_drive_b25, reversed, (uint32_t) ARRAY_LEN(g_drive_b25));
+    result = barcode_decode_frame(reversed, (uint32_t) ARRAY_LEN(g_drive_b25),
+                                  text, TEXT_SIZE);
+    check((1 == result) && ('B' == text[0]), "same frame crossed backwards is B");
+
+    for (letter = 'A'; letter <= 'Z'; letter++)
+    {
+        for (drop = 1u; drop <= (BARCODE_ELEMENTS_PER_CHAR + 1u); drop++)
+        {
+            count = make_frame(letter, widths, BIAS_NOISE, 1.0f);
+
+            /* Read forwards, then crossed the other way round; either way
+               the first elements the car meets are lost. */
+            result = barcode_decode_frame(&widths[drop], count - drop, text,
+                                          TEXT_SIZE);
+            total++;
+            decoded += ((1 == result) && (letter == text[0])) ? 1u : 0u;
+            reverse(widths, reversed, count);
+            result = barcode_decode_frame(&reversed[drop], count - drop, text,
+                                          TEXT_SIZE);
+            total++;
+            decoded += ((1 == result) && (letter == text[0])) ? 1u : 0u;
+
+            /* Cut at the end instead: no letter, or the right one. */
+            result = barcode_decode_frame(widths, count - drop, text, TEXT_SIZE);
+            wrong += ((result > 0) && (letter != text[0])) ? 1u : 0u;
+        }
+    }
+
+    (void) printf("barcode: %" PRIu32 "/%" PRIu32 " frames missing 1-10 first "
+                  "elements decoded, %" PRIu32 " wrong when cut at the end\n",
+                  decoded, total, wrong);
+    check(decoded == total, "A-Z decode with the first bars lost");
+    check(0u == wrong, "frames cut at the end never give a wrong letter");
 }
 
 /*!
@@ -920,21 +1155,23 @@ test_terrain (void)
  * @param[in]  range_y   Forward distance of the box face.
  * @param[in]  width     Box width.
  * @param[in]  wall_left Distance of a wall on the left, 0 for none.
+ * @param[in]  first    First servo angle.
+ * @param[in]  last     Last servo angle.
  *
  * @return Number of points.
  */
 static uint32_t
 scan_box (avoidance_point_t * p_points, float32_t centre_x, float32_t range_y,
-          float32_t width, float32_t wall_left)
+          float32_t width, float32_t wall_left, int32_t first, int32_t last)
 {
     uint32_t  count   = 0u;
-    int32_t   angle   = SCAN_FIRST_DEG;
+    int32_t   angle   = first;
     float32_t cos_a   = 0.0f;
     float32_t sin_a   = 0.0f;
     float32_t best    = NO_ECHO_MM;
     float32_t lateral = 0.0f;
 
-    for (angle = SCAN_FIRST_DEG; angle <= SCAN_LAST_DEG; angle += SCAN_STEP_DEG)
+    for (angle = first; angle <= last; angle += SCAN_STEP_DEG)
     {
         /* Casts: angles are 10..170, exact in float32_t and int16_t; the
            distance is below US_MAX_MM or replaced by -1. */
@@ -977,8 +1214,10 @@ test_obstacle (void)
     avoidance_profile_t prof;
     avoidance_plan_t    plan;
     uint32_t            count = 0u;
+    uint32_t            idx   = 0u;
 
-    count = scan_box(points, 20.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f);
+    count = scan_box(points, 20.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
+                     SCAN_LAST_DEG);
     check(avoidance_profile(points, count, &prof), "box found");
     plan = avoidance_plan(&prof, 0u);
     (void) printf("obstacle: box w=100 at x=+20: est width %.0f, "
@@ -994,7 +1233,8 @@ test_obstacle (void)
                  0.5f),
           "bypass: pass = closest + deepest box + car length + margin");
 
-    count = scan_box(points, 20.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 200.0f);
+    count = scan_box(points, 20.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 200.0f, SCAN_FIRST_DEG,
+                     SCAN_LAST_DEG);
     (void) avoidance_profile(points, count, &prof);
     plan = avoidance_plan(&prof, 0u);
     (void) printf("obstacle: same box + wall 200 mm left: clear L=%" PRId32
@@ -1003,17 +1243,113 @@ test_obstacle (void)
                   avoidance_action_name(plan.action));
     check(AVOID_TURN_RIGHT == plan.action, "wall on the left: pass right");
 
-    count = scan_box(points, 0.0f, 70.0f, BOX_WIDTH_MM, 0.0f);
+    count = scan_box(points, 0.0f, 70.0f, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
+                     SCAN_LAST_DEG);
     (void) avoidance_profile(points, count, &prof);
     check(AVOID_REVERSE == avoidance_plan(&prof, 0u).action,
           "too close: reverse");
     check(AVOID_STOP == avoidance_plan(&prof, OBST_MAX_ATTEMPTS).action,
           "then stop");
 
-    count = scan_box(points, 400.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f);
+    count = scan_box(points, 400.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
+                     SCAN_LAST_DEG);
     (void) avoidance_profile(points, count, &prof);
     check(AVOID_CONTINUE == avoidance_plan(&prof, 0u).action,
           "outside the corridor: continue");
+
+    /* S5-U07: a 235 mm box on the real mount (65..115 degrees). */
+    count = scan_box(points, -WIDE_BOX_OFFSET_MM, BOX_RANGE_MM, WIDE_BOX_MM,
+                     0.0f, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    (void) avoidance_profile(points, count, &prof);
+    plan = avoidance_plan(&prof, 0u);
+    check(AVOID_TURN_RIGHT == plan.action,
+          "wide box 60 mm left: pass right (left edge not seen)");
+    check((plan.offset_mm - (CAR_WIDTH_MM / 2.0f))
+              >= ((WIDE_BOX_MM / 2.0f) - WIDE_BOX_OFFSET_MM),
+          "wide box 60 mm left: the car clears its right edge");
+    count = scan_box(points, WIDE_BOX_OFFSET_MM, BOX_RANGE_MM, WIDE_BOX_MM,
+                     0.0f, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    (void) avoidance_profile(points, count, &prof);
+    plan = avoidance_plan(&prof, 0u);
+    check((AVOID_TURN_LEFT == plan.action)
+              && ((plan.offset_mm - (CAR_WIDTH_MM / 2.0f))
+                  >= ((WIDE_BOX_MM / 2.0f) - WIDE_BOX_OFFSET_MM)),
+          "wide box 60 mm right: pass left, clear of its left edge");
+    count = scan_box(points, 0.0f, NEAR_BOX_MM, WIDE_BOX_MM, 0.0f,
+                     SERVO_MIN_DEG, SERVO_MAX_DEG);
+    (void) avoidance_profile(points, count, &prof);
+    plan = avoidance_plan(&prof, 0u);
+    check((BLIND_ACTION == plan.action)
+              && (plan.offset_mm >= OBST_BLIND_OFFSET_MM),
+          "wide box past both sweep ends: blind pass on OBST_BLIND_LEFT's side");
+    check((OBST_BLIND_OFFSET_MM - (CAR_WIDTH_MM / 2.0f))
+              >= ((LARGEST_BOX_MM / 2.0f) + WIDE_BOX_OFFSET_MM),
+          "blind pass clears a 150 mm box 60 mm off the line either way");
+    count = scan_box(points, 0.0f, NEAR_BOX_MM, LARGEST_BOX_MM, 0.0f,
+                     SCAN_FIRST_DEG, SCAN_LAST_DEG);
+    check(avoidance_profile(points, count, &prof)
+              && nearly(prof.width_mm, LARGEST_BOX_MM, WIDTH_TOLERANCE),
+          "150 mm box centred at 150 mm: width estimate");
+
+    /* Design obstacle: 100 mm box, 60 mm off the line, on the real mount:
+       one edge in view, so the profile picks the free side. */
+    count = scan_box(points, -WIDE_BOX_OFFSET_MM, NEAR_BOX_MM, BOX_WIDTH_MM,
+                     0.0f, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    (void) avoidance_profile(points, count, &prof);
+    plan = avoidance_plan(&prof, 0u);
+    check((AVOID_TURN_RIGHT == plan.action)
+              && ((plan.offset_mm - (CAR_WIDTH_MM / 2.0f))
+                  >= ((BOX_WIDTH_MM / 2.0f) - WIDE_BOX_OFFSET_MM)),
+          "100 mm box 60 mm left: pass right, clear of it");
+    count = scan_box(points, WIDE_BOX_OFFSET_MM, NEAR_BOX_MM, BOX_WIDTH_MM,
+                     0.0f, SERVO_MIN_DEG, SERVO_MAX_DEG);
+    (void) avoidance_profile(points, count, &prof);
+    plan = avoidance_plan(&prof, 0u);
+    check((AVOID_TURN_LEFT == plan.action)
+              && ((plan.offset_mm - (CAR_WIDTH_MM / 2.0f))
+                  >= ((BOX_WIDTH_MM / 2.0f) - WIDE_BOX_OFFSET_MM)),
+          "100 mm box 60 mm right: pass left, clear of it");
+
+    /* Car scan of 24 Oct, box right of the line: the floor echoed at
+       301-369 mm on the left and planned REVERSE.  Ignored, the left
+       is free. */
+    count = 0u;
+    for (idx = 0u; idx < FLOOR_SCAN_POINTS; idx++)
+    {
+        points[count].angle_deg = (int16_t) (SERVO_MIN_DEG
+                                             + ((int32_t) idx * OBST_FINE_STEP_DEG));
+        points[count].dist_mm   = g_floor_scan_mm[idx];
+        count++;
+    }
+    (void) avoidance_profile(points, count, &prof);
+    check(AVOID_TURN_LEFT == avoidance_plan(&prof, 0u).action,
+          "box right, floor echo on the left ignored: pass left");
+
+    /* Nothing found: no stale edges or clearances (scans printed
+       cl=70647).  Fill the profile with junk first. */
+    prof.clear_left_mm  = JUNK_MM;
+    prof.clear_right_mm = JUNK_MM;
+    prof.closest_angle  = JUNK_MM;
+    prof.left_edge_mm   = (float32_t) JUNK_MM;
+    prof.right_edge_mm  = (float32_t) JUNK_MM;
+    prof.width_mm       = (float32_t) JUNK_MM;
+    prof.centre_mm      = (float32_t) JUNK_MM;
+
+    for (idx = 0u; idx < NO_ECHO_POINTS; idx++)
+    {
+        points[idx].angle_deg = (int16_t) (SERVO_CENTRE_DEG + (int32_t) idx);
+        points[idx].dist_mm   = (int16_t) -1;
+    }
+
+    check(!avoidance_profile(points, NO_ECHO_POINTS, &prof),
+          "no echoes: nothing found");
+    check((0 == prof.clear_left_mm) && (0 == prof.clear_right_mm)
+              && (0 == prof.closest_angle)
+              && nearly(prof.left_edge_mm, 0.0f, 0.0f)
+              && nearly(prof.right_edge_mm, 0.0f, 0.0f)
+              && nearly(prof.width_mm, 0.0f, 0.0f)
+              && nearly(prof.centre_mm, 0.0f, 0.0f),
+          "nothing found: edges and clearances zero");
 }
 
 /*!
@@ -1683,18 +2019,18 @@ test_vehicle_obstacle (void)
     pings = vehicle_sim_pings();
     vehicle_sim_step();
     check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
-    /* (3 coarse + 9 fine looks) x 3 pings; the pass needs no side looks. */
-    check(((vehicle_sim_pings() - pings) == 36u)
-              && (1u == vehicle_sim_count("{[scan] pts=9 found=1")),
+    /* (3 coarse + 11 fine looks) x 3 pings; the pass needs no side looks. */
+    check(((vehicle_sim_pings() - pings) == 42u)
+              && (1u == vehicle_sim_count("{[scan] pts=11 found=1")),
           "vehicle: coarse then fine scan, inside the mount's limits");
-    check((9u == obstacle_get_points(points, SCAN_MAX_POINTS))
-              && (70 == points[0].angle_deg) && (200 == points[1].dist_mm),
-          "vehicle: last scan points kept (70..110 deg fine scan)");
+    check((11u == obstacle_get_points(points, SCAN_MAX_POINTS))
+              && (65 == points[0].angle_deg) && (150 == points[2].dist_mm),
+          "vehicle: last scan points kept (65..115 deg fine scan)");
     check((2u == vehicle_sim_count("L90")) && (2u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: box-shaped bypass, line rejoined");
-    /* Pass: closest 200 + deepest 250 + car 200 + margin 60 mm. */
-    check(1u == vehicle_sim_count("fwd710;"),
+    /* Pass: closest 150 + deepest 250 + car 200 + margin 60 mm. */
+    check(1u == vehicle_sim_count("fwd660;"),
           "vehicle: pass leg = closest + depth + car length + margin");
     vehicle_sim_box(false);
 
@@ -1817,7 +2153,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_front_ambient(ULTRASONIC_VALID, NEAR_MM);
     vehicle_sim_step();
     vehicle_sim_front_ambient(ULTRASONIC_OUT_OF_RANGE, ULTRASONIC_NO_ECHO);
-    check((1u == vehicle_sim_count("fwd710;"))
+    check((1u == vehicle_sim_count("fwd660;"))
               && (1u == vehicle_sim_count("L90")) && (1u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_STOPPED, "path blocked"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
@@ -1872,6 +2208,31 @@ test_vehicle_barcode_watchdog (void)
     vehicle_sim_step(); /* ... and published at the next one */
     check(NAV_RIGHT == vehicle_status().pending_nav,
           "vehicle: a barcode read during the run is kept");
+
+    /* Turn once the barcode sensor is past the junction line, not on a
+       barcode-sized bar. */
+    vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
+    vehicle_sim_run(200u);
+    vehicle_start(1000u);
+    vehicle_sim_barcode(NAV_LEFT);
+    vehicle_sim_run(100u);
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_NARROW_MS);
+    vehicle_sim_bar_black(false);
+    vehicle_sim_run(100u);
+    check((vehicle_is(VS_LINE_FOLLOW, NULL))
+              && (NAV_LEFT == vehicle_status().pending_nav),
+          "vehicle: no turn on a barcode-sized bar");
+    vehicle_sim_clear_log();
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_JUNCTION_MS);
+    check(0u == vehicle_sim_count("NAV_TURN"),
+          "vehicle: no turn while on the junction line");
+    vehicle_sim_bar_black(false);
+    vehicle_sim_run(60u);
+    check((1u == vehicle_sim_count("junction line"))
+              && (1u == vehicle_sim_count("NAV_TURN")),
+          "vehicle: turn once past the junction line");
 
     gap = vehicle_sim_watchdog_gap_ms();
     check((WATCHDOG_TIMEOUT_MS == vehicle_sim_watchdog_timeout_ms())
