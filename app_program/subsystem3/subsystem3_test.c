@@ -21,7 +21,11 @@
 #define CALIBRATION_MS   (5000u)
 #define SLOW_TIMEOUT_MS  (20000)
 #define PERMILLE         (1000.0f)
-#define BARCODE_RUN_MM   (1000.0f)
+/* Start about 100 mm before the barcode: cross it slowly and stop soon
+   after, still on the mat.  S3-U03 asks for 100 and 180 mm/s. */
+#define BARCODE_RUN_MM   (400.0f)
+#define BARCODE_SPEED_MM_S (100.0f) /* [CALIBRATE] 180 for the fast runs */
+#define TRACE_MS         (10u)    /* barcode trace: 1 mm at 100 mm/s  */
 
 #if APP_MODE == APP_MODE_TEST_IR
 /*!
@@ -74,14 +78,38 @@ subsystem3_test_ir (void)
 /*!
  * @brief Buddy 3 barcode test: drive slowly and straight over a barcode
  *        (pushing the car by hand also works); barcode.c prints each
- *        decode.
+ *        decode.  While driving, "bc,odo_mm,raw,norm" lines trace the
+ *        barcode sensor every TRACE_MS, to see whether each bar reaches
+ *        the black and white levels (BARCODE_BLACK_LEVEL, _WHITE_LEVEL).
  */
 void
 subsystem3_test_barcode (void)
 {
-    barcode_stats_t bc_stats;
+    barcode_stats_t      bc_stats;
+    ir_sensor_snapshot_t ir_snap;
+    motion_status_t      motion;
+    uint32_t             waited = 0u;
 
-    motion_move_forward(BARCODE_RUN_MM, SPEED_SLOW_MM_S);
+    /* Cast: tm_printf() takes the kernel's UB string type (ASCII). */
+    (void) tm_printf((UB const *) "# bc,odo_mm,raw,norm_permille\n");
+    motion_move_forward(BARCODE_RUN_MM, BARCODE_SPEED_MM_S);
+
+    /* motion_wait(), not b_busy: the move starts in the motion task, so
+       b_busy can still be false straight after the command. */
+    while ((MOTION_WAIT_BUSY == motion_wait((int32_t) TRACE_MS))
+           && (waited < (uint32_t) SLOW_TIMEOUT_MS))
+    {
+        motion_get_status(&motion);
+        ir_sensor_read(&ir_snap);
+        /* Casts: tm_printf() takes UB strings; raw ADC counts fit INT. */
+        (void) tm_printf((UB const *) "bc,%d,%d,%d\n",
+                         app_tests_print_int(motion.odo_mm),
+                         (INT) ir_snap.raw[IR_BARCODE],
+                         app_tests_print_int(ir_snap.norm[IR_BARCODE]
+                                             * PERMILLE));
+        waited += TRACE_MS;
+    }
+
     (void) motion_wait_done(SLOW_TIMEOUT_MS);
     barcode_get_stats(&bc_stats);
 

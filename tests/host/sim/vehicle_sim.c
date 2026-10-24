@@ -17,11 +17,12 @@
 #define SIM_MOVE_MS     (400)  /* every simulated move takes this long */
 #define SIM_PING_MS     (101u) /* worst ping: 60 ms gap + 40 ms timeout */
 #define SIM_MONITOR_MS  (70u)  /* obstacle.c MONITOR_PERIOD_MS          */
-#define SIM_BOX_MM      (200)  /* box ahead, seen between these angles  */
+#define SIM_BOX_MM      (150)  /* box ahead, seen between these angles  */
 #define SIM_BOX_FROM    (75)
 #define SIM_BOX_TO      (105)
 #define SIM_ON_LINE     (0.6f) /* normalised IR level on / off the line */
 #define SIM_OFF_LINE    (0.0f)
+#define SIM_JUNCTION    (0.9f) /* both sensors on black */
 #define SIM_STOP_DELAY  (100u) /* vehicle_sim_stop_on_next_turn()       */
 #define SIM_STOP_HOLD   (30u)
 #define SIM_MAX_PRESSES (16u)
@@ -48,6 +49,7 @@ static char                 gs_log[SIM_LOG_SIZE];
 static uint32_t             gs_pings;
 static bool                 gs_b_box;
 static float32_t            gs_ir = SIM_ON_LINE;
+static bool                 gsb_bar_black = false;
 static terrain_hump_state_t gs_hump = HUMP_FLAT;
 static uint32_t             gs_impacts;
 static int32_t              gs_move_left_ms;
@@ -558,6 +560,21 @@ void vehicle_sim_box(bool b_present)
 void vehicle_sim_line(bool b_on_line)
 {
     gs_ir = b_on_line ? SIM_ON_LINE : SIM_OFF_LINE;
+}
+
+void vehicle_sim_junction(void)
+{
+    gs_ir = SIM_JUNCTION;
+}
+
+void vehicle_sim_bar_black(bool b_black)
+{
+    gsb_bar_black = b_black;
+}
+
+bool ir_sensor_barcode_is_black(void)
+{
+    return gsb_bar_black;
 }
 
 void vehicle_sim_hump(terrain_hump_state_t state)

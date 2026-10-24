@@ -28,7 +28,8 @@
 #define US_PER_MS          (1000u)
 #define QUIET_US           (BARCODE_QUIET_MS * US_PER_MS)
 #define MBF_MSGS           (4u)
-#define MIN_FRAME_ELEMENTS (29u) /* 3 characters x 10 - 1 */
+#define MIN_FRAME_ELEMENTS (19u) /* data + gap + '*': first bars may be lost */
+#define SHORT_REPORT_MIN   (3u)  /* debug: print shorter frames from here */
 #define COUNT16_MASK       (0xFFFFu)
 
 /* Decoder statistics, written only by the barcode task. */
@@ -177,9 +178,10 @@ barcode_task (INT stacd, void * p_exinf)
 /*!
  * @brief Try to decode the collected frame and publish the result.
  *
- * Frames shorter than three characters are noise or a line crossing and
- * are dropped silently.  The 1-byte widths are widened on this task's
- * stack for the decoder, which works on ratios only.
+ * Frames shorter than MIN_FRAME_ELEMENTS are noise or a line crossing;
+ * from SHORT_REPORT_MIN elements they are printed for debugging.  The
+ * 1-byte widths are widened on this task's stack for the decoder, which
+ * works on ratios only.
  */
 static void
 finish_frame (void)
@@ -219,9 +221,35 @@ finish_frame (void)
         {
             g_stats.errors = (g_stats.errors + 1u) & COUNT16_MASK;
             (void) tm_printf((UB const *) "[barcode] frame of %d elements "
-                                          "rejected (%d)\n",
+                                          "rejected (%d):",
                              (INT) g_count, (INT) len);
+
+            /* Debug (S3-U03): the widths, to see what went wrong. */
+            for (idx = 0u; idx < g_count; idx++)
+            {
+                (void) tm_printf((UB const *) " %d", (INT) g_widths[idx]);
+            }
+
+            (void) tm_printf((UB const *) "\n");
         }
+    }
+    else if (g_count >= SHORT_REPORT_MIN)
+    {
+        /* Debug (S3-U03): what the sensor saw of a barcode it did not
+           finish, widths in ms, bar first. */
+        (void) tm_printf((UB const *) "[barcode] short frame: %d elements:",
+                         (INT) g_count);
+
+        for (idx = 0u; idx < g_count; idx++)
+        {
+            (void) tm_printf((UB const *) " %d", (INT) g_widths[idx]);
+        }
+
+        (void) tm_printf((UB const *) "\n");
+    }
+    else
+    {
+        /* One or two elements: a speck or an edge, not worth a line. */
     }
 
     g_count = 0u;
