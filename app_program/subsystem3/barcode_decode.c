@@ -46,6 +46,10 @@ static code39_entry_t const g_table[] = {
 static char const * const g_nav_names[] = {"NONE", "LEFT", "RIGHT", "STRAIGHT",
                                            "UTURN"};
 
+/* One 32-bit snapshot prevents readers seeing partial assignments.
+ * Byte order: forward, U-turn, left, right. Zero means unconfigured. */
+static volatile uint32_t g_mapping = 0u;
+
 static char    lookup(uint32_t pattern);
 static void    sort_widths(uint32_t const * p_widths, uint32_t * p_sorted);
 static char    decode_char(uint32_t const * p_widths);
@@ -107,38 +111,79 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
 }
 
 /*!
- * @brief Brief mapping: A = left, B = right, C = straight, D = U-turn.
- *
- * @param[in] symbol First decoded data character.
- *
- * @return The navigation command, or NAV_NONE.
+ * @brief Replace all assignments; invalid input leaves the map intact.
+ */
+bool
+barcode_decode_set_mapping (char const letters[BARCODE_MAPPING_SIZE])
+{
+    uint32_t packed = 0u;
+    uint32_t idx = 0u;
+    uint32_t other = 0u;
+    bool b_ok = (NULL != letters);
+
+    for (idx = 0u; b_ok && (idx < BARCODE_MAPPING_SIZE); idx++)
+    {
+        b_ok = (letters[idx] >= 'A') && (letters[idx] <= 'Z');
+
+        for (other = 0u; other < idx; other++)
+        {
+            b_ok = b_ok && (letters[idx] != letters[other]);
+        }
+
+        /* Cast: uppercase ASCII fits in one byte. */
+        packed |= (uint32_t) (uint8_t) letters[idx] << (8u * idx);
+    }
+
+    if (b_ok)
+    {
+        g_mapping = packed;
+    }
+
+    return (b_ok);
+}
+
+/*!
+ * @brief Read one complete snapshot; false means unconfigured.
+ */
+bool
+barcode_decode_get_mapping (char letters[BARCODE_MAPPING_SIZE])
+{
+    uint32_t snapshot = g_mapping;
+    uint32_t idx = 0u;
+
+    if (NULL != letters)
+    {
+        for (idx = 0u; idx < BARCODE_MAPPING_SIZE; idx++)
+        {
+            /* Cast: stored bytes are uppercase ASCII or zero. */
+            letters[idx] = (char) ((snapshot >> (8u * idx)) & 0xffu);
+        }
+    }
+
+    return (0u != snapshot);
+}
+
+/*!
+ * @brief Look up a letter in the runtime mapping, or return NAV_NONE.
  */
 barcode_decode_nav_t
 barcode_decode_to_command (char symbol)
 {
+    static barcode_decode_nav_t const commands[BARCODE_MAPPING_SIZE] = {
+        NAV_STRAIGHT, NAV_UTURN, NAV_LEFT, NAV_RIGHT};
+    char letters[BARCODE_MAPPING_SIZE];
+    uint32_t idx = 0u;
     barcode_decode_nav_t command = NAV_NONE;
 
-    switch (symbol)
+    if (barcode_decode_get_mapping(letters))
     {
-        case 'A':
-            command = NAV_LEFT;
-        break;
-
-        case 'B':
-            command = NAV_RIGHT;
-        break;
-
-        case 'C':
-            command = NAV_STRAIGHT;
-        break;
-
-        case 'D':
-            command = NAV_UTURN;
-        break;
-
-        default:
-            command = NAV_NONE;
-        break;
+        for (idx = 0u; idx < BARCODE_MAPPING_SIZE; idx++)
+        {
+            if (symbol == letters[idx])
+            {
+                command = commands[idx];
+            }
+        }
     }
 
     return (command);

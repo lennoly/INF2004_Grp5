@@ -98,6 +98,7 @@ static void         check_events(void);
 static void         emit_obstacle(vehicle_status_t const * p_veh);
 static void         emit_gains(void);
 static void         emit_help(void);
+static void         emit_mapping(void);
 static char const * line_name(line_follow_state_t line_state);
 static char const * link_name(mqtt_bridge_link_t link);
 static INT          to_int(float32_t value);
@@ -263,6 +264,12 @@ handle_command_text (char const * p_text)
     if (command_parse(p_text, &cmd))
     {
         p_err = execute(&cmd);
+
+        if ((NULL == p_err) && (COMMAND_MAP == cmd.kind))
+        {
+            emit_mapping();
+        }
+
         (void) tm_sprintf(gp_out,
                           (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
                                        "\"cmd\":\"%s\",\"ok\":%d%s%s%s}",
@@ -302,7 +309,8 @@ execute (command_t const * p_cmd)
     switch (b_allowed ? p_cmd->kind : COMMAND_INVALID)
     {
         case COMMAND_START:
-            b_ok = vehicle_command(VCMD_START, 0);
+            b_ok = (barcode_decode_get_mapping(NULL))
+                   && (vehicle_command(VCMD_START, 0));
         break;
 
         case COMMAND_STOP:
@@ -346,6 +354,14 @@ execute (command_t const * p_cmd)
             g_gains_due = GAINS_REPORT_TICKS;
         break;
 
+        case COMMAND_MAP:
+            b_ok = barcode_decode_set_mapping(p_cmd->nav_letters);
+        break;
+
+        case COMMAND_MAPPING:
+            emit_mapping();
+        break;
+
         case COMMAND_RATE:
             /* Cast: command_parse() only accepts 0 or 50..5000 ms. */
             g_period_ms = (uint32_t) car_math_round(p_cmd->arg[0]);
@@ -372,6 +388,12 @@ execute (command_t const * p_cmd)
     if (b_allowed)
     {
         p_err = b_ok ? NULL : "not available in this build";
+
+        if ((COMMAND_START == p_cmd->kind)
+            && (!barcode_decode_get_mapping(NULL)))
+        {
+            p_err = "configure map=forward,uturn,left,right before start";
+        }
     }
 
     return (p_err);
@@ -651,6 +673,34 @@ emit_gains (void)
 }
 
 /*!
+ * @brief Report the current RAM mapping so the PC can verify it.
+ */
+static void
+emit_mapping (void)
+{
+    char letters[BARCODE_MAPPING_SIZE];
+    bool b_ready = barcode_decode_get_mapping(letters);
+
+    /* Casts: tm_sprintf takes the kernel UB string type; ASCII formats. */
+
+    if (b_ready)
+    {
+        (void) tm_sprintf(gp_out,
+            (UB const *) "{\"type\":\"mapping\",\"configured\":1,"
+                         "\"forward\":\"%c\",\"uturn\":\"%c\","
+                         "\"left\":\"%c\",\"right\":\"%c\"}",
+            letters[0], letters[1], letters[2], letters[3]);
+    }
+    else
+    {
+        (void) tm_sprintf(gp_out,
+            (UB const *) "{\"type\":\"mapping\",\"configured\":0}");
+    }
+
+    emit(TOPIC_EVENT, true);
+}
+
+/*!
  * @brief Human-readable usage on the console plus a compact event.
  */
 static void
@@ -666,15 +716,19 @@ emit_help (void)
                      "#   ff=<kf>,<offset>    feed-forward + friction "
                      "offset (pct)\n"
                      "#   line=<kp>,<ki>,<kd> line-following PID\n"
+                     "#   map=<forward>,<uturn>,<left>,<right> "
+                     "four distinct A-Z letters\n"
+                     "#   mapping             report active assignments\n"
                      "#   rate=<ms>           telemetry period, 0 = off\n"
-                     "#   speed=, pid=, ff=, line= only while IDLE or "
+                     "#   map=, speed=, pid=, ff=, line= only while IDLE or "
                      "STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "
                      "since the last timing\n");
     (void) tm_sprintf(gp_out,
                       (UB const *) "{\"type\":\"help\",\"cmds\":\"start|stop|"
                                    "calibrate|gains|help|timing|speed=|"
-                                   "pid=|ff=|line=|rate=\"}");
+                                   "pid=|ff=|line=|rate=|"
+                                   "map=forward,uturn,left,right|mapping\"}");
     emit(TOPIC_EVENT, false);
 }
 

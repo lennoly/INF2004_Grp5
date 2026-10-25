@@ -27,9 +27,12 @@ configurations: `TEST_IR` and `TEST_BARCODE`, each with black-high and black-low
 IR polarity. The only reused motion component is the existing pure-C PID
 arithmetic library; no motor task or driver is linked.
 
+The runner also checks that the mission vehicle and telemetry files compile,
+and tests every movement against the actual junction decision function.
+
 Coverage includes:
 
-- The supplied course barcode photo, A/B/C/D and a report-only Z.
+- The supplied course barcode photo and every letter A-Z.
 - Forward/reverse decoding, simulated speeds of 100–300 mm/s, distorted widths.
 - Exact frame length, missing/oversized gaps, zero widths, invalid symbols,
   invalid output buffers, and failure clearing the output string.
@@ -156,3 +159,12 @@ testing, then record the commit ID with each result. Do not mark hardware
 tests passed based on host output.
 
 See `DATA_REPRESENTATION.md` for the local packing changes and their limits.
+
+## Dynamic barcode movement assignments
+
+The firmware starts without assigned letters. In `MISSION` with WiFi enabled,
+send the instructor's four letters using `map=<forward>,<uturn>,<left>,<right>`
+on `picocar/<car-id>/cmd`. Use `mapping` to verify the result before `start`.
+The serial console accepts the same commands, including in bench test modes.
+Without a mapping, `TEST_BARCODE` still decodes A-Z and reports `NONE` for the
+movement. See [barcode setup](../../docs/BARCODE_SETUP.md) for examples.

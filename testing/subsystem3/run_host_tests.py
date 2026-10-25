@@ -37,6 +37,34 @@ def main():
                     "-lm", "-o", str(binary),
                 ], check=True)
                 subprocess.run([str(binary)], check=True)
+        print("\nMISSION navigation and telemetry compile checks", flush=True)
+        subprocess.run([
+            compiler, *flags, "-fsyntax-only", str(APP / "vehicle.c"),
+            str(APP / "subsystem1/telemetry.c"),
+        ], check=True)
+        subprocess.run([
+            compiler, *flags, f"-I{ROOT / 'tests/host'}", "-DTM_WIFI_MQTT=1",
+            "-fsyntax-only", str(APP / "subsystem1/telemetry.c"),
+        ], check=True)
+        binary = Path(folder) / "navigation.exe"
+        subprocess.run([
+            compiler, *flags, "-O2", "-fwhole-program",
+            str(HOST / "test_navigation.c"), "-o", str(binary),
+        ], check=True)
+        subprocess.run([str(binary)], check=True)
+        print("\nBuddy 3 driving integration", flush=True)
+        binary = Path(folder) / "driving.exe"
+        subprocess.run([
+            compiler, "-std=c99", "-Wall", "-Wextra", "-Werror", "-O2",
+            "-fwhole-program", "-flto", "-DAPP_MODE=APP_MODE_TEST_BUDDY3",
+            f"-I{HOST}", f"-I{APP}",
+            *[f"-I{APP / f'subsystem{i}'}" for i in range(1, 6)],
+            str(HOST / "test_driving.c"), str(APP / "car_math.c"),
+            str(APP / "subsystem2/pid.c"),
+            str(APP / "subsystem3/line_follow.c"),
+            str(APP / "subsystem3/barcode_decode.c"), "-lm", "-o", str(binary),
+        ], check=True)
+        subprocess.run([str(binary)], check=True)
 
 
 if __name__ == "__main__":

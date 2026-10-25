@@ -106,7 +106,7 @@ subsystem3_test_barcode (void)
         barcode_get_stats(&before);
         barcode_set_enabled(true);
         /* Cast: tm_printf uses kernel byte strings. */
-        (void) tm_printf((UB const *) "# Move *A*, *B*, *C*, *D* under barcode "
+        (void) tm_printf((UB const *) "# Move any *A*..*Z* under barcode "
                                       "sensor, both directions. Leave white "
                                       "for >= 250 ms between passes.\n");
 

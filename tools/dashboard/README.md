@@ -104,3 +104,12 @@ python picocar_dashboard.py --mqtt localhost   # terminal 3
 15 s, 35 mm hump every 20 s, obstacle every 30 s) and obeys the same
 commands; its wheels use the firmware's PID law, so tuning changes are
 visible.
+
+## Configure barcode movements before starting
+
+In the command box, enter `map=<forward>,<uturn>,<left>,<right>` using the
+instructor's four distinct letters, then press Enter. For example,
+`map=W,X,Y,Z` assigns W to forward, X to U-turn, Y to left, and Z to right.
+Send `mapping` to read back the assignments, then press Start. The map must
+be sent again after every reboot. Updates require IDLE or STOPPED.
+See [barcode setup](../../docs/BARCODE_SETUP.md) for MQTT topics and replies.

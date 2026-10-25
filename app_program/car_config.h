@@ -131,8 +131,6 @@
 #define BARCODE_WHITE_LEVEL         (0.40f)
 #define BARCODE_QUIET_MS            (250u)    /* white gap ending a frame   */
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
-#define NAV_EXECUTE_AT_JUNCTION     (1)       /* 0 = act immediately        */
-#define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => act anyway  */
 
 /* ------------------------------------------------------------------------ */
 /* IMU / terrain (Buddy 4)                                                  */

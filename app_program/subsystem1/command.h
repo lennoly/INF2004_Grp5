@@ -12,11 +12,14 @@
  *   pid=<kp>,<ki>,<kd>           wheel speed PID
  *   ff=<kf>,<offset_pct>         speed feed-forward + static-friction offset
  *   line=<kp>,<ki>,<kd>          line-following PID
+ *   map=<forward>,<uturn>,<left>,<right>  four distinct A-Z letters
+ *   mapping                      report the active barcode mapping
  *   rate=<ms>                    telemetry period, 0 = off, 50..5000
  *
  * Numbers are plain decimals ("0.08", "-1.5", "12"), without exponents.
  * The tuning commands (speed=, pid=, ff=, line=) are accepted only while
- * the car is IDLE or STOPPED (command_allowed()).
+ * the car is IDLE or STOPPED (command_allowed()). Mapping changes also
+ * require IDLE or STOPPED. Lowercase mapping letters are normalised to A-Z.
  */
 
 #ifndef COMMAND_H
@@ -25,6 +28,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "car_types.h"
+#include "barcode_decode.h"
 
 #define COMMAND_MAX_ARGS    (3u)
 #define COMMAND_LINE_MAX    (64u) /* longest accepted command line       */
@@ -48,6 +52,8 @@ typedef enum
     COMMAND_LINE,
     COMMAND_RATE,
     COMMAND_TIMING,
+    COMMAND_MAP,
+    COMMAND_MAPPING,
     COMMAND_INVALID
 } command_id_t;
 
@@ -56,6 +62,8 @@ typedef struct
     command_id_t kind;
     uint32_t     n_args;
     float32_t    arg[COMMAND_MAX_ARGS];
+    /* Order: forward, U-turn, left, right. */
+    char         nav_letters[BARCODE_MAPPING_SIZE];
     uint32_t     req_id; /* "#<id>" prefix, 0 if none */
 } command_t;
 

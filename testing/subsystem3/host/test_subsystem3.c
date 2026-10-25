@@ -33,7 +33,12 @@ static uint32_t const g_photo[29] = {
     48u,14u,16u,45u,17u,15u,46u,15u,15u,47u,15u,47u,15u,15u
 };
 static char const * const g_patterns[] = {
-    "100001001", "001001001", "101001000", "000011001", "011010000"
+    "100001001", "001001001", "101001000", "000011001", "100011000",
+    "001011000", "000001101", "100001100", "001001100", "000011100",
+    "100000011", "001000011", "101000010", "000010011", "100010010",
+    "001010010", "000000111", "100000110", "001000110", "000010110",
+    "110000001", "011000001", "111000000", "010010001", "110010000",
+    "011010000"
 };
 
 static void make_frame(uint32_t *widths, unsigned symbol, uint32_t narrow)
@@ -52,12 +57,38 @@ static void make_frame(uint32_t *widths, unsigned symbol, uint32_t narrow)
 
 static void test_decoder(void)
 {
+    char letters[4];
+    CHECK(!barcode_decode_get_mapping(letters));
+    CHECK(barcode_decode_to_command('A') == NAV_NONE);
+    CHECK(!barcode_decode_set_mapping(NULL));
+    CHECK(!barcode_decode_set_mapping("AAAA"));
+    CHECK(!barcode_decode_set_mapping("AB1D"));
+    CHECK(barcode_decode_set_mapping("WXYZ"));
+    CHECK(barcode_decode_to_command('W') == NAV_STRAIGHT);
+    CHECK(barcode_decode_to_command('X') == NAV_UTURN);
+    CHECK(barcode_decode_to_command('Y') == NAV_LEFT);
+    CHECK(barcode_decode_to_command('Z') == NAV_RIGHT);
+    CHECK(barcode_decode_to_command('A') == NAV_NONE);
+    CHECK(!barcode_decode_set_mapping("ZZZZ"));
+    CHECK(barcode_decode_get_mapping(letters) && memcmp(letters, "WXYZ", 4u) == 0);
+    for (unsigned first = 0u; first < 26u; first++)
+    {
+        for (unsigned slot = 0u; slot < 4u; slot++)
+        {
+            letters[slot] = (char) ('A' + (first + slot) % 26u);
+        }
+        CHECK(barcode_decode_set_mapping(letters));
+        CHECK(barcode_decode_to_command(letters[0]) == NAV_STRAIGHT);
+        CHECK(barcode_decode_to_command(letters[1]) == NAV_UTURN);
+        CHECK(barcode_decode_to_command(letters[2]) == NAV_LEFT);
+        CHECK(barcode_decode_to_command(letters[3]) == NAV_RIGHT);
+    }
     char text[9] = {0};
     uint32_t widths[29];
     uint32_t reversed[29];
     CHECK(barcode_decode_frame(g_photo, 29u, text, sizeof(text)) == 1);
     CHECK(strcmp(text, "A") == 0);
-    for (unsigned symbol = 0u; symbol < 5u; symbol++)
+    for (unsigned symbol = 0u; symbol < 26u; symbol++)
     {
         for (uint32_t speed = 100u; speed <= 300u; speed += 10u)
         {
@@ -69,11 +100,12 @@ static void test_decoder(void)
                 reversed[28u - i] = widths[i];
             }
             CHECK(barcode_decode_frame(widths, 29u, text, sizeof(text)) == 1);
-            CHECK(text[0] == ((symbol < 4u) ? (char) ('A' + symbol) : 'Z'));
+            CHECK(text[0] == (char) ('A' + symbol));
             CHECK(barcode_decode_frame(reversed, 29u, text, sizeof(text)) == 1);
-            CHECK(text[0] == ((symbol < 4u) ? (char) ('A' + symbol) : 'Z'));
+            CHECK(text[0] == (char) ('A' + symbol));
         }
     }
+    CHECK(barcode_decode_set_mapping("CDAB"));
     CHECK(barcode_decode_to_command('A') == NAV_LEFT);
     CHECK(barcode_decode_to_command('B') == NAV_RIGHT);
     CHECK(barcode_decode_to_command('C') == NAV_STRAIGHT);
@@ -199,7 +231,7 @@ static void test_stream(void)
     CHECK(g_fake_tasks == 1u);
     CHECK(g_fake_message_size == 6u);
     barcode_set_enabled(true);
-    for (unsigned symbol = 0u; symbol < 5u; symbol++)
+    for (unsigned symbol = 0u; symbol < 26u; symbol++)
     {
         for (uint32_t narrow = 10u; narrow <= 30u; narrow += 10u)
         {
@@ -207,7 +239,7 @@ static void test_stream(void)
             {
                 stream_frame(symbol, narrow, reverse != 0u);
                 CHECK(barcode_get_event(&event, 0));
-                CHECK(event.text[0] == ((symbol < 4u) ? (char) ('A'+symbol) : 'Z'));
+                CHECK(event.text[0] == (char) ('A'+symbol));
                 CHECK(event.cmd == barcode_decode_to_command(event.text[0]));
                 fake_sample(WHITE, WHITE, WHITE, 300u, true);
                 CHECK(!barcode_get_event(&event, 0)); /* no duplicate */
