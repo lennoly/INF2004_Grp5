@@ -36,6 +36,8 @@ typedef enum
 int32_t barcode_decode_frame(uint32_t const * p_widths, uint32_t count,
                              char * p_out, uint32_t out_size);
 barcode_decode_nav_t barcode_decode_to_command(char symbol);
+void barcode_decode_set_symbol(barcode_decode_nav_t command, char symbol);
+char barcode_decode_symbol(barcode_decode_nav_t command);
 char const *         barcode_decode_command_name(barcode_decode_nav_t command);
 
 #endif /* BARCODE_DECODE_H */

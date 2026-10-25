@@ -20,54 +20,80 @@
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink);
-  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
-header h1 { font-size: 16px; margin: 0 8px 0 0; }
-.pill { padding: 2px 9px; border-radius: 999px; background: var(--btn);
+/* One screen: the page is the window height and each column fits in it
+   (a column that still overflows scrolls on its own).  Small windows fall
+   back to one long page. */
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
+  font: 12px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 8px; padding: 5px 10px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0 4px 0 0; }
+header .note { margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill { padding: 1px 8px; border-radius: 999px; background: var(--btn);
   color: var(--muted); font-weight: 600; white-space: nowrap; }
 .pill.ok { color: #fff; background: var(--ok); }
 .pill.bad { color: #fff; background: var(--bad); }
 .pill.warn { color: #fff; background: var(--warn); }
-main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 340px;
-  gap: 12px; padding: 12px 16px; }
-@media (max-width: 1150px) { main { grid-template-columns: minmax(0, 1fr); } }
+main { display: grid; grid-template-columns: 230px minmax(0, 1fr) 280px;
+  gap: 8px; padding: 8px 10px; flex: 1; min-height: 0; }
+main > div { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+main > div:last-child { display: flex; flex-direction: column; gap: 8px; }
+main > div:nth-child(2) { display: flex; flex-direction: column; gap: 8px; }
+main > div:nth-child(2) .charts { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+.charts section { display: flex; flex-direction: column; min-height: 0; margin: 0; }
+.charts canvas { flex: 1 1 0; height: 0; min-height: 50px; }
+main > div:last-child section { flex: 1 1 0; min-height: 60px; margin: 0; display: flex; flex-direction: column; }
+main > div:last-child .list { flex: 1; min-height: 0; max-height: none; }
+@media (max-width: 1050px), (max-height: 560px) {
+  body { display: block; height: auto; }
+  main { grid-template-columns: minmax(0, 1fr); }
+  main > div, main > div:last-child, main > div:nth-child(2) { overflow: visible; display: block; }
+  .charts canvas { flex: none; height: 115px; }
+  main > div:nth-child(2) .charts { margin-bottom: 8px; }
+  main > div:last-child section { margin-bottom: 8px; }
+  main > div:last-child .list { max-height: 240px; }
+}
 section { background: var(--panel); border: 1px solid var(--line);
-  border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); margin: 0 0 8px; }
-.row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-button { font: inherit; padding: 6px 10px; border: 1px solid var(--line);
-  border-radius: 6px; background: var(--btn); color: var(--ink); cursor: pointer; }
+  border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; }
+h2 { font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 0 0 3px; }
+.row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+.row:last-child { margin-bottom: 0; }
+button { font: inherit; padding: 3px 7px; border: 1px solid var(--line);
+  border-radius: 5px; background: var(--btn); color: var(--ink); cursor: pointer; }
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--ok); color: #fff; border-color: transparent; }
 button.stop { background: var(--bad); color: #fff; border-color: transparent; }
-.tune { display: grid; grid-template-columns: 56px repeat(3, minmax(0, 1fr)) 58px;
-  gap: 4px; align-items: center; margin-bottom: 6px; }
+.tune { display: grid; grid-template-columns: 40px repeat(3, minmax(0, 1fr)) 46px;
+  gap: 3px; align-items: center; margin-bottom: 3px; }
 .tune label { color: var(--muted); }
-input { font: inherit; width: 100%; padding: 5px 6px; border: 1px solid var(--line);
-  border-radius: 5px; background: var(--bg); color: var(--ink); min-width: 0; }
-.cmd { display: flex; gap: 6px; }
-.note { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
-.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tune.letters { grid-template-columns: repeat(4, minmax(0, 1fr)) 46px; }
+.tune.letters input { text-align: center; text-transform: uppercase; font-weight: 700; }
+input { font: inherit; width: 100%; padding: 2px 5px; border: 1px solid var(--line);
+  border-radius: 4px; background: var(--bg); color: var(--ink); min-width: 0; }
+.cmd { display: flex; gap: 4px; }
+.note { color: var(--muted); font-size: 11px; margin: 2px 0 0; }
+.charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 700px) { .charts { grid-template-columns: minmax(0, 1fr); } }
-canvas { width: 100%; height: 190px; display: block; }
-.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
-.legend i { display: inline-block; width: 14px; height: 3px; margin-right: 4px;
+canvas { width: 100%; height: 115px; display: block; }
+.legend { display: flex; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 11px; }
+.legend i { display: inline-block; width: 12px; height: 3px; margin-right: 3px;
   vertical-align: middle; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
-.kv dt { color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.cards section { margin-bottom: 0; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; line-height: 1.25; }
+.kv dt { color: var(--muted); white-space: nowrap; }
 .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-.bar { height: 7px; background: var(--grid); border-radius: 4px; overflow: hidden; margin: 2px 0 6px; }
+.kv dd input { width: 70px; text-align: right; }
+.bar { height: 4px; background: var(--grid); border-radius: 3px; overflow: hidden; margin: 1px 0 3px; }
 .bar b { display: block; height: 100%; width: 0; background: var(--accent); }
-.big { font-size: 22px; font-weight: 700; }
-.list { max-height: 300px; overflow-y: auto; font: 12px/1.45 ui-monospace, Consolas, monospace; }
-.list div { padding: 1px 0; border-bottom: 1px solid var(--grid); white-space: pre-wrap;
+.big { font-size: 15px; font-weight: 700; }
+.list { max-height: 240px; overflow-y: auto; font: 11px/1.35 ui-monospace, Consolas, monospace; }
+.list div { padding: 0; border-bottom: 1px solid var(--grid); white-space: pre-wrap;
   overflow-wrap: anywhere; }
 .list .hot { color: var(--bad); }
-#feedback { color: var(--muted); min-height: 1.4em; }
+#feedback { color: var(--muted); min-height: 1.3em; margin: 2px 0 0; }
 </style>
 </head>
 <body>
@@ -78,6 +104,7 @@ canvas { width: 100%; height: 190px; display: block; }
   <span class="pill" id="p-state">state –</span>
   <span class="pill" id="p-rate">0 msg/s</span>
   <span class="pill" id="p-faults" hidden>faults</span>
+  <span class="pill bad" id="p-shock" hidden>SHOCK</span>
   <span class="note" id="where"></span>
 </header>
 
@@ -98,14 +125,14 @@ canvas { width: 100%; height: 190px; display: block; }
       </div>
     </section>
     <section>
-      <h2>Turn as if a barcode was read</h2>
-      <div class="row">
-        <button data-cmd="nav=1">Left</button>
-        <button data-cmd="nav=2">Right</button>
-        <button data-cmd="nav=3">Straight</button>
-        <button data-cmd="nav=4">U-turn</button>
+      <h2>Demo barcode letters (car stopped)</h2>
+      <div class="tune letters">
+        <label>Left</label><label>Right</label><label>Straight</label><label>U-turn</label><span></span>
+        <input id="map1" maxlength="1" value="A"><input id="map2" maxlength="1" value="B">
+        <input id="map3" maxlength="1" value="C"><input id="map4" maxlength="1" value="D">
+        <button id="set-map">Set</button>
       </div>
-      <p class="note">At the next junction or after 400 mm; U-turn at once. Only while running.</p>
+      <p class="note">Back to A B C D after a car reset: press Set again.</p>
     </section>
     <section>
       <h2>Tuning (car stopped)</h2>
@@ -149,6 +176,13 @@ canvas { width: 100%; height: 190px; display: block; }
           <span><i style="background:var(--irl)"></i>IR left</span>
           <span><i style="background:var(--irr)"></i>IR right</span></div>
       </section>
+      <section>
+        <h2>Terrain profile (last 2 m)</h2>
+        <canvas id="c-terrain"></canvas>
+        <div class="legend"><span><i style="background:var(--accent)"></i>bump height (mm)</span>
+          <span><i style="background:var(--warn)"></i>pitch (°, + nose up)</span>
+          <span id="v-terrain">–</span></div>
+      </section>
     </div>
     <div class="cards">
       <section><h2>Motion</h2><dl class="kv">
@@ -159,27 +193,41 @@ canvas { width: 100%; height: 190px; display: block; }
         <dt>Odometer</dt><dd id="v-odo">–</dd>
         <dt>Heading</dt><dd id="v-hdg">–</dd>
         <dt>Run time</dt><dd id="v-t">–</dd></dl></section>
-      <section><h2>Line and barcode</h2>
+      <section><h2>Line</h2>
         <dl class="kv"><dt>Line</dt><dd id="v-ls">–</dd>
           <dt>Error</dt><dd id="v-le">–</dd></dl>
         <div class="bar"><b id="b-le"></b></div>
         <dl class="kv"><dt>IR left</dt><dd id="v-irl">–</dd></dl><div class="bar"><b id="b-irl"></b></div>
         <dl class="kv"><dt>IR right</dt><dd id="v-irr">–</dd></dl><div class="bar"><b id="b-irr"></b></div>
-        <dl class="kv"><dt>IR barcode</dt><dd id="v-irb">–</dd></dl><div class="bar"><b id="b-irb"></b></div>
-        <dl class="kv"><dt>Last barcode</dt><dd id="v-bc">–</dd>
-          <dt>Pending turn</dt><dd id="v-pend">–</dd></dl></section>
-      <section><h2>IMU and humps</h2><dl class="kv">
-        <dt>Pitch / roll</dt><dd id="v-pr">–</dd>
+        <dl class="kv"><dt>IR barcode</dt><dd id="v-irb">–</dd></dl><div class="bar"><b id="b-irb"></b></div></section>
+      <section><h2>Barcode</h2><dl class="kv">
+        <dt>Last read</dt><dd id="v-bcread" class="big">–</dd>
+        <dt>Instruction</dt><dd id="v-bccmd">–</dd>
+        <dt>Pending turn</dt><dd id="v-pend">–</dd>
+        <dt>Last turn</dt><dd id="v-bcturn">–</dd>
+        <dt>Barcodes read</dt><dd id="v-nbc">–</dd>
+        <dt>Letters L R S U</dt><dd id="v-map">A B C D (default)</dd></dl></section>
+      <section><h2>IMU and terrain</h2><dl class="kv">
+        <dt>Yaw / pitch / roll</dt><dd id="v-ypr">–</dd>
         <dt>Turn rate</dt><dd id="v-rate">–</dd>
-        <dt>Event</dt><dd id="v-ev">–</dd>
-        <dt>Hump now</dt><dd id="v-h">–</dd>
-        <dt>Last peak</dt><dd id="v-pk">–</dd>
-        <dt>Highest peak</dt><dd id="v-max" class="big">–</dd>
-        <dt>Humps</dt><dd id="v-n">–</dd></dl></section>
+        <dt>Terrain</dt><dd id="v-ev">–</dd>
+        <dt>Speed</dt><dd id="v-speed">–</dd>
+        <dt>Task</dt><dd id="v-task">–</dd>
+        <dt>Bump now</dt><dd id="v-h">–</dd>
+        <dt>Last bump</dt><dd id="v-pk">–</dd>
+        <dt>Highest bump</dt><dd id="v-max" class="big">–</dd>
+        <dt>Bumps</dt><dd id="v-n">–</dd>
+        <dt>Shocks</dt><dd id="v-shocks">–</dd></dl></section>
       <section><h2>Obstacles</h2><dl class="kv">
         <dt>Front</dt><dd id="v-front" class="big">–</dd>
         <dt>Last action</dt><dd id="v-act">–</dd>
-        <dt>Passed</dt><dd id="v-nobs">–</dd></dl></section>
+        <dt>Passed</dt><dd id="v-nobs">–</dd>
+        <dt>Last scan: distance</dt><dd id="v-odist">–</dd>
+        <dt>Size (width)</dt><dd id="v-owidth" class="big">–</dd>
+        <dt>Centre offset</dt><dd id="v-ocentre">–</dd>
+        <dt>Clear left / right</dt><dd id="v-oclear">–</dd>
+        <dt>Real width (mm)</dt><dd><input id="real-w" placeholder="e.g. 80" inputmode="numeric"></dd>
+        <dt>Width error</dt><dd id="v-oerr">–</dd></dl></section>
       <section><h2>Link (heartbeat)</h2><dl class="kv">
         <dt>MQTT</dt><dd id="v-hlink">–</dd>
         <dt>WiFi</dt><dd id="v-wifi">–</dd>
@@ -203,7 +251,9 @@ canvas { width: 100%; height: 190px; display: block; }
 "use strict";
 const HISTORY_S = 30, MAX_ROWS = 150;
 const $ = id => document.getElementById(id);
-const series = [];                 // [t, spdL, spdR, tgtL, tgtR, le, irL, irR]
+const TERRAIN_MM = 2000;           // terrain chart: last 2 m driven
+const SONAR_AHEAD_MM = 70;         // car_config.h OBST_SENSOR_AHEAD_MM: sonar face ahead of the axle
+const series = [];                 // [t, spdL, spdR, tgtL, tgtR, le, irL, irR, hump, pitch, odo]
 let dirty = false, lastGains = "", nTelPrev = 0, rateT = performance.now();
 let lastLs = "";
 
@@ -224,6 +274,15 @@ document.querySelectorAll("[data-tune]").forEach(b =>
     for (let i = 0; i < n; i++) vals.push($(k + i).value.trim() || "0");
     send(k + "=" + vals.join(","));
   }));
+// Demo letters: map=<1..4>,<Code 39 index>, one command per turn.
+const CODE39 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+$("set-map").addEventListener("click", () => {
+  const letters = [1, 2, 3, 4].map(i => ($("map" + i).value.trim().toUpperCase() || " ")[0]);
+  const bad = letters.filter(c => c === " " || !CODE39.includes(c));
+  if (bad.length) { $("feedback").textContent = "letters must be A-Z or 0-9"; return; }
+  letters.forEach((c, i) => send("map=" + (i + 1) + "," + CODE39.indexOf(c)));
+  setText("v-map", letters.join(" ") + " (sent)");
+});
 $("send").addEventListener("click", () => { send($("cmd").value); $("cmd").select(); });
 $("cmd").addEventListener("keydown", e => { if (e.key === "Enter") $("send").click(); });
 
@@ -291,16 +350,54 @@ function update(m) {
   [["irl", 0], ["irr", 1], ["irb", 2]].forEach(([k, i]) => {
     const v = scaled(ir[i], 0.001); setText("v-" + k, fmt(v, 2)); bar("b-" + k, v || 0);
   });
-  setText("v-bc", (o.bc || "–") + "  (" + fmt(o.nbc) + " read)");
-  setText("v-pend", o.pend || "–");
-  setText("v-pr", fmt(scaled(o.pitch, 0.1), 1, "°") + " / " + fmt(scaled(o.roll, 0.1), 1, "°"));
+  // Barcode: the letter read and what the car does with it.
+  const bc = m.barcode;
+  if (bc) {
+    setText("v-bcread", (bc.code || "?") + " → " + bc.cmd);
+    setText("v-bccmd", { LEFT: "turn left at the junction", RIGHT: "turn right at the junction",
+                         STRAIGHT: "straight on at the junction", UTURN: "U-turn now" }[bc.cmd]
+                       || "not a turn letter");
+  }
+  setText("v-pend", o.pend || "–"); setText("v-nbc", fmt(o.nbc));
+
+  // IMU and terrain.
+  setText("v-ypr", fmt(scaled(o.yaw, 0.1), 0, "°") + " / " + fmt(scaled(o.pitch, 0.1), 1, "°")
+                   + " / " + fmt(scaled(o.roll, 0.1), 1, "°"));
   setText("v-rate", fmt(scaled(o.rate, 0.1), 1, " °/s"));
   setText("v-ev", o.ev || "–");
+  const spd = Array.isArray(o.spd) ? (o.spd[0] + o.spd[1]) / 2 : null;
+  setText("v-speed", fmt(spd, 0, " mm/s")); setText("v-task", st);
   const h = o.hump || {};
   setText("v-h", fmt(h.h, 1, " mm")); setText("v-pk", fmt(h.pk, 1, " mm"));
   setText("v-max", fmt(h.max, 1, " mm")); setText("v-n", fmt(h.n));
-  setText("v-front", (o.front === null || o.front === undefined || o.front < 0) ? "no echo" : fmt(o.front, 0, " mm"));
+  setText("v-terrain", (o.ev || "–") + "  ·  " + fmt(spd, 0, " mm/s") + "  ·  " + st);
+  const mg = (m.impact_mg === null || m.impact_mg === undefined) ? "" : "  " + m.impact_mg + " mg";
+  setText("v-shocks", fmt(m.impacts) + (m.impacts ? "  (last" + (mg || " –") + ")" : ""));
+  const shock = m.impact_age_s !== null && m.impact_age_s < 5;
+  $("p-shock").hidden = !shock;
+  if (shock) setText("p-shock", "SHOCK #" + m.impacts + mg);
+
+  // Obstacles: front range, then the last scan.
+  // Sonar distances, and from the wheel axle (sonar face + SONAR_AHEAD_MM).
+  const axle = d => fmt(d, 0, " mm") + "  (" + fmt(d + SONAR_AHEAD_MM, 0) + " axle)";
+  setText("v-front", (o.front === null || o.front === undefined || o.front < 0) ? "no echo" : axle(o.front));
   setText("v-act", o.act || "–"); setText("v-nobs", fmt(o.nobs));
+  const ob = m.obstacle;
+  if (ob) {
+    const seen = v => v ? fmt(v, 0, " mm") : "edge not seen";
+    setText("v-odist", ob.found ? axle(ob.dist) : "nothing found");
+    setText("v-owidth", ob.found ? (ob.width_known ? "" : "≥ ") + fmt(ob.width, 0, " mm") : "–");
+    setText("v-ocentre", ob.found ? fmt(ob.centre, 0, " mm") + (ob.centre > 0 ? " right" : ob.centre < 0 ? " left" : "") : "–");
+    setText("v-oclear", ob.found ? seen(ob.cl) + " / " + seen(ob.cr) : "–");
+  }
+  const real = parseFloat($("real-w").value);
+  let err = "–";
+  if (ob && ob.found && real > 0) {
+    err = ob.width_known
+      ? fmt(ob.width - real, 0, " mm") + "  (" + fmt((ob.width - real) * 100 / real, 0, " %") + ")"
+      : "unknown: an edge was not seen";
+  }
+  setText("v-oerr", err);
   setText("v-hlink", hb.link || "–"); setText("v-wifi", hb.wifi || "–");
   setText("v-ip", hb.ip || "–");
   setText("v-pub", hb.pub === undefined ? "–" : hb.pub + " / " + hb.drop);
@@ -320,13 +417,23 @@ function update(m) {
     }
   }
   if (m.events.length) addRows("events", m.events, /IMPACT|STOPPED|FAILED|OBSTACLE|offline/);
+  for (const e of m.events) {
+    const tm = e.match(/state -> NAV_TURN \((\w+)(, no junction)?\)/);
+    if (tm) setText("v-bcturn", tm[1] + (tm[2] ? " after 400 mm (no junction)" : tm[1] === "UTURN" ? " at once" : " at the junction"));
+  }
   const acts = m.events.map(keyAction).filter(Boolean);
   if (o.ls && o.ls !== lastLs) {
     if (o.ls === "JUNC") acts.push(new Date().toTimeString().slice(0, 8) + "  Junction");
     lastLs = o.ls;
   }
   if (acts.length) addRows("actions", acts, /IMPACT|STOPPED|OBSTACLE|TURN/);
-  if (m.console.length) addRows("console", m.console);
+  if (m.console.length) {
+    addRows("console", m.console);
+    for (const c of m.console) {
+      const mm = c.match(/^# map L=(.) R=(.) S=(.) U=(.)/);
+      if (mm) setText("v-map", mm.slice(1).join(" ") + " (car)");
+    }
+  }
   if (m.samples.length) {
     for (const s of m.samples) series.push(s);
     const tEnd = series[series.length - 1][0];
@@ -337,7 +444,9 @@ function update(m) {
 
 // ---------- charts (plain canvas) ----------
 function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-function chart(canvas, lines, fixed) {
+// x: series column on the horizontal axis (default 0 = time) and how much
+// of it to show, e.g. { i: 10, span: 2000, left: "-2 m" } for distance.
+function chart(canvas, lines, fixed, x = { i: 0, span: HISTORY_S, left: "-30 s" }) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
@@ -355,8 +464,8 @@ function chart(canvas, lines, fixed) {
     lo = Math.min(lo, 0); hi = Math.max(hi, lo + 50);
     const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
   }
-  const tEnd = series.length ? series[series.length - 1][0] : 0, t0 = tEnd - HISTORY_S;
-  const X = t => padL + (t - t0) / HISTORY_S * pw;
+  const tEnd = series.length ? series[series.length - 1][x.i] || 0 : 0, t0 = tEnd - x.span;
+  const X = t => padL + (t - t0) / x.span * pw;
   const Y = v => 6 + (hi - v) / (hi - lo) * ph;
   g.font = "11px system-ui, sans-serif"; g.fillStyle = css("--muted");
   g.strokeStyle = css("--grid"); g.lineWidth = 1;
@@ -366,16 +475,16 @@ function chart(canvas, lines, fixed) {
     g.fillText(Math.abs(hi - lo) < 5 ? v.toFixed(1) : Math.round(v), 2, y + 4);
   }
   if (lo < 0 && hi > 0) { g.strokeStyle = css("--muted"); g.beginPath(); g.moveTo(padL, Y(0)); g.lineTo(padL + pw, Y(0)); g.stroke(); }
-  g.fillText("-30 s", padL, h - 3); g.fillText("now", padL + pw - 22, h - 3);
+  g.fillText(x.left, padL, h - 3); g.fillText("now", padL + pw - 22, h - 3);
   for (const ln of lines) {
     g.strokeStyle = css(ln.color); g.lineWidth = ln.width || 1.6;
     g.setLineDash(ln.dash ? [5, 4] : []);
     g.beginPath(); let pen = false;
     for (const s of series) {
-      const v = s[ln.i];
-      if (v === null || v === undefined) { pen = false; continue; }
-      const x = X(s[0]), y = Y(v);
-      if (pen) g.lineTo(x, y); else { g.moveTo(x, y); pen = true; }
+      const v = s[ln.i], sx = s[x.i];
+      if (v === null || v === undefined || sx === null || sx === undefined || sx < t0) { pen = false; continue; }
+      const px = X(sx), py = Y(v);
+      if (pen) g.lineTo(px, py); else { g.moveTo(px, py); pen = true; }
     }
     g.stroke();
   }
@@ -390,6 +499,9 @@ function draw() {
     chart($("c-line"), [
       { i: 6, color: "--irl", width: 1.2 }, { i: 7, color: "--irr", width: 1.2 },
       { i: 5, color: "--err", width: 1.8 }], [-1.05, 1.05]);
+    chart($("c-terrain"), [
+      { i: 9, color: "--warn", width: 1.2 }, { i: 8, color: "--accent", width: 1.8 }],
+      null, { i: 10, span: TERRAIN_MM, left: "-" + TERRAIN_MM / 1000 + " m" });
   }
   requestAnimationFrame(draw);
 }

@@ -30,12 +30,23 @@ pip install -r requirements.txt
   line error with the left/right IR sensors.
 * **Values:** motion (speed, target, PWM, encoder ticks, odometer, heading),
   line and barcode (IR bars, last barcode, pending turn), IMU and humps
-  (pitch/roll, event, highest hump peak), obstacles (front distance, last
-  action), link heartbeat (WiFi state, sent/dropped, re-joins, chip resets).
+  (yaw/pitch/roll, terrain event, speed and task, bumps, shock count),
+  barcode (letter read, what the car does with it, pending turn, the demo
+  letters), obstacles (front distance, last action, last scan's distance,
+  size, centre and clearances; type the real box width to see the width
+  error, or "unknown" when an edge was not seen), link heartbeat (WiFi state, sent/dropped, re-joins, chip resets).
+* **Terrain profile:** bump height and pitch over the last 2 m driven.
+* **SHOCK pill:** red in the header for 5 s after each impact, with its
+  strength in mg.
+* **Distances** (front and last scan) show the sonar reading and, in
+  brackets, the distance from the wheel axle (+70 mm, `OBST_SENSOR_AHEAD_MM`).
+* **Barcode turns** show whether they ran at the junction or after 400 mm
+  without one ("LEFT, no junction" in the events).
+* The page fits one screen (about 1366 x 650 or larger); a smaller window
+  falls back to one long page.
 * **Events and car console:** newest at the top.
 * **Controls:** Start / Stop / Calibration spin, Fast 20 Hz / Normal 5 Hz,
-  Gains, the Nav buttons (`nav=1..4`, a turn as if a barcode was read), the
-  tuning boxes and a free command box.
+  Gains, the tuning boxes, the demo barcode letters and a free command box.
 
 The page only gets at most 5 updates a second and redraws a chart only when
 new data arrived, so it stays smooth at 20 Hz telemetry.
@@ -53,8 +64,11 @@ The tuning boxes fill in from the car. Edit and press **Apply**:
 
 Other commands: `start`, `stop`, `calibrate`, `gains`, `help`, `timing`
 (task times, control jitter and CPU load), `nav=1..4` (turn as if a barcode
-was read: 1 left, 2 right, 3 straight, 4 U-turn).
-Tuning (`pid=`, `ff=`, `line=`, `speed=`) is accepted only while the car is
+was read: 1 left, 2 right, 3 straight, 4 U-turn), `map=1..4,index` (the
+barcode letter for that turn as its Code 39 index, A=10 .. Z=35; the
+**Demo barcode letters** boxes send these for you, and the car goes back to
+A B C D when reset).
+Tuning (`pid=`, `ff=`, `line=`, `speed=`, `map=`) is accepted only while the car is
 IDLE or STOPPED; while it drives, the reply says so.
 The car answers every command with an event (`cmd ... ok` or the reason it
 failed) and then reports the gains now in use.

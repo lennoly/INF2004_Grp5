@@ -16,10 +16,15 @@
  *   nav=<1..4>                   as if a barcode was read: 1 left,
  *                                2 right, 3 straight, 4 U-turn (testing
  *                                turns without barcodes; while running)
+ *   map=<1..4>,<0..42>           barcode letter for a command (same
+ *                                numbers as nav=) as its Code 39 index,
+ *                                0-9 then A=10 .. Z=35 (the dashboard
+ *                                converts letters); back to car_config.h
+ *                                at reset
  *
  * Numbers are plain decimals ("0.08", "-1.5", "12"), without exponents.
- * The tuning commands (speed=, pid=, ff=, line=) are accepted only while
- * the car is IDLE or STOPPED (command_allowed()).
+ * The tuning commands (speed=, pid=, ff=, line=, map=) are accepted only
+ * while the car is IDLE or STOPPED (command_allowed()).
  */
 
 #ifndef COMMAND_H
@@ -39,6 +44,7 @@
 #define COMMAND_RATE_MAX_MS (5000)
 #define COMMAND_NAV_MIN     (1) /* NAV_LEFT  */
 #define COMMAND_NAV_MAX     (4) /* NAV_UTURN */
+#define COMMAND_SYMBOL_MAX  (42) /* last Code 39 index ('%') */
 
 typedef enum
 {
@@ -54,6 +60,7 @@ typedef enum
     COMMAND_RATE,
     COMMAND_TIMING,
     COMMAND_NAV,
+    COMMAND_MAP,
     COMMAND_INVALID
 } command_id_t;
 

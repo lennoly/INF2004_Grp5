@@ -27,6 +27,9 @@ static int32_t find_closest(avoidance_point_t const * p_points, uint32_t count,
 static void grow_cluster(avoidance_point_t const * p_points, uint32_t count,
                          int32_t limit_mm, uint32_t * p_low, uint32_t * p_high);
 
+static void merge_near(avoidance_point_t const * p_points, uint32_t count,
+                       int32_t near_mm, uint32_t * p_low, uint32_t * p_high);
+
 static void measure_extent(avoidance_point_t const * p_points, uint32_t low,
                            uint32_t high, avoidance_profile_t * p_out);
 
@@ -48,7 +51,9 @@ static avoidance_plan_t choose_side(avoidance_profile_t const * p_prof,
  * @param[out] p_out    Profile; when nothing is found every field but
  *                      closest_mm is zero (no stale or random edges).
  *
- * @return true if an obstacle closer than OBST_DETECT_MM was found.
+ * @return true if anything echoed in the corridor (closer than OBST_FLOOR_MM).
+ *         Not OBST_DETECT_MM: after a REVERSE the box is often just past
+ *         it (221 mm, 25 Oct) and the car drove back into it.
  */
 bool
 avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
@@ -63,7 +68,7 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
     /* Scans printed cl=70647 when nothing was found: start from zero. */
     *p_out            = empty;
     p_out->closest_mm = find_closest(p_points, count, &best);
-    p_out->b_found    = (0u != count) && (p_out->closest_mm < OBST_DETECT_MM);
+    p_out->b_found    = (0u != count) && (p_out->closest_mm < OBST_FLOOR_MM);
 
     if (p_out->b_found)
     {
@@ -71,6 +76,9 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
         high = best;
         grow_cluster(p_points, count, p_out->closest_mm + OBST_CLUSTER_DEPTH_MM,
                      &low, &high);
+        merge_near(p_points, count,
+                   p_out->closest_mm + (NEIGHBOUR_RANGE * OBST_CLUSTER_DEPTH_MM),
+                   &low, &high);
         p_out->closest_angle = p_points[best].angle_deg;
         measure_extent(p_points, low, high, p_out);
         measure_clearance(p_points, count, low, high, p_out);
@@ -144,6 +152,23 @@ avoidance_action_name (avoidance_action_t action)
     }
 
     return (p_name);
+}
+
+/*!
+ * @brief Whether the profile's width is a measurement: both box edges were
+ *        seen.  An edge at the end of the sweep has clearance 0, and the
+ *        width is then only the sweep's reach (S5-U07, 25 Oct: both boxes
+ *        read 170-210 mm), a lower bound.
+ *
+ * @param[in] p_prof Obstacle profile.
+ *
+ * @return true if both edges were seen.
+ */
+bool
+avoidance_width_known (avoidance_profile_t const * p_prof)
+{
+    return ((p_prof->b_found) && (0 != p_prof->clear_left_mm)
+            && (0 != p_prof->clear_right_mm));
 }
 
 /*!
@@ -239,6 +264,49 @@ grow_cluster (avoidance_point_t const * p_points, uint32_t count,
 }
 
 /*!
+ * @brief Join echoes the car could not fit between to the cluster.  Slant
+ *        echoes off one box past OBST_FLOOR_MM split it into pieces 37 mm
+ *        apart, which read as no room either side (REVERSE loop, 25 Oct).
+ *
+ * @param[in]     p_points Scan points.
+ * @param[in]     count    Number of points.
+ * @param[in]     near_mm  Farthest distance of another object nearby (as
+ *                         in measure_clearance()).
+ * @param[in,out] p_low    First index of the cluster.
+ * @param[in,out] p_high   Last index of the cluster.
+ */
+static void
+merge_near (avoidance_point_t const * p_points, uint32_t count, int32_t near_mm,
+            uint32_t * p_low, uint32_t * p_high)
+{
+    float32_t const need = CAR_WIDTH_MM + OBST_MARGIN_MM;
+    uint32_t        idx  = 0u;
+
+    /* Lower indices are to the right (larger lateral), higher to the left;
+       each joined echo becomes the end the next one is measured from. */
+    for (idx = *p_low; idx > 0u; idx--)
+    {
+        if ((point_is_valid(&p_points[idx - 1u]))
+            && (p_points[idx - 1u].dist_mm <= near_mm)
+            && ((point_lateral(&p_points[idx - 1u])
+                 - point_lateral(&p_points[*p_low])) < need))
+        {
+            *p_low = idx - 1u;
+        }
+    }
+
+    for (idx = *p_high + 1u; idx < count; idx++)
+    {
+        if ((point_is_valid(&p_points[idx])) && (p_points[idx].dist_mm <= near_mm)
+            && ((point_lateral(&p_points[*p_high]) - point_lateral(&p_points[idx]))
+                < need))
+        {
+            *p_high = idx;
+        }
+    }
+}
+
+/*!
  * @brief Width and centre of the obstacle cluster.
  *
  * @param[in]     p_points Scan points.
@@ -268,13 +336,19 @@ measure_extent (avoidance_point_t const * p_points, uint32_t low, uint32_t high,
 
     p_out->centre_mm = 0.5f * (p_out->left_edge_mm + p_out->right_edge_mm);
 
-    /* Reported width only: the edges stay as seen, so the pass keeps the
-       cone as extra margin.  Cast: closest_mm is below US_MAX_MM. */
-    beam_mm = 2.0f * (float32_t) p_out->closest_mm
+    /* The cone echoes past each real edge, so each seen edge is pulled in
+       by closest x tan(beam) (a box that read 78 mm too wide made the car
+       swing that much further, 25 Oct); never past the centre.  Cast:
+       closest_mm is below US_MAX_MM. */
+    beam_mm = (float32_t) p_out->closest_mm
               * (car_math_sin(OBST_BEAM_HALF_DEG * CAR_MATH_RAD_PER_DEG)
                  / car_math_cos(OBST_BEAM_HALF_DEG * CAR_MATH_RAD_PER_DEG));
-    p_out->width_mm = p_out->right_edge_mm - p_out->left_edge_mm - beam_mm;
-    p_out->width_mm = (p_out->width_mm > 0.0f) ? p_out->width_mm : 0.0f;
+    beam_mm = (beam_mm < (p_out->centre_mm - p_out->left_edge_mm))
+                  ? beam_mm
+                  : (p_out->centre_mm - p_out->left_edge_mm);
+    p_out->left_edge_mm  += beam_mm;
+    p_out->right_edge_mm -= beam_mm;
+    p_out->width_mm = p_out->right_edge_mm - p_out->left_edge_mm;
 }
 
 /*!
@@ -350,6 +424,8 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     float32_t        pass       = 0.0f;
     bool             b_left_ok  = false;
     bool             b_right_ok = false;
+    bool             b_unsure   = false;
+    bool             b_prefer_l = false;
 
     /* Casts: clearances are at most OBST_MAX_CLEARANCE_MM and the closest
        echo at most US_MAX_MM, so they convert exactly to float32_t. */
@@ -360,7 +436,21 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     b_right_ok = (car_math_is_finite(off_right))
                  && ((float32_t) p_prof->clear_right_mm >= need);
 
-    if (b_left_ok && ((!b_right_ok) || (off_left <= off_right)))
+    /* Near the centre the seen side cannot be trusted: shift wide, away
+       from the way the box leans (OBST_BLIND_LEFT's side if it is dead
+       centre), so a wrong lean still clears it.  Any side pass shifts at
+       least OBST_MIN_OFFSET_MM. */
+    b_unsure   = car_math_abs(p_prof->centre_mm) < OBST_CENTRE_UNSURE_MM;
+    b_prefer_l = b_unsure ? ((p_prof->centre_mm > 0.0f)
+                             || ((!(p_prof->centre_mm < 0.0f))
+                                 && (0 != OBST_BLIND_LEFT)))
+                          : (off_left <= off_right);
+    off_left   = b_unsure ? OBST_BLIND_OFFSET_MM : off_left;
+    off_right  = b_unsure ? OBST_BLIND_OFFSET_MM : off_right;
+    off_left   = (off_left > OBST_MIN_OFFSET_MM) ? off_left : OBST_MIN_OFFSET_MM;
+    off_right  = (off_right > OBST_MIN_OFFSET_MM) ? off_right : OBST_MIN_OFFSET_MM;
+
+    if (b_left_ok && ((!b_right_ok) || b_prefer_l))
     {
         plan.action    = AVOID_TURN_LEFT;
         plan.offset_mm = off_left;

@@ -27,6 +27,7 @@
 #define APP_MODE_TEST_TELEMETRY     (7)  /* Buddy 1: MQTT telemetry        */
 #define APP_MODE_TEST_WHEELS        (8)  /* Buddy 2: raw motor pin check   */
 #define APP_MODE_TEST_CRASH         (9)  /* Buddy 4: drive into a wall     */
+#define APP_MODE_TEST_OBSTACLE      (10) /* Buddy 5: MISSION, straight     */
 
 #ifndef APP_MODE
 #define APP_MODE                    APP_MODE_MISSION
@@ -107,6 +108,7 @@
 #define SPEED_HUMP_DOWN_MM_S        (75.0f)   /* [CALIBRATE] descending    */
 #define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
 #define SPEED_TURN_MM_S             (120.0f)
+#define SPEED_BYPASS_MM_S           (300.0f)  /* [CALIBRATE] obstacle bypass legs (NFR2 max) */
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
 #define SPEED_CMD_MIN_MM_S          (60)
@@ -210,7 +212,7 @@
 #define US_SEM_TIMEOUT_MS           (100u)    /* NFR9: sensor wait limit    */
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
-#define OBST_DETECT_MM              (200)     /* start profiling below this */
+#define OBST_DETECT_MM              (240)     /* start profiling below this (25 Oct: 200 scanned too close to see box edges) */
 /* The floor echoes at about 300-380 mm (the sensor is low and cannot tilt
    up): the profile treats echoes this far or further as no echo.  The
    front sensor still watches the pass for real objects. */
@@ -226,17 +228,34 @@
 #define OBST_MARGIN_MM              (60.0f)
 #define OBST_MAX_CLEARANCE_MM       (1000)
 #define OBST_FINE_STEP_DEG          (5)
-#define OBST_DEPTH_MAX_MM           (250.0f)  /* [CALIBRATE] deepest box    */
+#define OBST_DEPTH_MAX_MM           (150.0f)  /* [CALIBRATE] deepest box (10-15 cm) */
 #define OBST_MAX_ATTEMPTS           (2u)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
    pass this far to one side, enough for the largest obstacle, a 150 mm
    box up to 60 mm off the line either way (75 + 60 + corridor 140). */
 #define OBST_BLIND_OFFSET_MM        (280.0f)  /* [CALIBRATE]               */
-/* Sonar cone: the box still echoes this far past each edge, so the
-   reported width is narrowed by 2 x closest x tan(beam).  0 until set from
-   TEST_ULTRASONIC scans of 100 and 150 mm boxes (obstacles are 10-15 cm). */
+/* Sonar cone: each seen edge is pulled in by closest x tan(beam).  0: a
+   flat face only echoes near square-on, so the seen box can sit 60-80 mm
+   from the real one (25 Oct); 8 deg cut a pass to 53 mm.  Keep the edges
+   as seen and the cone as margin. */
 #define OBST_BEAM_HALF_DEG          (0.0f)    /* [CALIBRATE]               */
+/* Seen centre this close to the car's centre line: the side cannot be
+   trusted (a box 60 mm left read 10 mm right, or 20 mm left), so pass
+   wide by OBST_BLIND_OFFSET_MM, away from the way it leans. */
+#define OBST_CENTRE_UNSURE_MM       (40.0f)   /* [CALIBRATE]               */
+/* Smallest sideways shift of a side pass: the seen edge can be 60-80 mm
+   off, so a pass sized to it alone could clip the box (53 mm, 25 Oct). */
+#define OBST_MIN_OFFSET_MM          (150.0f)  /* [CALIBRATE]               */
 #define OBST_BLIND_LEFT             (1)       /* 0: blind pass on the right*/
+/* Diagonal bypass: the car's inner side on the 45 deg legs keeps this    */
+/* clearance from the box's near and far corners (deepest box,            */
+/* OBST_DEPTH_MAX_MM); the car backs off first if the box is too close.   */
+#define OBST_CORNER_MARGIN_MM       (30.0f)   /* [CALIBRATE]               */
+#define OBST_SENSOR_AHEAD_MM        (70.0f)   /* sonar face ahead of the wheel axle (measured) */
+/* TEST_OBSTACLE build: MISSION with line only after the obstacle.  The   */
+/* car drives straight (no steering, line search or barcode turns) until   */
+/* it has bypassed an obstacle, then rejoins the line and follows it.      */
+#define OBST_TEST_STRAIGHT          (APP_MODE == APP_MODE_TEST_OBSTACLE)
 
 /* ------------------------------------------------------------------------ */
 /* Vehicle controller (Buddy 5)                                             */
