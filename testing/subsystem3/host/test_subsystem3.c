@@ -229,7 +229,7 @@ static void test_stream(void)
     CHECK(barcode_init() == 0);
     CHECK(barcode_init() == 0);
     CHECK(g_fake_tasks == 1u);
-    CHECK(g_fake_message_size == 6u);
+    CHECK(g_fake_message_size == 10u);
     barcode_set_enabled(true);
     for (unsigned symbol = 0u; symbol < 26u; symbol++)
     {
@@ -246,6 +246,33 @@ static void test_stream(void)
             }
         }
     }
+    /* A leading noise pair must not hide a complete following frame. */
+    for (unsigned symbol = 0; symbol < 26; symbol++)
+    for (unsigned reverse = 0; reverse < 2; reverse++)
+    {
+        uint32_t widths[29];
+        make_frame(widths, symbol, 10u);
+        barcode_set_enabled(true);
+        fake_sample(WHITE, WHITE, WHITE, 300u, true);
+        fake_sample(WHITE, WHITE, BLACK, 5u, true);
+        fake_sample(WHITE, WHITE, WHITE, 5u, true);
+        for (unsigned i = 0; i < 29; i++)
+        {
+            fake_sample(WHITE, WHITE, (i % 2 == 0) ? BLACK : WHITE,
+                        widths[reverse ? 28-i : i], true);
+        }
+        fake_sample(WHITE, WHITE, WHITE, 15u, true);
+        CHECK(barcode_get_event(&event, 0) && event.text[0] == (char)('A' + symbol));
+        CHECK(!barcode_get_event(&event, 0));
+    }
+    /* A queued result from an older session cannot survive restart. */
+    stream_frame(0u, 10u, false);
+    barcode_set_enabled(false);
+    barcode_set_enabled(true);
+    CHECK(!barcode_get_event(&event, 0));
+    stream_frame(1u, 10u, false);
+    CHECK(barcode_get_event(&event, 0) && event.text[0] == 'B');
+
     /* Truncated capture and recovery. */
     fake_sample(WHITE, WHITE, BLACK, 10u, true);
     fake_sample(WHITE, WHITE, WHITE, 300u, true);

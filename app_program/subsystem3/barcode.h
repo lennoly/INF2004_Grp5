@@ -33,6 +33,7 @@ typedef struct
 int32_t barcode_init(void);
 bool    barcode_get_event(barcode_event_t * p_event, int32_t timeout_ms);
 void    barcode_get_stats(barcode_stats_t * p_out);
+/* Request a new session; only the barcode owner resets its ring/frame. */
 void    barcode_set_enabled(bool b_enabled);
 void    barcode_poll(void); /* one consumer only; normally barcode task */
 

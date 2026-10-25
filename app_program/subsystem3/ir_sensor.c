@@ -193,7 +193,6 @@ ir_sensor_calib_end (void)
     }
 
     EI(imask);
-    ir_sensor_barcode_reset();
 
     return (b_ok);
 }
@@ -209,7 +208,6 @@ ir_sensor_calib_cancel (void)
     DI(imask);
     gb_calibrating = false;
     EI(imask);
-    ir_sensor_barcode_reset();
 }
 
 /*!

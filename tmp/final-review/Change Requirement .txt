@@ -1,0 +1,26 @@
+P1: Change Requirement: Minimum-Bit Data Representation
+P2: The robot car firmware must minimise the number of bits used to represent application data. Each data field representing application information must use only the number of bits required to represent its valid range, using C bit-fields or explicit masks and shifts where appropriate. Examples include:
+P3: A value ranging from 1 to 5: 3 bits
+P4: A state machine with up to 8 states: 3 bits
+P5: Fault conditions such as motor stall, encoder fault, IMU fault, no echo and Wi-Fi loss: use individual bits within a shared fault bitmask, rather than separate integer variables.
+P6: The requirement applies to application data throughout the firmware, including:
+P7: motion control and encoder data;
+P8: line and barcode sensing;
+P9: obstacle detection;
+P10: hump estimation;
+P11: vehicle and controller states;
+P12: data shared between tasks or between an ISR and a task;
+P13: inter-task queue messages; and
+P14: MQTT telemetry and command payloads.
+P15: For MQTT communication, application data should be represented using compact binary fields rather than sending individual values as text.
+P16: When multiple values are packed into the same storage unit and that data is shared between tasks, or between an ISR and a task, access must be implemented safely. Read-modify-write operations on shared packed data must not introduce race conditions, and atomic access or appropriate synchronisation must be used where required.
+P18: Week 13 Documentation and Demonstration
+P19: As part of the Week 13 final submission, teams must include the following evidence and documentation in their GitHub repository:
+P20: Data representation table
+Identify each relevant application data field, its valid range, required number of bits, and how it is represented in the implementation.
+P21: RAM usage comparison
+Measure and compare RAM usage before and after implementing the change.
+P22: Message size comparison
+Measure and compare the size of relevant inter-task and/or communication messages before and after implementing the change.
+P23: Correctness and performance
+Provide evidence that the revised representation causes no loss of required functionality and no unacceptable degradation in timing or system performance.

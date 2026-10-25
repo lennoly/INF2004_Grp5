@@ -60,6 +60,7 @@ static volatile ID              gh_done_flag = 0;
 
 /* Used only by the task that initialises the drivers. */
 static bool gb_started = false;
+static volatile bool gb_stop_latched = false;
 
 /* Control-task private state: initialised and used only by
    motion_task() and the functions it calls. */
@@ -186,6 +187,42 @@ motion_stop (void)
 }
 
 /*!
+ * @brief Latch an emergency stop independently of any command queue.
+ */
+void
+motion_emergency_stop (void)
+{
+    UINT imask = 0u;
+
+    DI(imask);
+    gb_stop_latched = true;
+    EI(imask);
+    motion_stop();
+}
+
+/*!
+ * @brief Release the latch for an accepted START or mission calibration.
+ */
+void
+motion_clear_stop (void)
+{
+    UINT imask = 0u;
+
+    DI(imask);
+    gb_stop_latched = false;
+    EI(imask);
+}
+
+/*!
+ * @brief Whether an emergency stop remains latched.
+ */
+bool
+motion_stop_requested (void)
+{
+    return (gb_stop_latched);
+}
+
+/*!
  * @brief Continuous wheel speeds (line following and searching).
  *
  * @param[in] left_mm_s  Left wheel speed, signed.
@@ -243,7 +280,7 @@ motion_wait (int32_t timeout_ms)
         result = g_status.b_last_ok ? MOTION_WAIT_OK : MOTION_WAIT_FAIL;
     }
 
-    return (result);
+    return (motion_stop_requested() ? MOTION_WAIT_FAIL : result);
 }
 
 /*!
@@ -341,7 +378,7 @@ post_command (motion_cmd_t const * p_cmd)
     (void) tk_clr_flg(gh_done_flag, ~FLG_DONE);
 
     DI(imask);
-    g_cmd.mode      = p_cmd->mode;
+    g_cmd.mode      = gb_stop_latched ? MOTION_IDLE : p_cmd->mode;
     g_cmd.v_l       = p_cmd->v_l;
     g_cmd.v_r       = p_cmd->v_r;
     g_cmd.goal_mm   = p_cmd->goal_mm;
@@ -450,6 +487,11 @@ read_inputs (motion_cmd_t * p_cmd)
 
     DI(imask);
     *p_cmd    = g_cmd;
+
+    if (gb_stop_latched)
+    {
+        p_cmd->mode = MOTION_IDLE;
+    }
     gains     = g_gains;
     gains_seq = g_gains_seq;
     EI(imask);

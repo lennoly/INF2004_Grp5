@@ -63,6 +63,9 @@ void motion_move_backward(float32_t dist_mm, float32_t speed_mm_s);
 void motion_turn_left(float32_t angle_deg);
 void motion_turn_right(float32_t angle_deg);
 void motion_stop(void);
+void motion_emergency_stop(void);
+void motion_clear_stop(void);
+bool motion_stop_requested(void);
 
 /* Continuous control for line following and searching. */
 void motion_set_velocity(float32_t left_mm_s, float32_t right_mm_s);

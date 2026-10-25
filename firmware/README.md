@@ -2,6 +2,9 @@
 
 **Rebuilt on 25 October 2026:** **picocar_TEST_BUDDY3_uart.uf2** includes runtime
 barcode mapping and stores the pending decoded letter until its junction.
+It also includes the five review fixes: latched queue-independent STOP,
+consumer-owned barcode reset with stale-session rejection, stopping on failed
+moves, fresh odometry baselines, and recovery after leading barcode noise.
 Flash this file for combined black-line following and
 barcode navigation. Only the Buddy 3 driving UF2 is kept here. TEST_IR and
 TEST_BARCODE are stationary bench modes that can be rebuilt from source.

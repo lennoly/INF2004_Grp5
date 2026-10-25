@@ -317,7 +317,7 @@ execute (command_t const * p_cmd)
             /* Test builds have no vehicle task: stop the motors directly. */
             if (!vehicle_command(VCMD_STOP, 0))
             {
-                motion_stop();
+                motion_emergency_stop();
             }
         break;
 

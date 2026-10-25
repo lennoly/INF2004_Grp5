@@ -20,15 +20,18 @@
 #define US_PER_MS          (1000u)
 #define QUIET_US           (BARCODE_QUIET_MS * US_PER_MS)
 #define MBF_MSGS           (4u)
+#define WINDOW_STEP        (2u)
 #define MIN_FRAME_ELEMENTS (29u) /* 3 characters x 10 - 1 */
-#define EVENT_BYTES        (6u)  /* 7-bit ASCII, 3-bit command, 32-bit time */
-#define EVENT_STORAGE      (8u)  /* kernel rounds payload to a UW boundary */
+#define EVENT_BYTES        (10u) /* symbol, command, time and session */
+#define EVENT_STORAGE      (12u) /* kernel rounds payload to a UW boundary */
 
 /* Shared with the vehicle and telemetry tasks: volatile (Rule 1.8.c). */
 static volatile ID              gh_mbuf = 0;
 static volatile barcode_stats_t g_stats;
 static volatile bool            gb_enabled = true;
 static ID                       gh_task    = 0;
+static volatile uint32_t        g_requested_session = 0u;
+static uint32_t                 g_active_session = 0u;
 
 /* Frame being collected; used only by barcode_task(). */
 static uint32_t g_widths[MIN_FRAME_ELEMENTS];
@@ -77,20 +80,41 @@ bool
 barcode_get_event (barcode_event_t * p_event, int32_t timeout_ms)
 {
     uint8_t packed[EVENT_BYTES] = {0};
-    INT     msg_size            = tk_rcv_mbf(gh_mbuf, packed, timeout_ms);
+    INT msg_size = 0;
+    int32_t wait_ms = timeout_ms;
+    uint32_t session = 0u;
+    bool b_found = false;
 
-    if (EVENT_BYTES == msg_size)
+    UINT imask = 0u;
+
+    do
     {
-        *p_event = (barcode_event_t){NAV_NONE, {0}, 0u};
-        /* Casts: 7-bit ASCII and a checked 3-bit command. */
-        p_event->text[0] = (char) (packed[0] & 0x7fu);
-        p_event->cmd     = (barcode_decode_nav_t) (packed[1] & 7u);
-        p_event->time_ms = (uint32_t) packed[2] | ((uint32_t) packed[3] << 8u)
-                           | ((uint32_t) packed[4] << 16u)
-                           | ((uint32_t) packed[5] << 24u);
-    }
+        msg_size = tk_rcv_mbf(gh_mbuf, packed, wait_ms);
+        wait_ms = TMO_POL;
+        /* Casts widen each stored session byte before shifting. */
+        session = (uint32_t) packed[6] | ((uint32_t) packed[7] << 8u)
+                  | ((uint32_t) packed[8] << 16u)
+                  | ((uint32_t) packed[9] << 24u);
+        DI(imask);
+        b_found = (EVENT_BYTES == msg_size) && gb_enabled
+                  && (session == g_requested_session);
 
-    return (EVENT_BYTES == msg_size);
+        if (b_found)
+        {
+            *p_event = (barcode_event_t){NAV_NONE, {0}, 0u};
+            /* Casts retain checked ASCII, command bits and time bytes. */
+            p_event->text[0] = (char) (packed[0] & 0x7fu);
+            p_event->cmd = (barcode_decode_nav_t) (packed[1] & 7u);
+            p_event->time_ms = (uint32_t) packed[2]
+                              | ((uint32_t) packed[3] << 8u)
+                              | ((uint32_t) packed[4] << 16u)
+                              | ((uint32_t) packed[5] << 24u);
+        }
+
+        EI(imask);
+    } while ((EVENT_BYTES == msg_size) && (!b_found));
+
+    return (b_found);
 }
 
 /*!
@@ -101,23 +125,12 @@ barcode_get_event (barcode_event_t * p_event, int32_t timeout_ms)
 void
 barcode_set_enabled (bool b_enabled)
 {
-    barcode_event_t discarded;
-    UINT            imask = 0u;
+    UINT imask = 0u;
 
     DI(imask);
-    gb_enabled = false;
-    g_count    = 0u;
-    gb_armed   = false;
-    ir_sensor_barcode_reset();
-    g_seen_overruns = ir_sensor_barcode_overruns();
-    EI(imask);
-
-    while (barcode_get_event(&discarded, TMO_POL))
-    {
-        /* Old commands must not survive a new bench session. */
-    }
-
+    g_requested_session++;
     gb_enabled = b_enabled;
+    EI(imask);
 }
 
 /*!
@@ -132,6 +145,16 @@ barcode_poll (void)
     uint32_t            overruns = ir_sensor_barcode_overruns();
     uint32_t            budget   = 64u;
 
+    if (g_active_session != g_requested_session)
+    {
+        g_active_session = g_requested_session;
+        g_count = 0u;
+        gb_armed = false;
+        ir_sensor_barcode_reset();
+        overruns = ir_sensor_barcode_overruns();
+        g_seen_overruns = overruns;
+    }
+
     if (gb_enabled)
     {
         if (overruns != g_seen_overruns)
@@ -143,7 +166,8 @@ barcode_poll (void)
             ir_sensor_barcode_reset();
         }
 
-        while ((budget > 0u) && (ir_sensor_barcode_pop(&element)))
+        while ((budget > 0u) && (g_active_session == g_requested_session)
+               && (ir_sensor_barcode_pop(&element)))
         {
             budget--;
             add_element(&element);
@@ -263,6 +287,10 @@ finish_frame (void)
         packed[3] = (uint8_t) ((event.time_ms >> 8u) & 0xffu);
         packed[4] = (uint8_t) ((event.time_ms >> 16u) & 0xffu);
         packed[5] = (uint8_t) ((event.time_ms >> 24u) & 0xffu);
+        packed[6] = (uint8_t) (g_active_session & 0xffu);
+        packed[7] = (uint8_t) ((g_active_session >> 8u) & 0xffu);
+        packed[8] = (uint8_t) ((g_active_session >> 16u) & 0xffu);
+        packed[9] = (uint8_t) ((g_active_session >> 24u) & 0xffu);
 
         if (tk_snd_mbf(gh_mbuf, packed, EVENT_BYTES, TMO_POL) < E_OK)
         {
@@ -274,8 +302,21 @@ finish_frame (void)
         g_stats.errors++;
     }
 
-    g_count  = 0u;
-    gb_armed = false;
+    if (1 == len)
+    {
+        g_count = 0u;
+        gb_armed = false;
+    }
+    else
+    {
+        /* Retry the next bar-aligned window after a leading noise pair. */
+        for (uint32_t idx = 0u; idx < (MIN_FRAME_ELEMENTS - WINDOW_STEP); idx++)
+        {
+            g_widths[idx] = g_widths[idx + WINDOW_STEP];
+        }
+
+        g_count = MIN_FRAME_ELEMENTS - WINDOW_STEP;
+    }
 }
 
 /*!

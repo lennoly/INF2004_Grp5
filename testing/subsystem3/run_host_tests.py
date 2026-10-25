@@ -1,6 +1,7 @@
 """Compile and run only Buddy 3 tests; Python 3 + a C99 GCC compiler required."""
 from pathlib import Path
 import os
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -65,6 +66,8 @@ def main():
             str(APP / "subsystem3/barcode_decode.c"), "-lm", "-o", str(binary),
         ], check=True)
         subprocess.run([str(binary)], check=True)
+        subprocess.run([sys.executable, str(ROOT / "testing/subsystem3/review_probes.py")],
+                       check=True)
 
 
 if __name__ == "__main__":
