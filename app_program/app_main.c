@@ -93,25 +93,38 @@ usermain (void)
     /* Only Buddy 3 and its motor/encoder dependencies. No USB host needed. */
     hal_gpio_init_out(PIN_SERVO, false);
     ercd = encoder_init();
+
     if (E_OK == ercd)
     {
         ercd = motion_init();
     }
+
     if (E_OK == ercd)
     {
         ercd = ir_sensor_init();
     }
+
     if (E_OK == ercd)
     {
         ercd = barcode_init();
     }
+
     if (E_OK == ercd)
     {
         barcode_set_enabled(false);
         ercd = vehicle_init();
     }
+
     report_init("Buddy 3 driving", ercd);
+
+    if (E_OK == ercd)
+    {
+        /* Receive runtime barcode assignments over UART or MQTT. */
+        report_init("commands", telemetry_init(false));
+    }
+
     (void) tm_printf((UB const *) "Buddy 3: GP20=start, GP21=stop. "
+                                  "Configure map=forward,uturn,left,right first. "
                                   "IR + barcode; no sonar/servo.\n");
 #elif APP_MODE == APP_MODE_MISSION
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */

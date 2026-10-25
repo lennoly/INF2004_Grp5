@@ -97,6 +97,14 @@ git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../d
 3. Press **GP20 (START)** to run a test / the mission. **GP21 (STOP)**
    stops; STOP while idle = 360° calibration spin (IR + magnetometer).
 
+## Barcode demo configuration
+
+Before starting the updated mission firmware, send the instructor's four
+letters with `map=<forward>,<uturn>,<left>,<right>` through the MQTT command
+topic or dashboard command box. There are no default assignments. Use
+`mapping` to verify them; resend after reboot. All movements wait for a
+junction. See [barcode setup](docs/BARCODE_SETUP.md).
+
 ## Dashboard and live tuning (no reflashing)
 ```
 pip install -r tools/dashboard/requirements.txt

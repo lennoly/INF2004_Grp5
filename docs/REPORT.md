@@ -327,7 +327,7 @@ Record on the real car:
 
 Decoding classifies the **3 widest of each 9 elements as wide**. Code 39 guarantees exactly three wide elements per character, so this works regardless of speed and only assumes the speed is steady over one ≈40 mm character. A frame that fails forwards is reversed and decoded again, because the car may read the code from either end. Frames must start and end with `*`, which rejects line crossings and noise.
 
-**Navigation command interface.** Decoded characters map A→LEFT, B→RIGHT, C→STRAIGHT and D→U-TURN. Commands reach the vehicle task through a message buffer.
+**Navigation command interface.** All A-Z letters can be decoded. Before starting, send `map=<forward>,<uturn>,<left>,<right>` on the MQTT command topic (or serial console), using four distinct instructor-selected letters. There are no default assignments. `mapping` reports the active map. Updates require IDLE or STOPPED; invalid messages leave the map intact. See `docs/BARCODE_SETUP.md`.
 
 The vehicle executes a command at the next junction:
 
@@ -335,7 +335,7 @@ The vehicle executes a command at the next junction:
 2. Make an encoder turn.
 3. Sweep to re-centre on the line.
 
-A U-turn is executed immediately. If no junction appears within 400 mm, the command is executed anyway.
+Every movement, including a U-turn, waits for a detected junction. There is no distance-based execution fallback. Starting requires a configured mapping, and a new run discards scans collected before start. Assignments live in RAM and must be resent after reboot.
 
 **Verification.**
 

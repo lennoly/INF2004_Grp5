@@ -50,7 +50,9 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"ff", COMMAND_FF, 2u},
                                          {"line", COMMAND_LINE, 3u},
                                          {"rate", COMMAND_RATE, 1u},
-                                         {"timing", COMMAND_TIMING, 0u}};
+                                         {"timing", COMMAND_TIMING, 0u},
+                                         {"map", COMMAND_MAP, 0u},
+                                         {"mapping", COMMAND_MAPPING, 0u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -67,6 +69,8 @@ static char const * find_keyword(char const * p_text, uint32_t * p_index);
 static char const * parse_values(char const * p_text, float32_t * p_args,
                                  uint32_t * p_count);
 static bool         validate(command_t const * p_cmd);
+static char const * parse_mapping(char const * p_text,
+                                  char letters[BARCODE_MAPPING_SIZE]);
 
 /*!
  * @brief Parse one command line.
@@ -103,7 +107,16 @@ command_parse (char const * p_text, command_t * p_cmd)
     /* Step 2: the optional "=value,value,..." list. */
     if (b_ok)
     {
-        p_cursor = parse_values(skip_space(p_cursor), p_cmd->arg, &n_values);
+        if (COMMAND_MAP == g_specs[spec_idx].kind)
+        {
+            p_cursor = parse_mapping(skip_space(p_cursor), p_cmd->nav_letters);
+        }
+        else
+        {
+            p_cursor =
+                parse_values(skip_space(p_cursor), p_cmd->arg, &n_values);
+        }
+
         b_ok     = (NULL != p_cursor);
     }
 
@@ -165,7 +178,8 @@ command_error (void)
 bool
 command_allowed (command_id_t kind, bool b_stationary)
 {
-    bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
+    bool b_tuning = (COMMAND_MAP == kind) || (COMMAND_SPEED == kind)
+                    || (COMMAND_PID == kind)
                     || (COMMAND_FF == kind) || (COMMAND_LINE == kind);
 
     return ((!b_tuning) || b_stationary);
@@ -618,6 +632,49 @@ validate (command_t const * p_cmd)
     }
 
     return (b_ok);
+}
+
+/*!
+ * @brief Parse all assignments before any active map is changed.
+ */
+static char const *
+parse_mapping (char const * p_text, char letters[BARCODE_MAPPING_SIZE])
+{
+    char const * p_cursor = p_text;
+    uint32_t idx = 0u;
+    uint32_t other = 0u;
+    bool b_ok = true;
+
+    for (idx = 0u; b_ok && (idx < BARCODE_MAPPING_SIZE); idx++)
+    {
+        b_ok = (*p_cursor == ((0u == idx) ? '=' : ','));
+
+        if (b_ok)
+        {
+            p_cursor = skip_space(p_cursor + 1);
+            /* Cast: toupper returns the ASCII letter as an int. */
+            letters[idx] = (char) toupper((unsigned char) *p_cursor);
+            b_ok = (letters[idx] >= 'A') && (letters[idx] <= 'Z');
+
+            if (b_ok)
+            {
+                p_cursor = skip_space(p_cursor + 1);
+
+                for (other = 0u; other < idx; other++)
+                {
+                    b_ok = b_ok && (letters[idx] != letters[other]);
+                }
+            }
+        }
+    }
+
+    if (!b_ok)
+    {
+        gp_error = "map: four distinct A-Z letters (forward,uturn,left,right)";
+        p_cursor = NULL;
+    }
+
+    return (p_cursor);
 }
 
 /*** end of file ***/

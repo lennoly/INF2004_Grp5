@@ -494,6 +494,7 @@ test_barcode (void)
     int32_t    result  = 0;
     float32_t  ramp    = 1.0f;
 
+    check(barcode_decode_set_mapping("CDAB"), "configure mapping fixture");
     result = barcode_decode_frame(g_photo, PHOTO_ELEMENTS, text, TEXT_SIZE);
     (void) printf(
         "barcode: course photo decodes to '%s' -> %s\n",
@@ -1174,6 +1175,22 @@ test_command_limits (void)
     check((!command_parse("rate=99999999999", &cmd))
               && (!command_parse("rate=-5", &cmd)),
           "rate: huge or negative values rejected");
+    check(command_parse("#42 MAP = w, x, y, z", &cmd)
+              && (COMMAND_MAP == cmd.kind) && (42u == cmd.req_id)
+              && (0 == memcmp(cmd.nav_letters, "WXYZ", 4u)),
+          "mapping parses letters, spaces and request ID");
+    check(command_parse("mapping", &cmd) && (COMMAND_MAPPING == cmd.kind),
+          "mapping query");
+    check(!command_parse("map=A,A,C,D", &cmd), "duplicate mapping rejected");
+    check(!command_parse("map=A,B,C", &cmd), "incomplete mapping rejected");
+    check(!command_parse("map=A,B,C,D,E", &cmd), "extra mapping rejected");
+    check(!command_parse("map=AA,B,C,D", &cmd), "multi-letter mapping rejected");
+    check(!command_parse("map=A,B,C,1", &cmd), "numeric mapping rejected");
+    check(!command_parse("map", &cmd), "missing mapping rejected");
+    check(!command_parse("map=", &cmd), "empty mapping rejected");
+    check(!command_allowed(COMMAND_MAP, false), "mapping refused while driving");
+    check(command_allowed(COMMAND_MAP, true), "mapping allowed while stopped");
+    check(command_allowed(COMMAND_MAPPING, false), "mapping query while driving");
     check((command_parse("timing", &cmd)) && (COMMAND_TIMING == cmd.kind),
           "timing command");
     check((!command_allowed(COMMAND_SPEED, false))

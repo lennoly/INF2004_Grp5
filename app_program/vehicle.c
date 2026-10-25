@@ -88,7 +88,6 @@ static volatile ID               gh_mbuf = 0;
 /* Vehicle-task private state. */
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
-static float32_t     g_pending_odo        = 0.0f;
 static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
 static uint32_t      g_seen_impacts       = 0u;
@@ -121,8 +120,8 @@ static bool            pass_obstacle(float32_t side, float32_t offset);
 static bool            seek_line(float32_t max_mm);
 static bool            bypass(avoidance_plan_t const * p_plan);
 static void            handle_obstacle(void);
-static void            take_barcode(float32_t odo_mm);
-static bool            nav_due(float32_t odo_mm);
+static void            take_barcode(void);
+static bool            nav_due(void);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
 static void            handle_line_search(void);
@@ -812,11 +811,9 @@ handle_obstacle (void)
 /*!
  * @brief Take a decoded barcode, if any, as the pending navigation
  *        command.
- *
- * @param[in] odo_mm Current odometer reading.
  */
 static void
-take_barcode (float32_t odo_mm)
+take_barcode (void)
 {
     barcode_event_t event;
 
@@ -824,28 +821,22 @@ take_barcode (float32_t odo_mm)
     {
         g_st.pending_nav = event.cmd;
         g_st.barcodes++;
-        g_pending_odo = odo_mm;
     }
 }
 
 /*!
  * @brief Whether the pending navigation command should run now: at the
- *        next junction (or at once, if so configured), immediately for a
- *        U-turn, or after NAV_PENDING_MAX_MM without a junction.
- *
- * @param[in] odo_mm Current odometer reading.
+ *        next junction, including U-turns. No distance fallback may turn
+ *        the car before a junction.
  *
  * @return true to execute the pending command.
  */
 static bool
-nav_due (float32_t odo_mm)
+nav_due (void)
 {
     barcode_decode_nav_t pending = g_st.pending_nav;
 
-    return ((NAV_NONE != pending)
-            && ((0 == NAV_EXECUTE_AT_JUNCTION) || (NAV_UTURN == pending)
-                || (LINE_JUNCTION == g_st.line_state)
-                || ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM)));
+    return ((NAV_NONE != pending) && (LINE_JUNCTION == g_st.line_state));
 }
 
 /*!
@@ -898,9 +889,9 @@ handle_line_follow (void)
                                            ir_snap.norm[IR_RIGHT],
                                            motion.odo_mm - g_prev_odo, LOOP_MS);
     g_prev_odo      = motion.odo_mm;
-    take_barcode(motion.odo_mm);
+    take_barcode();
 
-    if (nav_due(motion.odo_mm))
+    if (nav_due())
     {
         motion_stop();
         set_state(VS_NAV_TURN, barcode_decode_command_name(g_st.pending_nav));
@@ -956,23 +947,31 @@ start_run (void)
 {
     imu_status_t imu;
 
-    if (!FULL_MISSION)
+    if (!barcode_decode_get_mapping(NULL))
     {
-        barcode_set_enabled(true); /* Flush stale frames before each run. */
+        set_state(VS_IDLE, "configure barcode mapping before start");
     }
-    if (FULL_MISSION)
+    else
     {
-        imu_reset_run();
-        imu_get_status(&imu);
-        g_seen_impacts = imu.impacts;
+        /* Both modes discard scans collected before this run. */
+        barcode_set_enabled(false);
+        barcode_set_enabled(true);
+
+        if (FULL_MISSION)
+        {
+            imu_reset_run();
+            imu_get_status(&imu);
+            g_seen_impacts = imu.impacts;
+        }
+
+        line_follow_init(&g_lf);
+        g_st.pending_nav      = NAV_NONE;
+        g_st.barcodes         = 0u;
+        g_st.obstacles_passed = 0u;
+        g_attempts            = 0u;
+        g_run_start_ms        = now_ms();
+        set_state(VS_LINE_FOLLOW, "start");
     }
-    line_follow_init(&g_lf);
-    g_st.pending_nav      = NAV_NONE;
-    g_st.barcodes         = 0u;
-    g_st.obstacles_passed = 0u;
-    g_attempts            = 0u;
-    g_run_start_ms        = now_ms();
-    set_state(VS_LINE_FOLLOW, "start");
 }
 
 /*!
@@ -1005,14 +1004,17 @@ handle_requests (void)
         gb_abort = false;
         gb_start = false;
         motion_stop();
+
         if (!FULL_MISSION)
         {
             barcode_set_enabled(false);
         }
+
         if (FULL_MISSION)
         {
             servo_set_angle(SERVO_CENTRE_DEG);
         }
+
         set_state(VS_STOPPED, "stop command");
     }
 

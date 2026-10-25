@@ -47,6 +47,13 @@ int main(void)
     sensor.norm[IR_RIGHT] = 0.5f;
     start_pressed = true;
     poll_buttons(); handle_requests();
+    assert(g_st.state == VS_IDLE && !barcode_enabled);
+    assert(!barcode_decode_get_mapping(NULL));
+    assert(barcode_decode_set_mapping("WXYZ"));
+    start_pressed = false;
+    poll_buttons(); handle_requests();
+    start_pressed = true;
+    poll_buttons(); handle_requests();
     assert(g_st.state == VS_LINE_FOLLOW && barcode_enabled);
     handle_line_follow();
     assert(velocity_left > 0 && velocity_right > 0);
@@ -58,7 +65,7 @@ int main(void)
     assert(velocity_right > velocity_left);
 
     /* A left barcode waits for a junction. */
-    next_event.cmd = NAV_LEFT; event_ready = true;
+    next_event.cmd = barcode_decode_to_command('Y'); event_ready = true;
     handle_line_follow();
     assert(g_st.pending_nav == NAV_LEFT && g_st.state == VS_LINE_FOLLOW);
     sensor.norm[IR_LEFT] = 1.0f;
@@ -84,6 +91,21 @@ int main(void)
     wheels.odo_mm += 11.0f;
     handle_line_follow();
     assert(g_st.state == VS_LINE_FOLLOW);
+    /* A configured U-turn also waits for a junction, even after 500 mm. */
+    sensor.norm[IR_LEFT] = 0.5f; sensor.norm[IR_RIGHT] = 0.5f;
+    next_event.cmd = barcode_decode_to_command('X'); event_ready = true;
+    handle_line_follow();
+    assert(g_st.pending_nav == NAV_UTURN && g_st.state == VS_LINE_FOLLOW);
+    wheels.odo_mm += 500.0f;
+    handle_line_follow();
+    assert(g_st.state == VS_LINE_FOLLOW);
+    sensor.norm[IR_LEFT] = 1.0f; sensor.norm[IR_RIGHT] = 1.0f;
+    wheels.odo_mm += 11.0f;
+    handle_line_follow();
+    assert(g_st.state == VS_NAV_TURN);
+    start_run();
+    assert(g_st.state == VS_LINE_FOLLOW && g_st.pending_nav == NAV_NONE);
+
     /* White for 160 ms starts the existing line-search routine. */
     sensor.norm[IR_LEFT] = 0; sensor.norm[IR_RIGHT] = 0;
     for (unsigned i = 0; i < 8; i++) { handle_line_follow(); }
