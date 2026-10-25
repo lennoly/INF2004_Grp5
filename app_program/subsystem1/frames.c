@@ -40,6 +40,7 @@
 #define OFFSET_BITS   (17u) /* 0..100.000 in 0.001 steps               */
 #define RATE_BITS     (13u) /* 0..5000 ms                              */
 #define NAV_ARG_BITS  (3u)  /* nav= 1..4                               */
+#define JERK_BITS     (12u) /* impact strength, mg, saturating at 4095 */
 #define WIN_BITS      (16u) /* ms                                      */
 #define LOAD_BITS     (7u)  /* %                                       */
 #define US_BITS       (16u) /* us, saturating                          */
@@ -255,16 +256,19 @@ frames_obstacle (uint8_t * p_buf, uint32_t size,
  * @param[out] p_buf   Frame buffer.
  * @param[in]  size    Buffer size.
  * @param[in]  impacts Impacts counted this run.
+ * @param[in]  jerk_mg Strength: the largest jerk around the impact, mg.
  *
  * @return Frame length, or 0 if it did not fit.
  */
 uint32_t
-frames_impact (uint8_t * p_buf, uint32_t size, uint32_t impacts)
+frames_impact (uint8_t * p_buf, uint32_t size, uint32_t impacts,
+               float32_t jerk_mg)
 {
     bitpack_writer_t writer;
 
     put_header(&writer, p_buf, size, FRAME_IMPACT);
     put_count(&writer, impacts, PACKED_COUNT_BITS);
+    put_value_u(&writer, jerk_mg, UNIT, JERK_BITS);
 
     return (finish(&writer));
 }
@@ -416,6 +420,11 @@ frames_command (uint8_t * p_buf, uint32_t size, command_t const * p_cmd)
             put_value_u(&writer, p_cmd->arg[0], UNIT, NAV_ARG_BITS);
         break;
 
+        case COMMAND_MAP:
+            put_value_u(&writer, p_cmd->arg[0], UNIT, NAV_ARG_BITS);
+            put_value_u(&writer, p_cmd->arg[1], UNIT, PACKED_SYMBOL_BITS);
+        break;
+
         case COMMAND_FF:
             put_value_u(&writer, p_cmd->arg[0], MILLI, GAIN_BITS);
             put_value_u(&writer, p_cmd->arg[1], MILLI, OFFSET_BITS);
@@ -479,6 +488,13 @@ frames_parse_command (uint8_t const * p_buf, uint32_t len, command_t * p_cmd)
         case COMMAND_NAV:
             /* Cast: below 2^3, exact in float32_t. */
             p_cmd->arg[0] = (float32_t) bitpack_get_u(&reader, NAV_ARG_BITS);
+        break;
+
+        case COMMAND_MAP:
+            /* Casts: below 2^6, exact in float32_t. */
+            p_cmd->arg[0] = (float32_t) bitpack_get_u(&reader, NAV_ARG_BITS);
+            p_cmd->arg[1] =
+                (float32_t) bitpack_get_u(&reader, PACKED_SYMBOL_BITS);
         break;
 
         case COMMAND_FF:

@@ -377,6 +377,12 @@ class State:
         self.n_console = 0
         self.samples = deque()               # (number, t, values)
         self.n_samples = 0
+        # Latest of each for the barcode / obstacle / shock panels.
+        self.last_barcode = None
+        self.last_obstacle = None
+        self.impacts = 0
+        self.impact_mg = None
+        self.last_impact_time = None
 
     def handle(self, kind, payload):
         with self.lock:
@@ -387,8 +393,17 @@ class State:
                 self.log.heartbeat(payload)
             elif kind == "event":
                 self.log.event(payload)
-                if payload.get("type") == "gains":
+                t = payload.get("type")
+                if t == "gains":
                     self.gains = payload
+                elif t == "barcode":
+                    self.last_barcode = payload
+                elif t == "obstacle":
+                    self.last_obstacle = payload
+                elif t == "impact":
+                    self.impacts = payload.get("n", self.impacts + 1)
+                    self.impact_mg = payload.get("mg")
+                    self.last_impact_time = time.time()
                 self._add_event(describe_event(payload))
             elif kind == "status":
                 self.car_status = payload
@@ -417,7 +432,10 @@ class State:
                   pair(o, "tgt", 0), pair(o, "tgt", 1),
                   scaled(o.get("le"), 0.001),
                   scaled(pair(o, "ir", 0), 0.001),
-                  scaled(pair(o, "ir", 1), 0.001)]
+                  scaled(pair(o, "ir", 1), 0.001),
+                  (o.get("hump") or {}).get("h"),
+                  scaled(o.get("pitch"), 0.1),
+                  o.get("odo")]
         self.n_samples += 1
         self.samples.append((self.n_samples, now, values))
         while self.samples and now - self.samples[0][1] > HISTORY_S:
@@ -434,6 +452,10 @@ class State:
                          "msg": self.link_msg, "car": self.car_status},
                 "tel": self.tel, "hb": self.hb, "gains": self.gains,
                 "n_tel": self.n_tel, "age_s": age,
+                "barcode": self.last_barcode, "obstacle": self.last_obstacle,
+                "impacts": self.impacts, "impact_mg": self.impact_mg,
+                "impact_age_s": (round(time.time() - self.last_impact_time, 1)
+                                 if self.last_impact_time else None),
                 "events": [e for n, e in self.events if n > seen[0]],
                 "console": [c for n, c in self.console if n > seen[1]],
                 "samples": [[t] + v for n, t, v in self.samples
@@ -455,11 +477,13 @@ def describe_event(e):
         return "HUMP #%s peak %s mm (max %s mm)" % (
             e.get("n"), e.get("peak_mm"), e.get("max_mm"))
     if t == "obstacle":
-        return "OBSTACLE d=%s w=%s L=%s R=%s -> %s" % (
-            e.get("dist"), e.get("width"), e.get("cl"), e.get("cr"),
-            e.get("act"))
+        return "OBSTACLE d=%s w%s%s L=%s R=%s -> %s" % (
+            e.get("dist"), "=" if e.get("width_known", True) else ">=",
+            e.get("width"), e.get("cl"), e.get("cr"), e.get("act"))
     if t == "impact":
-        return "IMPACT #%s" % e.get("n")
+        mg = e.get("mg")
+        return "IMPACT #%s%s" % (e.get("n"), "" if mg is None else
+                                 "  %d mg" % mg)
     if t == "cmd":
         ok = "ok" if e.get("ok") else "FAILED: %s" % e.get("err", "")
         return "cmd '%s' %s" % (e.get("cmd"), ok)

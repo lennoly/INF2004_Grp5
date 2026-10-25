@@ -47,6 +47,17 @@ static code39_entry_t const g_table[] = {
 static char const * const g_nav_names[] = {"NONE", "LEFT", "RIGHT", "STRAIGHT",
                                            "UTURN"};
 
+/* Letter per command, indexed by barcode_decode_nav_t (NAV_NONE unused).
+   Starts from car_config.h; the map= command changes it for the demo
+   (written by the telemetry task, read by the barcode task: one-byte
+   stores, atomic on this CPU). */
+static volatile char g_symbols[] = {'\0', BARCODE_LEFT_SYMBOL,
+                                    BARCODE_RIGHT_SYMBOL,
+                                    BARCODE_STRAIGHT_SYMBOL,
+                                    BARCODE_UTURN_SYMBOL};
+
+#define SYMBOL_SLOTS (sizeof(g_symbols) / sizeof(g_symbols[0]))
+
 static char    lookup(uint32_t pattern);
 static void    sort_widths(uint32_t const * p_widths, uint32_t first,
                            uint32_t count, uint32_t * p_sorted);
@@ -128,8 +139,9 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
 }
 
 /*!
- * @brief Letter to command, set in car_config.h (BARCODE_*_SYMBOL;
- *        the brief: A = left, B = right, C = straight, D = U-turn).
+ * @brief Letter to command: car_config.h's BARCODE_*_SYMBOL (the brief:
+ *        A = left, B = right, C = straight, D = U-turn) until map= sets
+ *        another letter.
  *
  * @param[in] symbol First decoded data character.
  *
@@ -139,31 +151,49 @@ barcode_decode_nav_t
 barcode_decode_to_command (char symbol)
 {
     barcode_decode_nav_t command = NAV_NONE;
+    uint32_t             idx     = 0u;
 
-    switch (symbol)
+    /* Lowest command wins if two share a letter. */
+    for (idx = SYMBOL_SLOTS - 1u; idx > 0u; idx--)
     {
-        case BARCODE_LEFT_SYMBOL:
-            command = NAV_LEFT;
-        break;
-
-        case BARCODE_RIGHT_SYMBOL:
-            command = NAV_RIGHT;
-        break;
-
-        case BARCODE_STRAIGHT_SYMBOL:
-            command = NAV_STRAIGHT;
-        break;
-
-        case BARCODE_UTURN_SYMBOL:
-            command = NAV_UTURN;
-        break;
-
-        default:
-            command = NAV_NONE;
-        break;
+        if (symbol == g_symbols[idx])
+        {
+            /* Cast: idx is NAV_LEFT..NAV_UTURN. */
+            command = (barcode_decode_nav_t) idx;
+        }
     }
 
     return (command);
+}
+
+/*!
+ * @brief Set the letter that gives a command (demo letters, map=).
+ *
+ * @param[in] command NAV_LEFT..NAV_UTURN; anything else is ignored.
+ * @param[in] symbol  Code 39 data character.
+ */
+void
+barcode_decode_set_symbol (barcode_decode_nav_t command, char symbol)
+{
+    if ((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
+    {
+        g_symbols[command] = symbol;
+    }
+}
+
+/*!
+ * @brief Letter that gives a command now.
+ *
+ * @param[in] command NAV_LEFT..NAV_UTURN.
+ *
+ * @return The letter, or '?' for another value.
+ */
+char
+barcode_decode_symbol (barcode_decode_nav_t command)
+{
+    return (((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
+                ? g_symbols[command]
+                : '?');
 }
 
 /*!

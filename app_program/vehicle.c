@@ -47,17 +47,18 @@
 #define MBF_MSGS           (4u)
 #define LINE_GAINS         (3u)
 #define REACQ_SPEED        (90.0f)
-#define LINE_SEEN_LEVEL    (0.5f)
 #define CENTRED_ERROR      (0.2f)  /* line search: |L - R| below this */
 #define CENTRED_SUM        (0.6f)
 #define QUARTER_TURN       (90.0f)
+#define EIGHTH_TURN        (45.0f)
+#define DIAGONAL_PER_SIDE  (1.41421356f) /* 45 deg leg per mm sideways */
+#define COS_45             (0.70710678f)
 #define HALF_TURN          (180.0f)
 #define FULL_TURN          (360.0f)
 #define SERVO_FULL_DEG     (180)
 #define REVERSE_MM         (120.0f)
 #define PASS_STEP_MM       (50.0f)
 #define SIDE_SEEN_EXTRA_MM (150.0f)
-#define SEEK_EXTRA_MM      (200.0f)
 #define FRONT_IGNORE_MM    (150.0f)
 #define STRAIGHT_EXTRA_MM  (20.0f)
 #define SPEED_MIN_CMD      (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
@@ -117,6 +118,7 @@ static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
 static float32_t     g_pending_odo        = 0.0f;
 static bool          gb_left_junction     = false; /* since the command */
+static bool          gb_no_line_yet       = false; /* TEST_OBSTACLE start */
 static bool          gb_bar_black         = false; /* barcode IR on black */
 static float32_t     g_bar_start_odo      = 0.0f;
 static bool          gb_bar_junction      = false; /* junction line passed */
@@ -165,13 +167,13 @@ static bool            reacquire_line(float32_t side);
 static void            start_settling(void);
 static void            execute_nav(barcode_decode_nav_t cmd);
 static bool            pass_obstacle(float32_t pass_mm);
-static bool            seek_line(float32_t max_mm);
 static bool            bypass(avoidance_plan_t const * p_plan);
 static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
 static void            watch_junction_bar(float32_t odo_mm);
 static bool            nav_due(float32_t odo_mm);
+static char const *    nav_reason(barcode_decode_nav_t pending);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
 static void            handle_line_search(void);
@@ -950,7 +952,7 @@ pass_obstacle (float32_t pass_mm)
     bool b_ok = false;
 
     obstacle_monitor_enable(true);
-    motion_move_forward(pass_mm, SPEED_SLOW_MM_S);
+    motion_move_forward(pass_mm, SPEED_BYPASS_MM_S);
     b_ok = run_move(true);
     obstacle_monitor_enable(false);
 
@@ -958,56 +960,27 @@ pass_obstacle (float32_t pass_mm)
 }
 
 /*!
- * @brief Drive back towards the line until the IR row sees it.
+ * @brief Diagonal bypass that keeps the deviation to the planned offset:
+ *        45 deg out until the car is offset_mm to the side, straight past
+ *        (front sensor watching), 45 deg back the same length, then
+ *        line up on the line (reacquire_line()).  Half the
+ *        turning of a box-shaped bypass.
  *
- * @param[in] max_mm Give up after this distance.
+ * On a 45 deg leg the car's inner side stays on one 45 deg line, so a box
+ * corner is cleared by OBST_CORNER_MARGIN_MM (m) when it is m x sqrt2
+ * (forward + sideways) inside that line; the end of a 45 deg turn is the
+ * worst point of the turn.  Forward from the axle at the scan point,
+ * sideways from the line towards the pass side, W the car width:
  *
- * @return true if the line was seen.
- */
-static bool
-seek_line (float32_t max_mm)
-{
-    ir_sensor_snapshot_t ir_snap;
-    motion_status_t      motion;
-    float32_t            start  = 0.0f;
-    float32_t            limit  = car_math_is_finite(max_mm) ? max_mm : 0.0f;
-    search_result_t      result = SEARCH_RUNNING;
-
-    motion_get_status(&motion);
-    start = motion.odo_mm;
-    motion_set_velocity(SPEED_SLOW_MM_S, SPEED_SLOW_MM_S);
-
-    while (SEARCH_RUNNING == result)
-    {
-        (void) tk_dly_tsk(LOOP_MS);
-        poll_inputs();
-        ir_sensor_read(&ir_snap);
-        motion_get_status(&motion);
-
-        if ((ir_snap.norm[IR_LEFT] > LINE_SEEN_LEVEL)
-            || (ir_snap.norm[IR_RIGHT] > LINE_SEEN_LEVEL))
-        {
-            result = SEARCH_FOUND;
-        }
-        else if (gb_abort || ((motion.odo_mm - start) > limit))
-        {
-            result = SEARCH_ABORTED;
-        }
-        else
-        {
-            /* Keep driving. */
-        }
-    }
-
-    motion_stop();
-
-    return (SEARCH_FOUND == result);
-}
-
-/*!
- * @brief Box-shaped bypass that keeps the deviation to the planned
- *        offset: sidestep, pass (a fixed distance, front sensor watching),
- *        return, rejoin the line.
+ *     box edge    E = offset - W / 2 - OBST_MARGIN_MM
+ *     near face   N = closest + OBST_SENSOR_AHEAD_MM (+ any back-off)
+ *     out leg     N - E >= cos45 x W + sqrt2 x m, else back off first
+ *     far face    F = N + OBST_DEPTH_MAX_MM
+ *     return at   S = F + E - offset + cos45 x W + sqrt2 x m
+ *
+ * closest is pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM - OBST_MARGIN_MM
+ * (see avoidance_plan()).  The out leg covers offset_mm, so the straight
+ * leg is S - offset_mm.
  *
  * @param[in] p_plan Plan with AVOID_TURN_LEFT or AVOID_TURN_RIGHT.
  *
@@ -1018,17 +991,40 @@ bypass (avoidance_plan_t const * p_plan)
 {
     float32_t side =
         (AVOID_TURN_LEFT == p_plan->action) ? SIDE_LEFT : SIDE_RIGHT;
-    bool b_ok = false;
+    float32_t diagonal = p_plan->offset_mm * DIAGONAL_PER_SIDE;
+    float32_t inner    = (COS_45 * CAR_WIDTH_MM)
+                      + (DIAGONAL_PER_SIDE * OBST_CORNER_MARGIN_MM);
+    float32_t edge     = p_plan->offset_mm - (CAR_WIDTH_MM / 2.0f)
+                     - OBST_MARGIN_MM;
+    float32_t near     = (p_plan->pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM
+                      - OBST_MARGIN_MM)
+                     + OBST_SENSOR_AHEAD_MM;
+    float32_t back     = (edge + inner) - near;
+    float32_t straight = 0.0f;
+    bool      b_ok     = true;
 
+    back     = (back > 0.0f) ? back : 0.0f;
+    straight = ((near + back + OBST_DEPTH_MAX_MM + edge + inner)
+                - p_plan->offset_mm)
+               - p_plan->offset_mm;
+    straight = (straight > 0.0f) ? straight : 0.0f;
     obstacle_monitor_enable(false);
-    b_ok = (turn_side(side, QUARTER_TURN))
-           && (forward(p_plan->offset_mm, SPEED_SLOW_MM_S))
-           && (turn_side(-side, QUARTER_TURN))
-           && (pass_obstacle(p_plan->pass_mm))
-           && (turn_side(-side, QUARTER_TURN))
-           && (seek_line(p_plan->offset_mm + SEEK_EXTRA_MM))
-           && (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
-           && (turn_side(side, QUARTER_TURN)) && (reacquire_line(side));
+
+    if (back > 0.0f)
+    {
+        /* Too close for the out leg to clear the near corner. */
+        motion_move_backward(back, SPEED_SLOW_MM_S);
+        b_ok = run_move(false);
+    }
+
+    b_ok = b_ok && (turn_side(side, EIGHTH_TURN))
+           && (forward(diagonal, SPEED_BYPASS_MM_S))
+           && (turn_side(-side, EIGHTH_TURN)) && (pass_obstacle(straight))
+           && (turn_side(-side, EIGHTH_TURN))
+           /* The same length back puts the axle on the original path;
+              facing along it again, the line is under the IR row. */
+           && (forward(diagonal, SPEED_BYPASS_MM_S))
+           && (turn_side(side, EIGHTH_TURN)) && (reacquire_line(side));
     servo_set_angle(SERVO_CENTRE_DEG);
     obstacle_monitor_enable(true);
 
@@ -1080,6 +1076,7 @@ act_on_scan (avoidance_profile_t const * p_prof)
             if (bypass(&plan))
             {
                 g_st.obstacles_passed++;
+                gb_no_line_yet = false;
                 set_state(VS_LINE_FOLLOW, "obstacle bypassed");
             }
             else if (gb_abort)
@@ -1237,6 +1234,31 @@ nav_due (float32_t odo_mm)
 }
 
 /*!
+ * @brief NAV_TURN reason: the command's name, with ", no junction" when it
+ *        ran because NAV_PENDING_MAX_MM passed without a junction (the
+ *        dashboard shows where a barcode turn happened).
+ *
+ * @param[in] pending Command about to run (nav_due() was true).
+ *
+ * @return Reason string (a literal in packed.c's table).
+ */
+static char const *
+nav_reason (barcode_decode_nav_t pending)
+{
+    static char const * const p_no_junction[] = {
+        "", "LEFT, no junction", "RIGHT, no junction",
+        "STRAIGHT, no junction"};
+    bool b_junction = gb_bar_junction
+                      || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
+                          && (LINE_JUNCTION == g_st.line_state));
+    bool b_no_junction = (0 != NAV_EXECUTE_AT_JUNCTION) && (!b_junction)
+                         && (pending > NAV_NONE) && (pending < NAV_UTURN);
+
+    return (b_no_junction ? p_no_junction[pending]
+                          : barcode_decode_command_name(pending));
+}
+
+/*!
  * @brief Whether an obstacle is ahead (front sonar, confirmed by
  *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
  *        Both triggers are ignored while the IMU reports the car on a hump:
@@ -1295,10 +1317,16 @@ handle_line_follow (void)
     take_barcode(motion.odo_mm);
     watch_junction_bar(motion.odo_mm);
 
+    if (gb_no_line_yet)
+    {
+        g_st.line_state  = LINE_ON; /* no line: never lost, no turns */
+        g_st.pending_nav = NAV_NONE;
+    }
+
     if (nav_due(motion.odo_mm))
     {
         motion_stop();
-        set_state(VS_NAV_TURN, barcode_decode_command_name(g_st.pending_nav));
+        set_state(VS_NAV_TURN, nav_reason(g_st.pending_nav));
     }
     else if (LINE_LOST == g_st.line_state)
     {
@@ -1332,6 +1360,13 @@ handle_line_follow (void)
 
         speed = line_follow_speed(speed, g_lf.error);
         g_st.line_error = g_lf.error;
+
+        if (gb_no_line_yet)
+        {
+            speed = (float32_t) g_st.cruise_mm_s;
+            steer = 0.0f;
+        }
+
         motion_set_velocity(speed - steer, speed + steer);
     }
 }
@@ -1391,6 +1426,7 @@ start_run (void)
     g_st.pending_nav      = NAV_NONE;
     g_nav_request         = NAV_NONE; /* a nav= sent while idle is dropped */
     start_settling(); /* the car is rarely lined up at the start */
+    gb_no_line_yet        = (0 != OBST_TEST_STRAIGHT); /* line after the box */
     g_st.barcodes         = 0u;
     g_st.obstacles_passed = 0u;
     g_attempts            = 0u;

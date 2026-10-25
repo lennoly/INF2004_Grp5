@@ -75,6 +75,11 @@ static uint32_t g_seen_barcode = 0u;
 static uint32_t g_seen_humps   = 0u;
 static uint32_t g_seen_scans   = 0u;
 static uint32_t g_seen_impacts = 0u;
+/* Peak jerk of the last two event checks (imu_take_peak_jerk()): the
+   impact's own jolt can land just before or after the check that sees the
+   new count.  Taken only here; events are off in the TEST_IMU / TEST_CRASH
+   builds, which read it themselves. */
+static float32_t g_jerk_prev_mg = 0.0f;
 
 static char const g_hex_chars[] = "0123456789abcdef";
 
@@ -357,6 +362,18 @@ execute (command_t const * p_cmd)
             b_ok = vehicle_command(VCMD_NAV, car_math_round(p_cmd->arg[0]));
         break;
 
+        case COMMAND_MAP:
+            /* Casts: command_check() only accepts 1..4 and 0..42. */
+            barcode_decode_set_symbol(
+                (barcode_decode_nav_t) car_math_round(p_cmd->arg[0]),
+                packed_symbol_char((uint32_t) car_math_round(p_cmd->arg[1])));
+            (void) tm_printf((UB const *) "# map L=%c R=%c S=%c U=%c\n",
+                             (INT) barcode_decode_symbol(NAV_LEFT),
+                             (INT) barcode_decode_symbol(NAV_RIGHT),
+                             (INT) barcode_decode_symbol(NAV_STRAIGHT),
+                             (INT) barcode_decode_symbol(NAV_UTURN));
+        break;
+
         default:
             /* Refused: the result below says why. */
         break;
@@ -519,6 +536,10 @@ check_events (void)
     barcode_stats_t  bc_stats;
     imu_status_t     imu;
 
+    float32_t jerk_mg = imu_take_peak_jerk();
+    float32_t shock_mg = (jerk_mg > g_jerk_prev_mg) ? jerk_mg : g_jerk_prev_mg;
+
+    g_jerk_prev_mg = jerk_mg;
     vehicle_get_status(&veh);
     barcode_get_stats(&bc_stats);
     imu_get_status(&imu);
@@ -558,7 +579,8 @@ check_events (void)
     if (imu.impacts > g_seen_impacts)
     {
         g_seen_impacts = imu.impacts;
-        g_frame_len    = frames_impact(g_frame, sizeof(g_frame), imu.impacts);
+        g_frame_len    = frames_impact(g_frame, sizeof(g_frame), imu.impacts,
+                                       shock_mg);
         emit(TOPIC_EVENT, true);
     }
 }
@@ -645,8 +667,10 @@ emit_help (void)
                      "#   rate=<ms>           telemetry period, 0 = off\n"
                      "#   nav=<1..4>          as if a barcode was read: 1 "
                      "left, 2 right, 3 straight, 4 U-turn\n"
-                     "#   speed=, pid=, ff=, line= only while IDLE or "
-                     "STOPPED\n"
+                     "#   map=<1..4>,<idx>    barcode letter for that turn, "
+                     "Code 39 index (A=10 .. Z=35)\n"
+                     "#   speed=, pid=, ff=, line=, map= only while IDLE "
+                     "or STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "
                      "since the last timing\n"
                      "# MQTT takes the same commands as binary frames "

@@ -100,7 +100,7 @@ usermain (void)
                                   "WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 "
                                   "WIFI_DNS=1 WIFI_MQTT=1\n");
 #endif
-#elif APP_MODE == APP_MODE_MISSION
+#elif (APP_MODE == APP_MODE_MISSION) || (APP_MODE == APP_MODE_TEST_OBSTACLE)
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */
     report_init("encoder", encoder_init());
     report_init("motion", motion_init());
