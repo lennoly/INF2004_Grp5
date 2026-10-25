@@ -126,7 +126,8 @@ uint32_t frames_hump(uint8_t * p_buf, uint32_t size, uint32_t humps,
 uint32_t frames_obstacle(uint8_t * p_buf, uint32_t size,
                          avoidance_profile_t const * p_prof,
                          avoidance_action_t action);
-uint32_t frames_impact(uint8_t * p_buf, uint32_t size, uint32_t impacts);
+uint32_t frames_impact(uint8_t * p_buf, uint32_t size, uint32_t impacts,
+                       float32_t jerk_mg);
 uint32_t frames_reply(uint8_t * p_buf, uint32_t size, uint32_t req_id,
                       command_id_t kind, frames_error_t error);
 uint32_t frames_gains(uint8_t * p_buf, uint32_t size,

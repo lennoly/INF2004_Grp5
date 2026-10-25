@@ -2,14 +2,15 @@
  *
  * @brief Buddy 5 - scanning task and coarse-to-fine scan (see obstacle.h).
  *
- * Stage 1 coarse : SERVO_MIN_DEG, straight ahead and SERVO_MAX_DEG
- *                  (median of 3 each).  The sensor mount only lets the
- *                  sensor turn about 25 degrees each way, so the brief's
- *                  example angles (30 .. 150) cannot be reached.
+ * Stage 1 coarse : the front monitor, OBST_CONFIRM_READINGS close pings
+ *                  straight ahead.  A separate 65/90/115 deg pass missed
+ *                  an 8 cm box between those angles and let the car drive
+ *                  on into it (25 Oct), so it was dropped.
  * Stage 2 fine   : the whole SERVO_MIN_DEG..SERVO_MAX_DEG range in
- *                  OBST_FINE_STEP_DEG steps (11 points): a window around
- *                  the coarse echo missed the inner edge of an off-centre
- *                  box, the side the car passes on (S5-U07).
+ *                  OBST_FINE_STEP_DEG steps (11 points, median of 3 each),
+ *                  left to right (SERVO_MAX_DEG first).  The mount only
+ *                  lets the sensor turn about 25 degrees each way, so the
+ *                  brief's example angles (30 .. 150) cannot be reached.
  * Stage 3 profile: avoidance_profile() on the fine points.
  *
  * The caller's stop callback is polled every SETTLE_STEP_MS while the servo
@@ -38,9 +39,10 @@
 #define TASK_PRIORITY     (9)
 #define TASK_STACK        (2048)
 #define MONITOR_PERIOD_MS (70u)
-#define COARSE_ANGLES     (3u)
 #define FINE_MIN_DEG      (SERVO_MIN_DEG)
 #define FINE_MAX_DEG      (SERVO_MAX_DEG)
+#define FINE_POINTS_ALL   ((uint32_t) (((FINE_MAX_DEG - FINE_MIN_DEG) / OBST_FINE_STEP_DEG) + 1))
+#define FINE_POINTS       ((FINE_POINTS_ALL < SCAN_MAX_POINTS) ? FINE_POINTS_ALL : SCAN_MAX_POINTS)
 #define MEDIAN_SAMPLES    (3u)
 #define SWING_MS_PER_DEG  (3u)  /* about 0.18 s per 60 degrees */
 #define SETTLE_STEP_MS    (20u) /* stop checks while the servo settles */
@@ -75,9 +77,6 @@ static volatile uint8_t  g_last_angle[SCAN_MAX_POINTS];
 static volatile uint16_t g_last_dist[SCAN_MAX_POINTS];
 static volatile uint8_t  g_last_count = 0u;
 
-/* Stage 1 angles: both limits of the mount and straight ahead. */
-static int32_t const g_coarse_deg[COARSE_ANGLES] = {
-    SERVO_MIN_DEG, SERVO_CENTRE_DEG, SERVO_MAX_DEG};
 
 static uint32_t       now_ms(void);
 static packed_front_t no_reading_yet(void);
@@ -91,9 +90,6 @@ static int32_t  step_toward(int32_t angle, int32_t target);
 static bool     keep_scanning(obstacle_stop_cb_t p_should_stop);
 static uint32_t count_up(uint32_t count, uint32_t limit);
 static void     monitor_update(ultrasonic_ping_t const * p_ping);
-static bool     coarse_scan(avoidance_point_t * p_points, uint32_t * p_count,
-                            int32_t * p_low, int32_t * p_high,
-                            obstacle_stop_cb_t p_should_stop);
 static bool     fine_scan(avoidance_point_t * p_points, uint32_t * p_count,
                           obstacle_stop_cb_t p_should_stop);
 static void     monitor_task(INT stacd, void * p_exinf);
@@ -198,7 +194,7 @@ obstacle_monitor_enable (bool b_on)
 }
 
 /*!
- * @brief Full adaptive scan (the car should be stopped).  Leaves the
+ * @brief Full fine scan (the car should be stopped).  Leaves the
  *        servo centred.
  *
  * @param[out] p_prof        Obstacle profile; when the scan is stopped
@@ -216,8 +212,6 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
 {
     avoidance_point_t points[SCAN_MAX_POINTS];
     uint32_t          count      = 0u;
-    int32_t           low        = FINE_MAX_DEG;
-    int32_t           high       = FINE_MIN_DEG;
     bool              b_found    = false;
     bool              b_complete = false;
     uint32_t          idx        = 0u;
@@ -225,13 +219,7 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
     packed_profile_t  packed;
 
     monitor_pause();
-    b_complete = coarse_scan(points, &count, &low, &high, p_should_stop);
-
-    /* Something in range: scan the whole range finely. */
-    if (b_complete && (low <= high))
-    {
-        b_complete = fine_scan(points, &count, p_should_stop);
-    }
+    b_complete = fine_scan(points, &count, p_should_stop);
 
     /* Always re-centre fully, so the monitor's pings point ahead. */
     (void) servo_go(SERVO_CENTRE_DEG, p_should_stop, false);
@@ -263,11 +251,25 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
         /* Casts: tm_printf() takes the kernel's UB string type (the literal
            is ASCII); the values are small counts and distances in mm, so
            they fit in INT (the width is rounded to whole mm first). */
+        /* w>= : an edge was not seen, the width is a lower bound. */
         (void) tm_printf(
-            (UB const *) "[scan] pts=%d found=%d d=%d w=%d cl=%d cr=%d\n",
+            (UB const *) "[scan] pts=%d found=%d d=%d w%s%d cl=%d cr=%d\n",
             (INT) count, b_found ? 1 : 0, (INT) p_prof->closest_mm,
+            avoidance_width_known(p_prof) ? "=" : ">=",
             (INT) car_math_round(p_prof->width_mm), (INT) p_prof->clear_left_mm,
             (INT) p_prof->clear_right_mm);
+
+        /* Every point as angle:mm (-1 = no echo), so a wrong side choice
+           can be traced to the readings.  Casts: as above. */
+        (void) tm_printf((UB const *) "[scan] pts");
+
+        for (idx = 0u; idx < count; idx++)
+        {
+            (void) tm_printf((UB const *) " %d:%d", (INT) points[idx].angle_deg,
+                             (INT) points[idx].dist_mm);
+        }
+
+        (void) tm_printf((UB const *) "\n");
     }
     else
     {
@@ -544,53 +546,6 @@ keep_scanning (obstacle_stop_cb_t p_should_stop)
 }
 
 /*!
- * @brief Stage 1: coarse scan at the g_coarse_deg angles.
- *
- * @param[out] p_points      Scan points.
- * @param[out] p_count       Number of points taken.
- * @param[out] p_low         Lowest angle with an echo closer than
- *                           OBST_DETECT_MM (unchanged if none).
- * @param[out] p_high        Highest such angle (unchanged if none).
- * @param[in]  p_should_stop Stop callback, or NULL.
- *
- * @return false if the scan was stopped early.
- */
-static bool
-coarse_scan (avoidance_point_t * p_points, uint32_t * p_count, int32_t * p_low,
-             int32_t * p_high, obstacle_stop_cb_t p_should_stop)
-{
-    int32_t  angle   = 0;
-    int32_t  dist_mm = ULTRASONIC_NO_ECHO;
-    uint32_t idx     = 0u;
-    bool     b_go    = true;
-
-    *p_count = 0u;
-
-    for (idx = 0u; b_go && (idx < COARSE_ANGLES); idx++)
-    {
-        angle = g_coarse_deg[idx];
-        b_go  = look(angle, p_should_stop, &dist_mm);
-
-        if (b_go)
-        {
-            if ((ULTRASONIC_NO_ECHO != dist_mm) && (dist_mm < OBST_DETECT_MM))
-            {
-                *p_low  = (angle < *p_low) ? angle : *p_low;
-                *p_high = (angle > *p_high) ? angle : *p_high;
-            }
-
-            /* Casts: angles are 0..180 and distances at most US_MAX_MM (or
-               -1), so both fit int16_t. */
-            p_points[*p_count].angle_deg = (int16_t) angle;
-            p_points[*p_count].dist_mm   = (int16_t) dist_mm;
-            (*p_count)++;
-        }
-    }
-
-    return (b_go);
-}
-
-/*!
  * @brief Stage 2: fine scan of the whole range the mount allows.
  *
  * @param[out] p_points      Scan points.
@@ -603,23 +558,32 @@ static bool
 fine_scan (avoidance_point_t * p_points, uint32_t * p_count,
            obstacle_stop_cb_t p_should_stop)
 {
-    int32_t angle   = 0;
-    int32_t dist_mm = ULTRASONIC_NO_ECHO;
-    bool    b_go    = true;
+    int32_t  angle   = 0;
+    int32_t  dist_mm = ULTRASONIC_NO_ECHO;
+    uint32_t points  = FINE_POINTS;
+    uint32_t idx     = 0u;
+    bool     b_go    = true;
 
     *p_count = 0u;
 
-    for (angle = FINE_MIN_DEG;
-         b_go && (angle <= FINE_MAX_DEG) && (*p_count < SCAN_MAX_POINTS);
-         angle += OBST_FINE_STEP_DEG)
+    /* Left to right; the points stay sorted by angle (right first) for
+       avoidance_profile(), each in its own slot. */
+    while (b_go && (points > 0u))
     {
-        b_go = look(angle, p_should_stop, &dist_mm);
+        points--;
+
+        /* Cast: points is at most SCAN_MAX_POINTS, exact in int32_t. */
+        angle = FINE_MIN_DEG + ((int32_t) points * OBST_FINE_STEP_DEG);
+        b_go  = look(angle, p_should_stop, &dist_mm);
 
         if (b_go)
         {
-            /* Casts: as in coarse_scan(), both values fit int16_t. */
-            p_points[*p_count].angle_deg = (int16_t) angle;
-            p_points[*p_count].dist_mm   = (int16_t) dist_mm;
+            idx = points;
+
+            /* Casts: angles are 0..180 and distances at most US_MAX_MM (or
+               -1), so both fit int16_t. */
+            p_points[idx].angle_deg = (int16_t) angle;
+            p_points[idx].dist_mm   = (int16_t) dist_mm;
             (*p_count)++;
         }
     }

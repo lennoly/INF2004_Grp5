@@ -47,11 +47,12 @@ subsystem5_test_ultrasonic (void)
     (void) obstacle_scan(&profile, NULL);
     plan = avoidance_plan(&profile, 0u);
     (void) tm_printf(
-        (UB const *) "# found=%d closest=%d@%d edges L=%d R=%d width=%d "
+        (UB const *) "# found=%d closest=%d@%d edges L=%d R=%d width%s%d "
                      "clear L=%d R=%d -> %s offset=%d\n",
         profile.b_found ? 1 : 0, (INT) profile.closest_mm,
         (INT) profile.closest_angle, app_tests_print_int(profile.left_edge_mm),
         app_tests_print_int(profile.right_edge_mm),
+        avoidance_width_known(&profile) ? "=" : ">=",
         app_tests_print_int(profile.width_mm), (INT) profile.clear_left_mm,
         (INT) profile.clear_right_mm, avoidance_action_name(plan.action),
         app_tests_print_int(plan.offset_mm));

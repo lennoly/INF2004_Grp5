@@ -44,13 +44,14 @@ REASONS = ["other", "boot", "start", "stop command", "spin 360", "calibrated",
            "bypass: line not found", "path blocked", "LEFT", "RIGHT",
            "STRAIGHT", "UTURN", "fault: motor stall", "fault: encoder",
            "fault: IMU", "fault: sonar no echo", "sonar stale",
-           "watchdog reset"]
+           "watchdog reset", "LEFT, no junction", "RIGHT, no junction",
+           "STRAIGHT, no junction"]
 FAULTS = ["motor_stall", "encoder", "imu", "no_echo", "wifi_loss"]
 COMMANDS = ["start", "stop", "calibrate", "gains", "help", "speed", "pid",
-            "ff", "line", "rate", "timing", "nav"]
+            "ff", "line", "rate", "timing", "nav", "map"]
 ARG_COUNT = {"start": 0, "stop": 0, "calibrate": 0, "gains": 0, "help": 0,
              "speed": 1, "pid": 3, "ff": 2, "line": 3, "rate": 1,
-             "timing": 0, "nav": 1}
+             "timing": 0, "nav": 1, "map": 2}
 ERRORS = ["", "invalid command or value", "not a version-1 command frame",
           "only while IDLE or STOPPED", "not available in this build"]
 TIMING_NAMES = ["motion", "vehicle", "barcode", "imu", "hump", "ir_isr",
@@ -210,11 +211,17 @@ def _obstacle(rd):
     o = {"type": "obstacle", "found": rd.u(1), "dist": _range(rd.u(12)),
          "ang": rd.u(8), "width": rd.u(12), "centre": rd.s(13),
          "cl": rd.u(12), "cr": rd.u(12), "act": _name(ACTIONS, rd.u(3))}
+    # avoidance_width_known(): an edge at the sweep end has clearance 0 and
+    # the width is then only a lower bound.
+    o["width_known"] = bool(o["found"] and o["cl"] and o["cr"])
     return "event", o
 
 
 def _impact(rd):
-    return "event", {"type": "impact", "n": rd.u(8)}
+    o = {"type": "impact", "n": rd.u(8)}
+    if rd.pos + 12 <= rd.bits:                # strength (older firmware: none)
+        o["mg"] = rd.u(12)
+    return "event", o
 
 
 def _reply(rd):
@@ -256,6 +263,8 @@ def _command(rd):
         args = [rd.u(13)]
     elif name == "nav":
         args = [rd.u(3)]
+    elif name == "map":
+        args = [rd.u(3), rd.u(6)]
     elif name == "ff":
         args = [rd.u(20) / 1000.0, rd.u(17) / 1000.0]
     elif name in ("pid", "line"):
@@ -305,6 +314,9 @@ def parse_text(text):
         raise ValueError("rate: 0 (off) or 50..5000 ms")
     if name == "nav" and not 1 <= round(args[0]) <= 4:
         raise ValueError("nav: 1 left, 2 right, 3 straight, 4 U-turn")
+    if name == "map" and not (1 <= round(args[0]) <= 4
+                              and 0 <= round(args[1]) < len(CODE39)):
+        raise ValueError("map: 1..4, then a letter index 0..42")
     return name, args, req_id
 
 
@@ -318,6 +330,9 @@ def command_frame(name, args=(), req_id=0):
         wr.u(args[0], 13)
     elif name == "nav":
         wr.u(round(args[0]), 3)
+    elif name == "map":
+        wr.u(round(args[0]), 3)
+        wr.u(round(args[1]), 6)
     elif name == "ff":
         wr.u(args[0] * 1000, 20)
         wr.u(args[1] * 1000, 17)
@@ -428,6 +443,7 @@ def encode_event(e):
     elif t == "impact":
         wr = Writer(IMPACT)
         wr.u(e.get("n", 0), 8)
+        wr.u(e.get("mg", 0), 12)
     elif t == "cmd":
         wr = Writer(REPLY)
         wr.u(e.get("id", 0) & 0xFFFF, 16)

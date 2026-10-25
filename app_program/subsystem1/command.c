@@ -51,7 +51,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"line", COMMAND_LINE, 3u},
                                          {"rate", COMMAND_RATE, 1u},
                                          {"timing", COMMAND_TIMING, 0u},
-                                         {"nav", COMMAND_NAV, 1u}};
+                                         {"nav", COMMAND_NAV, 1u},
+                                         {"map", COMMAND_MAP, 2u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -167,7 +168,8 @@ bool
 command_allowed (command_id_t kind, bool b_stationary)
 {
     bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
-                    || (COMMAND_FF == kind) || (COMMAND_LINE == kind);
+                    || (COMMAND_FF == kind) || (COMMAND_LINE == kind)
+                    || (COMMAND_MAP == kind);
 
     return ((!b_tuning) || b_stationary);
 }
@@ -670,6 +672,15 @@ validate (command_t const * p_cmd)
                    && (p_cmd->arg[0] < ((float32_t) COMMAND_NAV_MAX + 0.5f));
             gp_error = b_ok ? gp_error
                             : "nav: 1 left, 2 right, 3 straight, 4 U-turn";
+        break;
+
+        case COMMAND_MAP:
+            /* As nav=, then a whole Code 39 index. */
+            b_ok = (p_cmd->arg[0] > ((float32_t) COMMAND_NAV_MIN - 0.5f))
+                   && (p_cmd->arg[0] < ((float32_t) COMMAND_NAV_MAX + 0.5f))
+                   && (p_cmd->arg[1] > -0.5f)
+                   && (p_cmd->arg[1] < ((float32_t) COMMAND_SYMBOL_MAX + 0.5f));
+            gp_error = b_ok ? gp_error : "map: 1..4, then a letter index 0..42";
         break;
 
         default:

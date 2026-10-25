@@ -124,6 +124,7 @@
 #define LARGEST_BOX_MM  (150.0f) /* obstacles are 10-15 cm wide   */
 #define WIDE_BOX_MM     (235.0f) /* S5-U07 box                         */
 #define WIDE_BOX_OFFSET_MM (60.0f)
+#define WIDE_BOX_RANGE_MM (200.0f) /* the cone hides the near edge closer */
 #define NEAR_BOX_MM     (150.0f)
 #define FLOOR_SCAN_POINTS (11u)
 #if OBST_BLIND_LEFT
@@ -686,6 +687,12 @@ test_barcode (void)
     check(NAV_UTURN == barcode_decode_to_command(BARCODE_UTURN_SYMBOL),
           "u-turn");
     check(NAV_NONE == barcode_decode_to_command('*'), "* is no command");
+    barcode_decode_set_symbol(NAV_LEFT, 'K');
+    check((NAV_LEFT == barcode_decode_to_command('K'))
+              && (NAV_NONE == barcode_decode_to_command(BARCODE_LEFT_SYMBOL))
+              && ('K' == barcode_decode_symbol(NAV_LEFT)),
+          "map: demo letter K now turns left, the old one does nothing");
+    barcode_decode_set_symbol(NAV_LEFT, BARCODE_LEFT_SYMBOL);
 
     for (count = 0u; count < PHOTO_ELEMENTS; count++)
     {
@@ -1170,6 +1177,7 @@ scan_box (avoidance_point_t * p_points, float32_t centre_x, float32_t range_y,
     float32_t sin_a   = 0.0f;
     float32_t best    = NO_ECHO_MM;
     float32_t lateral = 0.0f;
+    float32_t smear   = range_y * tanf(OBST_BEAM_HALF_DEG * CAR_MATH_RAD_PER_DEG);
 
     for (angle = first; angle <= last; angle += SCAN_STEP_DEG)
     {
@@ -1180,9 +1188,10 @@ scan_box (avoidance_point_t * p_points, float32_t centre_x, float32_t range_y,
         best    = NO_ECHO_MM;
         lateral = (range_y * cos_a) / sin_a;
 
-        /* Front face of the box: y = range_y, x in centre +- width / 2. */
-        if ((lateral >= (centre_x - (width / 2.0f)))
-            && (lateral <= (centre_x + (width / 2.0f))))
+        /* Front face of the box: y = range_y, x in centre +- width / 2,
+           seen OBST_BEAM_HALF_DEG past each edge (the sonar cone). */
+        if ((lateral >= (centre_x - (width / 2.0f) - smear))
+            && (lateral <= (centre_x + (width / 2.0f) + smear)))
         {
             best = range_y / sin_a;
         }
@@ -1251,6 +1260,66 @@ test_obstacle (void)
     check(AVOID_STOP == avoidance_plan(&prof, OBST_MAX_ATTEMPTS).action,
           "then stop");
 
+    /* After a REVERSE the box is often just past OBST_DETECT_MM (221 mm,
+       25 Oct): still the obstacle, not a clear path. */
+    count = scan_box(points, 0.0f, 221.0f, BOX_WIDTH_MM, 0.0f, SERVO_MIN_DEG,
+                     SERVO_MAX_DEG);
+    check(avoidance_profile(points, count, &prof)
+              && (AVOID_CONTINUE != avoidance_plan(&prof, 0u).action),
+          "box at 221 mm after a reverse: found, no continue");
+
+    /* 25 Oct, box on the left: floor-range slant echoes (293) split it
+       into pieces 37 mm apart; they are one box, open on the right. */
+    {
+        static int16_t const split[11] = {652, 679, 221, 221, 221, 293,
+                                          199, 198, 293, 211, 224};
+
+        for (idx = 0u; idx < 11u; idx++)
+        {
+            /* Cast: 65..115 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (SERVO_MIN_DEG + (5 * (int32_t) idx));
+            points[idx].dist_mm   = split[idx];
+        }
+
+        (void) avoidance_profile(points, 11u, &prof);
+        check(AVOID_TURN_RIGHT == avoidance_plan(&prof, 0u).action,
+              "box split by floor echoes: one box, pass right");
+    }
+
+    /* 25 Oct, 8 cm box 60 mm left.  A flat face read 10 mm right of
+       centre: side unsure, wide blind pass.  Seen only at 110..115 deg:
+       pass right, but never shift less than OBST_MIN_OFFSET_MM. */
+    {
+        static int16_t const centred[11] = {430, 412, 293, 232, 224, 224,
+                                            224, 424, 424, 424, 424};
+        static int16_t const far_left[11] = {570, 584, 1186, 1182, 1181, 295,
+                                             295, 295, 295, 227, 227};
+
+        for (idx = 0u; idx < 11u; idx++)
+        {
+            /* Cast: 65..115 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (SERVO_MIN_DEG + (5 * (int32_t) idx));
+            points[idx].dist_mm   = centred[idx];
+        }
+
+        (void) avoidance_profile(points, 11u, &prof);
+        plan = avoidance_plan(&prof, 0u);
+        check((AVOID_TURN_LEFT == plan.action)
+                  && nearly(plan.offset_mm, OBST_BLIND_OFFSET_MM, 0.5f),
+              "box leaning right near the centre: wide pass left");
+
+        for (idx = 0u; idx < 11u; idx++)
+        {
+            points[idx].dist_mm = far_left[idx];
+        }
+
+        (void) avoidance_profile(points, 11u, &prof);
+        plan = avoidance_plan(&prof, 0u);
+        check((AVOID_TURN_RIGHT == plan.action)
+                  && (plan.offset_mm >= OBST_MIN_OFFSET_MM),
+              "box seen far left: pass right, at least the minimum shift");
+    }
+
     count = scan_box(points, 400.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
                      SCAN_LAST_DEG);
     (void) avoidance_profile(points, count, &prof);
@@ -1258,7 +1327,7 @@ test_obstacle (void)
           "outside the corridor: continue");
 
     /* S5-U07: a 235 mm box on the real mount (65..115 degrees). */
-    count = scan_box(points, -WIDE_BOX_OFFSET_MM, BOX_RANGE_MM, WIDE_BOX_MM,
+    count = scan_box(points, -WIDE_BOX_OFFSET_MM, WIDE_BOX_RANGE_MM, WIDE_BOX_MM,
                      0.0f, SERVO_MIN_DEG, SERVO_MAX_DEG);
     (void) avoidance_profile(points, count, &prof);
     plan = avoidance_plan(&prof, 0u);
@@ -1267,7 +1336,7 @@ test_obstacle (void)
     check((plan.offset_mm - (CAR_WIDTH_MM / 2.0f))
               >= ((WIDE_BOX_MM / 2.0f) - WIDE_BOX_OFFSET_MM),
           "wide box 60 mm left: the car clears its right edge");
-    count = scan_box(points, WIDE_BOX_OFFSET_MM, BOX_RANGE_MM, WIDE_BOX_MM,
+    count = scan_box(points, WIDE_BOX_OFFSET_MM, WIDE_BOX_RANGE_MM, WIDE_BOX_MM,
                      0.0f, SERVO_MIN_DEG, SERVO_MAX_DEG);
     (void) avoidance_profile(points, count, &prof);
     plan = avoidance_plan(&prof, 0u);
@@ -1737,6 +1806,12 @@ test_command (void)
           "nav: U-turn, accepted while driving");
     check((!command_parse("nav=0", &cmd)) && (!command_parse("nav=5", &cmd)),
           "nav: only 1..4");
+    check((command_parse("map=1,20", &cmd)) && (COMMAND_MAP == cmd.kind)
+              && (nearly(cmd.arg[1], 20.0f, GAIN_TOLERANCE))
+              && (!command_allowed(COMMAND_MAP, false)),
+          "map: left = K (index 20), only while stopped");
+    check((!command_parse("map=5,10", &cmd)) && (!command_parse("map=1,43", &cmd)),
+          "map: 1..4 and index 0..42 only");
     check(!command_parse("pid=1,2", &cmd), "pid needs 3 values");
     check(!command_parse("pid=1,2,3,4", &cmd), "too many values");
     check(!command_parse("pid=-1,0,0", &cmd), "negative gain rejected");
@@ -2019,19 +2094,27 @@ test_vehicle_obstacle (void)
     pings = vehicle_sim_pings();
     vehicle_sim_step();
     check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
-    /* (3 coarse + 11 fine looks) x 3 pings; the pass needs no side looks. */
-    check(((vehicle_sim_pings() - pings) == 42u)
+    /* 11 fine looks x 3 pings (the monitor was the coarse stage); the
+       pass needs no side looks. */
+    check(((vehicle_sim_pings() - pings) == 33u)
               && (1u == vehicle_sim_count("{[scan] pts=11 found=1")),
-          "vehicle: coarse then fine scan, inside the mount's limits");
+          "vehicle: fine scan, inside the mount's limits");
     check((11u == obstacle_get_points(points, SCAN_MAX_POINTS))
               && (65 == points[0].angle_deg) && (150 == points[2].dist_mm),
           "vehicle: last scan points kept (65..115 deg fine scan)");
-    check((2u == vehicle_sim_count("L90")) && (2u == vehicle_sim_count("R90"))
+    check((2u == vehicle_sim_count("L45")) && (2u == vehicle_sim_count("R45"))
+              && (0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
-          "vehicle: box-shaped bypass, line rejoined");
-    /* Pass: closest 150 + deepest 250 + car 200 + margin 60 mm. */
-    check(1u == vehicle_sim_count("fwd660;"),
-          "vehicle: pass leg = closest + depth + car length + margin");
+          "vehicle: diagonal bypass, line rejoined");
+    /* Box seen 75..105 deg, centred: side unsure, blind offset 280 mm.
+       45 deg leg 280 x 1.414 = 396.  Box edge 280 - 80 - 60 = 140, near
+       face 150 + sonar 70 = 220, so back off 140 + 0.707 x 160 + 1.414 x
+       30 - 220 = 76; return at 220 + 76 + deepest 150 + 140 - 280 + 156 =
+       461, less the 280 the leg covered. */
+    check((1u == vehicle_sim_count("back76;"))
+              && (2u == vehicle_sim_count("fwd396;"))
+              && (1u == vehicle_sim_count("fwd181;")),
+          "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
 
     vehicle_sim_impact();
@@ -2084,7 +2167,7 @@ test_vehicle_scan_stop (void)
     check((0u == (vehicle_sim_pings() - pings))
               && (1u == vehicle_sim_count("{[scan] stopped}")),
           "vehicle: STOP while the servo moves ends the scan, no more pings");
-    check((0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("fwd")),
+    check((0u == vehicle_sim_count("L45")) && (0u == vehicle_sim_count("fwd")),
           "vehicle: no move after a stopped scan");
     check(CENTRE_US == vehicle_sim_servo_us(), "vehicle: sonar re-centred");
     vehicle_sim_step();
@@ -2095,7 +2178,7 @@ test_vehicle_scan_stop (void)
     vehicle_close_echo();
     vehicle_sim_step();
     pings = vehicle_sim_pings();
-    vehicle_sim_stop_command_at(900u); /* during the second servo step */
+    vehicle_sim_stop_command_at(800u); /* during the second servo step */
     vehicle_sim_step();
     vehicle_sim_step();
     check((3u == (vehicle_sim_pings() - pings))
@@ -2140,7 +2223,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_stop_on_next_turn();
     vehicle_sim_step();
     vehicle_sim_step();
-    check((1u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("fwd"))
+    check((1u == vehicle_sim_count("L45")) && (0u == vehicle_sim_count("fwd"))
               && (vehicle_is(VS_STOPPED, "stop command"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
           "vehicle: STOP in a bypass reported once");
@@ -2153,8 +2236,8 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_front_ambient(ULTRASONIC_VALID, NEAR_MM);
     vehicle_sim_step();
     vehicle_sim_front_ambient(ULTRASONIC_OUT_OF_RANGE, ULTRASONIC_NO_ECHO);
-    check((1u == vehicle_sim_count("fwd660;"))
-              && (1u == vehicle_sim_count("L90")) && (1u == vehicle_sim_count("R90"))
+    check((1u == vehicle_sim_count("fwd181;"))
+              && (1u == vehicle_sim_count("L45")) && (1u == vehicle_sim_count("R45"))
               && (vehicle_is(VS_STOPPED, "path blocked"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
           "vehicle: obstacle ahead on the pass: STOPPED (path blocked)");

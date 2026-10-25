@@ -334,7 +334,8 @@ test_frame_lengths (void)
     gp_check(5u == frames_hump(buf, sizeof(buf), 2u, 40.0f, 41.0f), "frame: hump 5 B");
     gp_check(11u == frames_obstacle(buf, sizeof(buf), &prof, AVOID_TURN_LEFT),
              "frame: obstacle 11 B");
-    gp_check(2u == frames_impact(buf, sizeof(buf), 1u), "frame: impact 2 B");
+    gp_check(4u == frames_impact(buf, sizeof(buf), 1u, 1234.0f),
+             "frame: impact with strength 4 B");
     gp_check(4u == frames_reply(buf, sizeof(buf), 7u, COMMAND_SPEED, FRAMES_OK),
              "frame: reply 4 B");
     gp_check(24u == frames_gains(buf, sizeof(buf), &gains), "frame: gains 24 B");
@@ -395,6 +396,14 @@ test_command_frames (void)
     gp_check((4u == len) && frames_parse_command(buf, len, &out) && (COMMAND_NAV == out.kind)
                  && near(out.arg[0], 2.0f, TOL_UNIT),
              "command: nav=2 (right) in 4 bytes");
+    cmd.kind   = COMMAND_MAP;
+    cmd.arg[0] = 4.0f;
+    cmd.arg[1] = 35.0f;
+    len        = frames_command(buf, sizeof(buf), &cmd);
+    gp_check(frames_parse_command(buf, len, &out) && (COMMAND_MAP == out.kind)
+                 && near(out.arg[0], 4.0f, TOL_UNIT) && near(out.arg[1], 35.0f, TOL_UNIT),
+             "command: map=4,35 (U-turn = Z) round trip");
+    cmd.kind   = COMMAND_NAV;
     cmd.arg[0] = 6.0f;
     len        = frames_command(buf, sizeof(buf), &cmd);
     gp_check(!frames_parse_command(buf, len, &out), "command: nav=6 rejected");

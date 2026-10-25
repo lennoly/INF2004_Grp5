@@ -1,7 +1,7 @@
 /** @file obstacle.h
  *
  * @brief Buddy 5 - adaptive scanning subsystem: a background front
- *        monitor plus an on-demand coarse-to-fine scan.
+ *        monitor (the coarse stage) plus an on-demand fine scan.
  */
 
 #ifndef OBSTACLE_H
