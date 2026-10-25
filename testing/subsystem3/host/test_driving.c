@@ -5,6 +5,14 @@
 #include <string.h>
 #include "../../../app_program/vehicle.c"
 
+static bool stop_latched;
+static vehicle_msg_t command_queue[4];
+static unsigned queue_count;
+static float32_t pending_distance;
+static unsigned moves_issued;
+static int32_t next_move_result = MOTION_WAIT_OK;
+static unsigned fail_on_move;
+static bool stop_at_completion;
 static bool start_pressed;
 static bool stop_pressed;
 static bool barcode_enabled;
@@ -22,9 +30,53 @@ bool hal_gpio_get(uint32_t pin)
 ER tk_get_tim(SYSTIM *p_time) { memset(p_time, 0, sizeof(*p_time)); return E_OK; }
 INT tm_printf(UB const *format, ...) { (void) format; return 0; }
 void motion_stop(void) { velocity_left = 0; velocity_right = 0; }
+void motion_emergency_stop(void) { stop_latched = true; motion_stop(); }
+void motion_clear_stop(void) { stop_latched = false; }
+bool motion_stop_requested(void) { return stop_latched; }
+INT tk_rcv_mbf(ID id, void *out, INT timeout)
+{
+    (void)id; (void)timeout;
+    if (!queue_count) { return -1; }
+    memcpy(out, command_queue, sizeof(vehicle_msg_t));
+    queue_count--;
+    memmove(command_queue, command_queue + 1, queue_count * sizeof(vehicle_msg_t));
+    return sizeof(vehicle_msg_t);
+}
+ER tk_snd_mbf(ID id, void const *src, INT size, INT timeout)
+{
+    (void)id; (void)timeout;
+    if (queue_count == 4) { return -1; }
+    memcpy(&command_queue[queue_count++], src, (size_t)size);
+    return E_OK;
+}
+ER tk_dly_tsk(uint32_t ms) { (void)ms; return E_OK; }
+void motion_move_forward(float32_t d, float32_t speed)
+{
+    pending_distance = d; moves_issued++; motion_set_velocity(speed, speed);
+}
+void motion_turn_left(float32_t angle)
+{
+    (void)angle; pending_distance = 0; moves_issued++; motion_set_velocity(-120,120);
+}
+void motion_turn_right(float32_t angle)
+{
+    (void)angle; pending_distance = 0; moves_issued++; motion_set_velocity(120,-120);
+}
+int32_t motion_wait(int32_t timeout)
+{
+    (void)timeout;
+    if (stop_at_completion) {
+        stop_at_completion = false;
+        assert(vehicle_command(VCMD_STOP, 0));
+    }
+    if (fail_on_move && moves_issued == fail_on_move) { return MOTION_WAIT_FAIL; }
+    if (next_move_result == MOTION_WAIT_OK) { wheels.odo_mm += pending_distance; }
+    pending_distance = 0;
+    motion_stop(); return next_move_result;
+}
 void motion_set_velocity(float32_t left, float32_t right)
 {
-    velocity_left = left; velocity_right = right;
+    if (!stop_latched) { velocity_left = left; velocity_right = right; }
 }
 void motion_get_status(motion_status_t *p_out) { *p_out = wheels; }
 void ir_sensor_read(ir_sensor_snapshot_t *p_out) { *p_out = sensor; }
@@ -119,6 +171,60 @@ int main(void)
     sensor.norm[IR_LEFT] = 0; sensor.norm[IR_RIGHT] = 0;
     for (unsigned i = 0; i < 8; i++) { handle_line_follow(); }
     assert(g_st.state == VS_LINE_SEARCH);
+    /* STOP bypasses a full queue, wins over queued START, and stays stopped. */
+    sensor.norm[0] = .5f; sensor.norm[1] = .5f;
+    start_pressed = false;
+    g_st.state = VS_LINE_FOLLOW;
+    for (unsigned i = 0; i < 4; i++) { assert(vehicle_command(VCMD_START, 0)); }
+    assert(queue_count == 4 && !vehicle_command(VCMD_START, 0));
+    gb_calib = true; /* STOP must discard every pending movement request. */
+    assert(vehicle_command(VCMD_STOP, 0));
+    assert(stop_latched);
+    poll_inputs(); handle_requests(); run_state();
+    assert(g_st.state == VS_STOPPED && !queue_count && !gb_calib);
+    for (unsigned i = 0; i < 5; i++) {
+        poll_inputs(); handle_requests(); run_state();
+        assert(g_st.state == VS_STOPPED && !velocity_left && !velocity_right);
+    }
+    assert(vehicle_command(VCMD_START, 0));
+    poll_inputs(); handle_requests();
+    assert(g_st.state == VS_LINE_FOLLOW && !stop_latched);
+
+    /* START ignores travel that happened before this run. */
+    wheels.odo_mm = 500; g_prev_odo = 100;
+    start_run(); sensor.norm[0] = 1; sensor.norm[1] = 1;
+    handle_line_follow();
+    assert(g_st.line_state == LINE_ON && g_lf.junction_mm == 0);
+
+    /* A successful manoeuvre rebases odometry before accepting another code. */
+    sensor.norm[0] = .5f; sensor.norm[1] = .5f;
+    g_st.state = VS_NAV_TURN; next_move_result = MOTION_WAIT_OK;
+    execute_nav(NAV_STRAIGHT);
+    assert(g_prev_odo == wheels.odo_mm);
+    sensor.norm[0] = 1; sensor.norm[1] = 1;
+    next_event.cmd = NAV_LEFT; next_event.text[0] = 'Y'; event_ready = true;
+    handle_line_follow();
+    assert(g_st.state == VS_LINE_FOLLOW && g_st.line_state == LINE_ON);
+    wheels.odo_mm += 11; handle_line_follow();
+    assert(g_st.state == VS_NAV_TURN);
+
+    /* A failed first leg must stop instead of starting a turn or search. */
+    moves_issued = 0; next_move_result = MOTION_WAIT_FAIL;
+    execute_nav(NAV_LEFT);
+    assert(moves_issued == 1 && g_st.state == VS_STOPPED && stop_latched);
+    run_state();
+    assert(moves_issued == 1 && !velocity_left && !velocity_right);
+    /* Failures in either forward or turning leg cannot begin recovery. */
+    for (unsigned leg = 1; leg <= 2; leg++) {
+        start_run(); moves_issued = 0; fail_on_move = leg;
+        next_move_result = MOTION_WAIT_OK;
+        execute_nav(NAV_LEFT);
+        assert(moves_issued == leg && g_st.state == VS_STOPPED && stop_latched);
+    }
+    fail_on_move = 0;
+    start_run(); moves_issued = 0; stop_at_completion = true;
+    execute_nav(NAV_LEFT);
+    assert(moves_issued == 1 && g_st.state == VS_STOPPED && stop_latched);
     puts("Buddy 3 driving: start, stop, steering, barcode junction and line loss PASS");
     return 0;
 }

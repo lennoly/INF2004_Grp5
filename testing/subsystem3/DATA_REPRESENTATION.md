@@ -12,9 +12,10 @@ performance measurements.
 | Course barcode symbol | seven-bit ASCII | 7 | Masked field in byte 0 of message |
 | Navigation command | NONE, LEFT, RIGHT, STRAIGHT, UTURN | 3 | Low three bits of message byte 1 |
 | Event timestamp | 0–2^32−1 milliseconds, modulo wrap | 32 | Four explicit little-endian message bytes |
+| Capture session | modulo 2^32 reset generation | 32 | Four little-endian bytes reject results from an interrupted older session |
 
 Byte-oriented storage rounds the 19-bit ring element to three bytes and the
-42-bit message to six bytes. Unused bits are zero. Durations longer than the
+74-bit message to ten bytes. Unused bits are zero. Durations longer than the
 quiet interval are saturated, because only the comparison with that interval
 is needed; a compile-time check prevents configuring an unrepresentable
 quiet interval.
@@ -25,12 +26,12 @@ quiet interval.
 |---|---:|---:|---:|
 | 64-entry ISR ring | 512 B (64 × 8) | 192 B (64 × 3) | 320 B |
 | Barcode capture widths | 316 B (79 × 4) | 116 B (29 × 4) | 200 B |
-| Navigation message payload | 20 B | 6 B | 14 B per message |
-| Requested four-message kernel buffer, including headers/alignment | 96 B | 48 B | 48 B |
+| Navigation message payload | 20 B | 10 B | 10 B per message |
+| Requested four-message kernel buffer, including headers/alignment | 96 B | 64 B | 32 B |
 
 The host tests report `sizeof(barcode_event_t)` and the configured message
-payload. Kernel payload storage is rounded to a four-byte word, so six-byte
-payloads reserve eight bytes each plus the message header. These are local
+payload. Kernel payload storage is rounded to a four-byte word, so ten-byte
+payloads reserve twelve bytes each plus the message header. These are local
 storage calculations, not the total RAM reduction: additional diagnostics
 consume memory and compiler/linker layout affects the final image.
 
@@ -42,11 +43,15 @@ The consumer copies them before advancing the tail. The producer never
 overwrites the consumer's slot. Lost elements increment an overrun counter;
 the consumer discards the damaged frame and resynchronises on white.
 
-Calibration application, ADC snapshots and explicit stream reset use
-interrupt-protected sections. Session reset is called from the lower-priority
-bench task with the decoder paused. The assumptions are the existing
-single-core build and one consumer. The test adapter checks deterministic
-behaviour, not hardware atomicity or SMP.
+Calibration application and ADC snapshots use interrupt-protected sections.
+START/STOP request a new capture generation under interrupt protection; they
+never modify the ring tail or the decoder frame. Only the barcode consumer
+applies the reset on its next poll. Queue messages carry that generation so an
+older decoder interrupted by a reset cannot publish a usable stale event.
+The extra four payload bytes are intentional correctness metadata. The
+assumptions remain the single-core build and one consumer. The regression
+suite injects reset requests during both consumer barriers and before enqueue;
+it does not establish hardware timing or SMP correctness.
 
 ## Remaining final-submission work
 

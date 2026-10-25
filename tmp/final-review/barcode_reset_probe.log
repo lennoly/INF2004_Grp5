@@ -1,0 +1,1 @@
+reset during ring pop: returned=1 head=6 tail=7 (disabled empty ring requires head==tail)

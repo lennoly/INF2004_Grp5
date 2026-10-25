@@ -1,0 +1,9 @@
+1.2.a line longer than 80 characters                        1 in  1 files
+    app_main.c:131: "Configure map=forward,uturn,left,right first. "
+1.4.b operand of && or || not parenthesised                 1 in  1 files
+    vehicle.c:905: obstacle_due ( motion . odo_mm )
+1.6.a cast without an explaining comment                    1 in  1 files
+    app_main.c:130: (void) tm_printf((UB const *) "Buddy 3: GP20=start, GP21=stop. "
+deviation 6.1.i name fixed by kernel or template            1 in  1 files
+deviation-note 1.6.a (void) discard cast                   39 in  4 files
+TOTAL (excluding deviations): 3

@@ -1,0 +1,5 @@
+Buddy 3 driving: start, stop, steering, barcode junction and line loss PASS
+restart with no new travel: line_state=2 junction_mm=10.0 (expected <10)
+post-manoeuvre queued barcode, no new travel: state=NAV_TURN
+STOP fallback next vehicle step: state=LINE_FOLLOW velocities=180,180 (expected stopped)
+failed navigation move: state=LINE_SEARCH (motor failure is treated as line loss)

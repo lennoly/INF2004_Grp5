@@ -1,0 +1,78 @@
+Buddy 3 fixes verified on 2026-10-25 (Asia/Singapore)
+Base commit: 022387b488c03d40f3593e12190194d4241a3d72
+Working tree fixes are uncommitted. Submission documents excluded.
+No flashing or on-car tests performed.
+
+
+FILE: uf2-verification.json
+{
+  "size": 140288,
+  "blocks": 274,
+  "sha256": "815ce7986ee7eddc7b16c457f27f4978fb756a9354b8cd5ba7b4578454be0d93",
+  "stack_pointer": "0x20040000",
+  "reset_vector": "0x100084a1",
+  "source_cache_matches": true,
+  "family": "RP2040",
+  "full_build": true
+}
+
+FILE: buddy3-baseline.log
+
+TEST mode=3 black_is_high=0
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+TEST mode=3 black_is_high=1
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+TEST mode=4 black_is_high=0
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+TEST mode=4 black_is_high=1
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+MISSION navigation and telemetry compile checks
+navigation: 13 junction decisions passed
+
+Buddy 3 driving integration
+Buddy 3 driving: start, stop, steering, barcode junction and line loss PASS
+Barcode: reset during both pop barriers and stale enqueue rejection PASS
+Motor owner: STOP latch, rejected commands and explicit restart PASS
+
+
+FILE: general-baseline.log
+make: Entering directory '/mnt/c/Users/neara/Desktop/embedded project github/tests/host'
+cc -std=c99 -Wpedantic -Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow -Werror -O1 -I../../app_program -I../../app_program/subsystem1/ -I../../app_program/subsystem2/ -I../../app_program/subsystem3/ -I../../app_program/subsystem4/ -I../../app_program/subsystem5/ -I. -DTM_WIFI_MQTT=1 -o picocar_tests test_main.c ../../app_program/car_math.c ../../app_program/subsystem2/pid.c ../../app_program/subsystem3/line_follow.c ../../app_program/subsystem3/barcode_decode.c ../../app_program/subsystem4/terrain.c ../../app_program/subsystem5/avoidance.c ../../app_program/subsystem1/mqtt_bridge.c ../../app_program/subsystem1/mqtt_lwip.c ../../app_program/subsystem1/command.c hal_stub.c timing_stub.c lwip/fake_lwip.c -lm
+./picocar_tests
+math: sqrt rel err 1.18e-07, atan2 err 0.0007 deg, sin err 3.58e-06
+pid: speed after 2 s = 180.0 mm/s (target 180), overshoot 0.0
+barcode: course photo decodes to 'A' -> LEFT
+barcode: 1000/1000 synthetic frames decoded (20% noise, speed drift, both directions)
+terrain: true height -> estimated peak (1.0 deg pitch noise)
+     20 mm ->  20.1 mm (+0.6%), humps=1
+     30 mm ->  30.4 mm (+1.3%), humps=1
+     40 mm ->  40.1 mm (+0.3%), humps=1
+     60 mm ->  60.0 mm (+0.0%), humps=1
+obstacle: box w=100 at x=+20: est width 89, centre 22, closest 250 -> TURN_LEFT offset 162
+obstacle: same box + wall 200 mm left: clear L=177 R=1000 -> TURN_RIGHT
+command: parser, line assembler, formatter and live gains OK
+
+136 passed, 0 failed
+make: Leaving directory '/mnt/c/Users/neara/Desktop/embedded project github/tests/host'
+
+
+FILE: barcode_reset_regression.log
+Barcode: reset during both pop barriers and stale enqueue rejection PASS
+
+
+FILE: motion_stop_regression.log
+Motor owner: STOP latch, rejected commands and explicit restart PASS
+
+
+FILE: barr-check-fixed.log
+deviation 6.1.i name fixed by kernel or template            1 in  1 files
+deviation-note 1.6.a (void) discard cast                   70 in  6 files
+TOTAL (excluding deviations): 0

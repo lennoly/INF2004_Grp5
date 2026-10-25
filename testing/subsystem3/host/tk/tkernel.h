@@ -9,12 +9,25 @@ typedef uint32_t UW;
 typedef uint8_t UB;
 typedef int32_t ID;
 typedef int32_t ER;
-typedef void (*FP)(INT, void *);
+/* Generic kernel callback storage; each handler has its own signature. */
+typedef void (*FP)(void);
 typedef struct { uint32_t hi; uint32_t lo; } SYSTIM;
 typedef struct { UINT mbfatr; size_t bufsz; size_t maxmsz; } T_CMBF;
 typedef struct {
     UINT tskatr; FP task; INT itskpri; size_t stksz;
 } T_CTSK;
+typedef struct { UINT flgatr; UINT iflgptn; } T_CFLG;
+typedef struct { UINT cycatr; FP cychdr; uint32_t cyctim; } T_CCYC;
+#define TA_WMUL (2u)
+#define TA_STA (4u)
+#define TWF_ORW (1u)
+ID tk_cre_flg(T_CFLG const *cfg);
+ID tk_cre_cyc(T_CCYC const *cfg);
+ER tk_set_flg(ID id, UINT bits);
+ER tk_clr_flg(ID id, UINT mask);
+ER tk_wai_flg(ID id, UINT bits, UINT mode, UINT *pattern, INT timeout);
+ER tk_wup_tsk(ID id);
+ER tk_slp_tsk(INT timeout);
 #define E_OK (0)
 #define E_LIMIT (-5)
 #define TMO_POL (0)

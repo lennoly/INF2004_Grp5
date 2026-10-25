@@ -127,9 +127,9 @@ usermain (void)
 #endif
     }
 
+    /* Cast: tm_printf takes the kernel UB string type; ASCII. */
     (void) tm_printf((UB const *) "Buddy 3: GP20=start, GP21=stop. "
-                                  "Configure map=forward,uturn,left,right first. "
-                                  "IR + barcode; no sonar/servo.\n");
+                                  "Configure map=forward,uturn,left,right\n");
 #elif APP_MODE == APP_MODE_MISSION
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */
     report_init("encoder", encoder_init());

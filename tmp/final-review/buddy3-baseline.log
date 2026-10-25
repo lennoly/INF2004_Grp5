@@ -1,0 +1,24 @@
+
+TEST mode=3 black_is_high=0
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+TEST mode=3 black_is_high=1
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+TEST mode=4 black_is_high=0
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+TEST mode=4 black_is_high=1
+3128 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 10 bytes
+
+MISSION navigation and telemetry compile checks
+navigation: 13 junction decisions passed
+
+Buddy 3 driving integration
+Buddy 3 driving: start, stop, steering, barcode junction and line loss PASS
+Barcode: reset during both pop barriers and stale enqueue rejection PASS
+Motor owner: STOP latch, rejected commands and explicit restart PASS

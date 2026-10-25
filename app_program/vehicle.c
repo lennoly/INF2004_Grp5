@@ -92,6 +92,7 @@ static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
 static uint32_t      g_seen_impacts       = 0u;
 static uint32_t      g_run_start_ms       = 0u;
+static volatile bool gb_stop_pending      = false;
 static bool          gb_abort             = false;
 static bool          gb_start             = false;
 static bool          gb_calib             = false;
@@ -103,6 +104,7 @@ static char const * const g_state_names[] = {
     "IDLE",        "CALIBRATE", "LINE_FOLLOW", "NAV_TURN",
     "LINE_SEARCH", "OBSTACLE",  "STOPPED"};
 
+static void            reset_line_follow(void);
 static uint32_t        now_ms(void);
 static void            set_state(vehicle_state_t state, char const * p_reason);
 static int32_t         clamp_speed(int32_t speed_mm_s);
@@ -191,11 +193,22 @@ vehicle_command (vehicle_cmd_t cmd, int32_t arg)
 {
     vehicle_msg_t msg = {VCMD_START, 0, {0.0f, 0.0f, 0.0f}};
 
+    UINT imask = 0u;
+
+    if (VCMD_STOP == cmd)
+    {
+        DI(imask);
+        gb_stop_pending = true;
+        EI(imask);
+        motion_emergency_stop();
+    }
+
     msg.cmd = cmd;
     msg.arg = arg;
 
     /* Cast: the message is a few dozen bytes, far below INT's range. */
-    return (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL));
+    return ((VCMD_STOP == cmd)
+            || (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL)));
 }
 
 /*!
@@ -257,6 +270,19 @@ vehicle_state_name (vehicle_state_t state)
     }
 
     return (p_name);
+}
+
+/*!
+ * @brief Begin fresh line classification at the current odometry reading.
+ */
+static void
+reset_line_follow (void)
+{
+    motion_status_t motion;
+
+    motion_get_status(&motion);
+    g_prev_odo = motion.odo_mm;
+    line_follow_init(&g_lf);
 }
 
 /*!
@@ -340,6 +366,11 @@ poll_buttons (void)
     gb_calib          = gb_calib || (FULL_MISSION && b_pressed && b_idle);
     gb_abort          = gb_abort || (FULL_MISSION ? (b_pressed && (!b_idle))
                                                  : b_stop);
+    if (gb_abort)
+    {
+        motion_emergency_stop();
+    }
+
     gb_btn_start_prev = b_start;
     gb_btn_stop_prev  = b_stop;
 }
@@ -391,8 +422,14 @@ poll_messages (void)
 static void
 poll_inputs (void)
 {
+    UINT imask = 0u;
+
     poll_buttons();
     poll_messages();
+    DI(imask);
+    gb_abort = gb_abort || gb_stop_pending;
+    gb_stop_pending = false;
+    EI(imask);
 }
 
 /*!
@@ -411,15 +448,20 @@ run_move (void)
     while (b_waiting)
     {
         result = motion_wait(LOOP_MS);
+        poll_inputs();
 
-        if (MOTION_WAIT_BUSY != result)
+        if (gb_abort || (motion_stop_requested()))
+        {
+            motion_emergency_stop();
+            b_waiting = false;
+        }
+        else if (MOTION_WAIT_BUSY != result)
         {
             b_ok      = (MOTION_WAIT_OK == result);
             b_waiting = false;
         }
         else
         {
-            poll_inputs();
             waited += LOOP_MS;
 
             if (gb_abort || (waited > MOVE_TIMEOUT_MS))
@@ -428,6 +470,12 @@ run_move (void)
                 b_waiting = false;
             }
         }
+    }
+
+    if ((!b_ok) && (!gb_abort))
+    {
+        motion_emergency_stop();
+        set_state(VS_STOPPED, "motion failed / timed out");
     }
 
     return (b_ok);
@@ -558,7 +606,7 @@ reacquire_line (float32_t side)
 
     if (SEARCH_FOUND == result)
     {
-        line_follow_init(&g_lf);
+        reset_line_follow();
     }
 
     return (SEARCH_FOUND == result);
@@ -608,9 +656,14 @@ execute_nav (barcode_decode_nav_t cmd)
     g_st.last_nav    = cmd;
     g_st.pending_nav = NAV_NONE;
     g_st.pending_code = '\0';
-    line_follow_init(&g_lf);
+    reset_line_follow();
 
-    if (b_ok)
+    if (gb_abort || (motion_stop_requested()))
+    {
+        motion_stop();
+        set_state(VS_STOPPED, "navigation stopped / motion failed");
+    }
+    else if (b_ok)
     {
         set_state(VS_LINE_FOLLOW, "nav done");
     }
@@ -902,7 +955,7 @@ handle_line_follow (void)
     {
         set_state(VS_LINE_SEARCH, "line lost");
     }
-    else if (FULL_MISSION && obstacle_due(motion.odo_mm))
+    else if (FULL_MISSION && (obstacle_due(motion.odo_mm)))
     {
         motion_stop();
         set_state(VS_OBSTACLE, "obstacle ahead / impact");
@@ -949,12 +1002,18 @@ start_run (void)
 {
     imu_status_t imu;
 
-    if (!barcode_decode_get_mapping(NULL))
+    if (gb_stop_pending || (!hal_gpio_get(PIN_BTN_STOP)))
+    {
+        motion_emergency_stop();
+        set_state(VS_STOPPED, "stop still active");
+    }
+    else if (!barcode_decode_get_mapping(NULL))
     {
         set_state(VS_IDLE, "configure barcode mapping before start");
     }
     else
     {
+        motion_clear_stop();
         /* Both modes discard scans collected before this run. */
         barcode_set_enabled(false);
         barcode_set_enabled(true);
@@ -966,7 +1025,7 @@ start_run (void)
             g_seen_impacts = imu.impacts;
         }
 
-        line_follow_init(&g_lf);
+        reset_line_follow();
         g_st.pending_nav      = NAV_NONE;
         g_st.pending_code     = '\0';
         g_st.barcodes         = 0u;
@@ -986,6 +1045,9 @@ calibrate (void)
 {
     bool b_ok = false;
 
+    /* An explicit mission calibration is an accepted movement request. */
+    motion_clear_stop();
+    barcode_set_enabled(false);
     set_state(VS_CALIBRATE, "spin 360");
     ir_sensor_calib_begin();
     imu_mag_calib_begin();
@@ -993,7 +1055,14 @@ calibrate (void)
     (void) run_move();
     b_ok = ir_sensor_calib_end();
     imu_mag_calib_end();
-    set_state(VS_IDLE, b_ok ? "calibrated" : "IR contrast too low");
+    if (gb_abort || (motion_stop_requested()))
+    {
+        set_state(VS_STOPPED, "calibration stopped / motion failed");
+    }
+    else
+    {
+        set_state(VS_IDLE, b_ok ? "calibrated" : "IR contrast too low");
+    }
 }
 
 /*!
@@ -1006,7 +1075,10 @@ handle_requests (void)
     {
         gb_abort = false;
         gb_start = false;
-        motion_stop();
+        gb_calib = false;
+        motion_emergency_stop();
+        g_st.pending_nav = NAV_NONE;
+        g_st.pending_code = '\0';
 
         if (!FULL_MISSION)
         {
@@ -1096,7 +1168,7 @@ vehicle_task (INT stacd, void * p_exinf)
     (void) p_exinf;
 
     /* The line follower is private to this task, so it is set up here. */
-    line_follow_init(&g_lf);
+    reset_line_follow();
 
     for (;;)
     {
