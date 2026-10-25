@@ -1,0 +1,265 @@
+ 
+ 
+  
+ROBO PICO 
+Simplifying Robotics with Raspberry PiⓇ Pico / Pico W 
+ Datasheet 
+ 
+Rev 1.0 
+April 2023 
+ 
+Information in this publication regarding device applications and the like is intended through suggestion 
+only and may be superseded by updates. It is your responsibility to ensure that your application meets with 
+your specifications. No representation or warranty is given and no liability is assumed by Cytron 
+Technologies Incorporated with respect to the accuracy or use of such information or infringement of patents 
+or other intellectual property rights arising from such use or otherwise. Use of Cytron Technologies’s 
+products as critical components in life support system is not authorized except with express written 
+approval by Cytron Technologies. No licenses are conveyed, implicitly or otherwise, under any intellectual 
+property rights. 
+ 
+
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              1 
+* Raspberry Pi is a trademark of Raspberry Pi Ltd.  
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              2 
+1. BOARD LAYOUT & FUNCTION 
+ Figure 1: ROBO-PICO Board Functions 
+ 
+ 
+ 
+Function Description 
+Vin Terminal Connect to any power source within 3.6 - 6V. 
+LiPo Battery Connector 
+Connect to Single Cell LiPo / Li-Ion Battery 
+The battery is rechargeable via USB port on the Raspberry Pi Pico / 
+Pico W. 
+ 
+∗ The battery is protected from overcharged and over discharged. If 
+the board cannot be turned on when the battery is connected, 
+please charge the battery to activate the battery protection 
+circuit. 
+Power LED Turn on when powered up. 
+On/Off Switch Turn on/off the power, including the Raspberry Pi Pico. 
+Reset Button Press to reset the Raspberry Pi Pico or Pico W. 
+GPIO Breakout Female Pin Headers Breakout of the Raspberry Pi Pico or Pico W 
+GPIO pins. 
+
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              3 
+ 
+ 
+ 
+Function Description 
+Grove Ports 
+Connect to external Grove modules. 
+ 
+Grove Port GPIO PWM SPI I2C UART Analog 
+1 0 PWM0-A SDI0 SDA0 TX0 - 
+1 PWM0-B CSn0 SCL0 RX0 - 
+2 2 PWM1-A SCK0 SDA1 - - 
+3 PWM1-B SDO0 SCL1 - - 
+3 4 PWM2-A SDI0 SDA0 TX1 - 
+5 PWM2-B CSn0 SCL0 RX1 - 
+4 16 PWM0-A SDI0 SDA0 TX0 - 
+17 PWM0-B CSn0 SCL0 RX0 - 
+5 6 PWM3-A SCK0 SDA1 - - 
+26 PWM5-A - SDA1 - ADC0 
+6 26 PWM5-A - SDA1 - ADC0 
+27 PWM5-B - SCL1 - ADC1 
+7 7 PWM3-B SDO0 SCL1 - - 
+28 PWM6-A - - - ADC2 
+ 
+Maker Port 
+Compatible with QWIIC / Stemma QT / Grove (with conversion 
+cable). 
+∗ The pins are shared with the Grove 2 port (GPIO 2, 3). 
+NeoPixel RGB LEDs  User programmable NeoPixel RGB LED. Connected to GP18. 
+Programmable Buttons Accessible from the user program. Connected to GP20 and GP21 
+Piezo Buzzer Can be used to play tone or melody. Connected to GP22. 
+Buzzer Mute Switch Used to mute the piezo buzzer. 
+Status LEDs LED indicators for Raspberry Pi Pico GPIOs on Grove Ports. 
+Turn on when the GPIO state is high. 
+Motor Test Buttons 
+Press to test the functionality of the motor driver. 
+Motor will run at full speed. 
+● MxA : Forward* 
+● MxB : Backward* 
+Servo Ports 
+Connectors for 4 x RC servo motors. 
+Signal is connected to GP12, GP13, GP14 and GP15. 
+V+ voltage is equal to power source voltage. 
+Motor Status LEDs 
+Turn on when the motor is running. 
+● MxA : Forward* 
+● MxB : Backward* 
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              4 
+ 
+ 
+ 
+Function Description 
+DC Motor Terminals 
+Connect to the motor terminal. 
+Motor voltage at full speed is equal to power source voltage. 
+Motor direction is dependent on the polarity. 
+● M1A : GP8 ●  M2A : GP10 
+● M1B : GP9 ●  M2B : GP11 
+ 
+VBAT Sense 
+Solder the jumper on the back of the board to allow voltage 
+measurement of the VBAT  via GP-28-ADC2. 
+VADC2  =  VBAT / 2 
+(VBAT  = VIN or VUSB or VLiPo whichever is higher) 
+Pi Pico Socket  Socket for Raspberry Pi Pico and Pico W. 
+ 
+Table 1: ROBO-PICO Board Functions 
+ 
+∗ Actual motor direction is dependent on the motor connection. 
+Swapping the connection (MxA & MxB) will reverse the direction. 
+ 
+ 
+ 
+  
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              5 
+2. RASPBERRY PI PICO PINOUT DIAGRAM 
+ 
+Figure 2: Raspberry Pi Pico Pinout Diagram 
+ 
+Figure 3: Raspberry Pi Pico W Pinout Diagram  
+
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              6 
+3. SPECIFICATIONS 
+ 
+No Parameters Min Max Unit 
+1 Power Input Voltage (USB, LiPo or VIN) * 3.6 6  V 
+2 Digital Input Voltage 
+Low Level -0.3 0.8 V 
+High Level 2.0 3.6 V 
+3 Digital Output Voltage 
+Low Level 0 0.5 V 
+High Level 2.6 3.3 V 
+4 Analog Input Voltage 0 3.3 V 
+5 Vmotor & Vservo (Only USB is connected) VUSB - 0.4 V 
+6 Vmotor & Vservo (Only either one of LiPo or VIN is connected) VLiPo or VIN V 
+7 Vmotor & Vservo (USB and LiPo are connected) VUSB - 0.4 V 
+8 Vmotor & Vservo 
+(USB and VIN are connected) 
+VIN < VUSB VUSB - 0.4 V 
+VIN > VUSB 
+and 
+VIN - VUSB < 0.6 
+VIN - 0.4 V 
+VIN - VUSB > 0.6 VIN V 
+9 Maximum DC Motor Current (Per Channel) 
+Continuous - 1  A 
+Peak (< 5 seconds) - 1.5  A 
+10 DC Motor Driver PWM Frequency - 20 kHz 
+11 Total +3V3 Output Current (Grove Ports) - 300 mA 
+12 Operating Temperature -20 85 ℃ 
+ 
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              7 
+Table 2: ROBO-PICO Absolute Maximum Ratings 
+ 
+∗ Voltage for the DC motor and servo is equal to power input voltage. 
+∗ It’s not recommended to connect both LiPo and VIN at the same time. 
+Although it’s perfectly safe to do so. 
+ 
+  
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              8 
+4. MOTOR DRIVER TRUTH TABLE 
+ 
+Input A 
+(GP8 / GP10) 
+Input B 
+(GP9 / GP11) 
+Output A 
+(M1A / M2A) 
+Output B 
+(M1B / M2B) Motor 
+Low Low Low Low Brake 
+High Low High Low Forward* 
+Low High Low High Backward* 
+High High Hi-Z (Open) Hi-Z (Open) Coast 
+Table 3: Motor Driver Truth Table 
+ 
+∗ Actual motor direction is depending on the motor connection. 
+Swapping the connection (MA & MB) will reverse the direction. 
+ 
+ 
+5. DIMENSION 
+ Figure 4: ROBO-PICO Dimension  
+
+ROBOT.HEAD to TOE 
+Datasheet - ROBO-PICO 
+ 
+ Created by Cytron Technologies Sdn Bhd – All Rights Reserved                                                              9 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Prepared by: 
+ 
+Cytron Technologies Sdn Bhd 
+www.cytron.io 
+No. 1, Lorong Industri Impian 1, 
+Taman Industri Impian, 
+14000 Bukit Mertajam, 
+Penang, Malaysia. 
+ 
+Tel: +604 - 548 0668 
+Fax:  +604 - 548 0669 
+ 
+Email: 
+support@cytron.io 
+sales@cytron.io 

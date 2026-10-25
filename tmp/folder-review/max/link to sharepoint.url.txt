@@ -1,0 +1,5 @@
+[{000214A0-0000-0000-C000-000000000046}]
+Prop3=19,11
+[InternetShortcut]
+IDList=
+URL=https://sitsingaporetechedu-my.sharepoint.com/:w:/g/personal/2500343_sit_singaporetech_edu_sg/IQBMycLh2CUHSJTfwESlxkJwAcoJz9R8nfuyZe1PcYxOHc8?e=uif7XE

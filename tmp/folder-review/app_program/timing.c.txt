@@ -1,0 +1,234 @@
+/** @file timing.c
+ *
+ * @brief Execution-time, control-jitter and CPU-load measurement (see
+ *        timing.h).
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <tk/tkernel.h>
+#include "car_config.h"
+#include "hal.h"
+#include "timing.h"
+
+#define PROBE_PRIORITY (CNF_MAX_TSKPRI) /* the lowest task priority  */
+#define PROBE_STACK    (512)
+#define PROBE_GAP_US   (3u) /* longer gap = something else ran */
+#define US_PER_MS      (1000u)
+#define PERIOD_US      (CONTROL_PERIOD_MS * US_PER_MS)
+
+/* Statistics written by the measured sections (tasks and the IR
+   interrupt) and read by timing_take(), always with interrupts disabled. */
+static timing_stat_t g_stat[TIMING_COUNT];
+static uint32_t      g_jitter_max_us = 0u;
+static uint32_t      g_periods       = 0u;
+
+/* Written only by the motion task. */
+static uint32_t g_last_wake_us = 0u;
+
+/* Idle time, written only by the probe task and only ever increased, so
+   one aligned 32-bit read is consistent (single core, A13). */
+static volatile uint32_t g_idle_total_ms = 0u;
+
+/* Window start and idle total at the last timing_take(); used only by
+   the task that runs the "timing" command. */
+static uint32_t g_window_start_ms = 0u;
+static uint32_t g_idle_start_ms   = 0u;
+
+static char const * const g_names[TIMING_COUNT] = {
+    "motion", "vehicle", "barcode", "imu", "hump", "ir_isr", "net", "rejoin"};
+
+static uint32_t now_ms(void);
+static void     timing_probe_task(INT stacd, void * p_exinf);
+
+/*!
+ * @brief Start the idle probe and the first measurement window.
+ *
+ * @return E_OK or a kernel error code.
+ */
+int32_t
+timing_init (void)
+{
+    T_CTSK ctsk   = {0};
+    ID     h_task = 0;
+
+    g_window_start_ms = now_ms();
+    ctsk.tskatr       = TA_HLNG | TA_RNG3;
+
+    /* Cast: the kernel stores every task entry as the generic FP type and
+       calls a TA_HLNG task as (INT stacd, void * exinf), matching
+       timing_probe_task(). */
+    ctsk.task    = (FP) timing_probe_task;
+    ctsk.itskpri = PROBE_PRIORITY;
+    ctsk.stksz   = PROBE_STACK;
+    h_task       = tk_cre_tsk(&ctsk);
+
+    return ((h_task >= E_OK) ? tk_sta_tsk(h_task, 0) : h_task);
+}
+
+/*!
+ * @brief Start timing a section.
+ *
+ * @return Start time in microseconds, for timing_stop().
+ */
+uint32_t
+timing_start (void)
+{
+    return (hal_time_us());
+}
+
+/*!
+ * @brief Finish timing a section (task or interrupt context).
+ *
+ * @param[in] section  Which section.
+ * @param[in] start_us Value returned by timing_start().
+ */
+void
+timing_stop (timing_id_t section, uint32_t start_us)
+{
+    uint32_t        elapsed = hal_time_us() - start_us;
+    timing_stat_t * p_stat  = &g_stat[section];
+    UINT            imask   = 0u;
+
+    DI(imask);
+    p_stat->max_us = (elapsed > p_stat->max_us) ? elapsed : p_stat->max_us;
+    p_stat->sum_us += elapsed;
+    p_stat->count++;
+    EI(imask);
+}
+
+/*!
+ * @brief Record one wake-up of the 20 ms control loop (motion task only):
+ *        the deviation from the nominal period is the jitter (A2, NFR1).
+ *
+ * @param[in] now_us Wake-up time.
+ */
+void
+timing_period (uint32_t now_us)
+{
+    uint32_t period = now_us - g_last_wake_us;
+    uint32_t dev    = 0u;
+    UINT     imask  = 0u;
+
+    if (0u != g_last_wake_us)
+    {
+        dev =
+            (period > PERIOD_US) ? (period - PERIOD_US) : (PERIOD_US - period);
+
+        DI(imask);
+        g_jitter_max_us = (dev > g_jitter_max_us) ? dev : g_jitter_max_us;
+        g_periods++;
+        EI(imask);
+    }
+
+    g_last_wake_us = now_us;
+}
+
+/*!
+ * @brief Copy the results of the current window and start a new one.
+ *
+ * @param[out] p_out Results.
+ */
+void
+timing_take (timing_report_t * p_out)
+{
+    uint32_t idx   = 0u;
+    uint32_t now   = now_ms();
+    uint32_t idle  = g_idle_total_ms;
+    UINT     imask = 0u;
+
+    DI(imask);
+
+    /* Cast: TIMING_COUNT is a small positive enumeration constant. */
+    for (idx = 0u; idx < (uint32_t) TIMING_COUNT; idx++)
+    {
+        p_out->stat[idx]   = g_stat[idx];
+        g_stat[idx].max_us = 0u;
+        g_stat[idx].sum_us = 0u;
+        g_stat[idx].count  = 0u;
+    }
+
+    p_out->jitter_max_us = g_jitter_max_us;
+    p_out->periods       = g_periods;
+    g_jitter_max_us      = 0u;
+    g_periods            = 0u;
+    EI(imask);
+
+    p_out->window_ms  = now - g_window_start_ms;
+    p_out->idle_ms    = idle - g_idle_start_ms;
+    g_window_start_ms = now;
+    g_idle_start_ms   = idle;
+
+    /* A probe that ran longer than the window means rounding only. */
+    p_out->idle_ms =
+        (p_out->idle_ms > p_out->window_ms) ? p_out->window_ms : p_out->idle_ms;
+}
+
+/*!
+ * @brief Short name of a measured section, for the JSON report.
+ *
+ * @param[in] section Section.
+ *
+ * @return A string literal.
+ */
+char const *
+timing_name (timing_id_t section)
+{
+    return (g_names[section]);
+}
+
+/*!
+ * @brief Kernel time in milliseconds (wraps after 49 days).
+ *
+ * @return Milliseconds since boot.
+ */
+static uint32_t
+now_ms (void)
+{
+    SYSTIM tim = {0, 0u};
+
+    (void) tk_get_otm(&tim);
+
+    return (tim.lo);
+}
+
+/*!
+ * @brief Idle probe (lowest priority): runs only when nothing else can,
+ *        and adds up the time it runs uninterrupted.  A gap longer than
+ *        PROBE_GAP_US between two of its clock reads means that a task or
+ *        an interrupt ran in between.
+ *
+ * @param[in] stacd   Start code (unused).
+ * @param[in] p_exinf Extended information (unused).
+ */
+static void
+timing_probe_task (INT stacd, void * p_exinf)
+{
+    uint32_t last    = hal_time_us();
+    uint32_t now     = 0u;
+    uint32_t gap     = 0u;
+    uint32_t idle_us = 0u;
+
+    (void) stacd;
+    (void) p_exinf;
+
+    for (;;)
+    {
+        now  = hal_time_us();
+        gap  = now - last;
+        last = now;
+
+        if (gap <= PROBE_GAP_US)
+        {
+            idle_us += gap;
+        }
+
+        if (idle_us >= US_PER_MS)
+        {
+            idle_us -= US_PER_MS;
+            g_idle_total_ms++;
+        }
+    }
+}
+
+/*** end of file ***/

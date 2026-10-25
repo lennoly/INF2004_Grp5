@@ -1,0 +1,86 @@
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+A
+Code 39  *A*  |  bars: 141 x 50 mm
+B
+Code 39  *B*  |  bars: 141 x 50 mm
+C
+Code 39  *C*  |  bars: 141 x 50 mm
+D
+Code 39  *D*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 1/7
+
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+E
+Code 39  *E*  |  bars: 141 x 50 mm
+F
+Code 39  *F*  |  bars: 141 x 50 mm
+G
+Code 39  *G*  |  bars: 141 x 50 mm
+H
+Code 39  *H*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 2/7
+
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+I
+Code 39  *I*  |  bars: 141 x 50 mm
+J
+Code 39  *J*  |  bars: 141 x 50 mm
+K
+Code 39  *K*  |  bars: 141 x 50 mm
+L
+Code 39  *L*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 3/7
+
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+M
+Code 39  *M*  |  bars: 141 x 50 mm
+N
+Code 39  *N*  |  bars: 141 x 50 mm
+O
+Code 39  *O*  |  bars: 141 x 50 mm
+P
+Code 39  *P*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 4/7
+
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+Q
+Code 39  *Q*  |  bars: 141 x 50 mm
+R
+Code 39  *R*  |  bars: 141 x 50 mm
+S
+Code 39  *S*  |  bars: 141 x 50 mm
+T
+Code 39  *T*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 5/7
+
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+U
+Code 39  *U*  |  bars: 141 x 50 mm
+V
+Code 39  *V*  |  bars: 141 x 50 mm
+W
+Code 39  *W*  |  bars: 141 x 50 mm
+X
+Code 39  *X*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 6/7
+
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Keep the white area beside each barcode clear; cut between rows.
+Y
+Code 39  *Y*  |  bars: 141 x 50 mm
+Z
+Code 39  *Z*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 7/7

@@ -1,0 +1,59 @@
+ 
+ 
+  Tech Support: services@elecfreaks.com  
+Ultrasonic Ranging Module HC - SR04 
+ Product features:   
+Ultrasonic ranging module HC - SR04 provides 2cm - 400cm non-contact 
+measurement function, the ranging accuracy can reach to 3mm. The modules 
+includes ultrasonic transmitters, receiver and control circuit. The basic principle 
+of work: 
+(1) Using IO trigger for at least 10us high level signal, 
+(2) The Module automatically sends eight 40 kHz and detect whether there is a 
+pulse signal back. 
+(3) IF the signal back, through high level , time of high output IO duration is 
+the time from sending ultrasonic to returning. 
+Test distance = (high level time×velocity of sound (340M/S) / 2, 
+ Wire connecting direct as following:   
+/circle6 5V Supply 
+/circle6 Trigger Pulse Input 
+/circle6 Echo Pulse Output 
+/circle6 0V Ground 
+Electric Parameter 
+Working Voltage DC 5 V 
+Working Current 15mA 
+Working Frequency 40Hz 
+Max Range 4m 
+Min Range 2cm 
+MeasuringAngle 15 degree 
+Trigger Input Signal 10uS TTL pulse 
+Echo Output Signal Input TTL lever signal and the r ange in 
+proportion 
+Dimension 45*20*15mm 
+ 
+ 
+ 
+ 
+       Vcc  Trig  Echo  GND 
+ 
+ 
+Timing diagram 
+The Timing diagram is shown below. You only need to supply a short 10uS 
+pulse to the trigger input to start the ranging, and then the module will send out 
+an 8 cycle burst of ultrasound at 40 kHz and raise its echo. The Echo is a 
+distance object that is pulse width and the range in proportion .You can 
+calculate the range through the time interval between sending trigger signal and 
+receiving echo signal. Formula: uS / 58 = centimeters or uS / 148 =inch; or: the 
+range = high level time * velocity (340M/S) / 2; we suggest to use over 60ms 
+measurement cycle, in order to prevent trigger signal to the echo signal. 
+ 
+ 
+ 
+ Attention:   
+/circle6  The module is not suggested to connect directly to electric, if connected  
+electric, the GND terminal should be connected the module first, otherwise, 
+it will affect the normal work of the module. 
+/circle6  When tested objects, the range of area is n ot less than 0.5 square meters 
+and the plane requests as smooth as possible, otherwise ,it will affect the 
+results of measuring. 
+ 
+www.Elecfreaks.com 

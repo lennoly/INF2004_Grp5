@@ -1,0 +1,3 @@
+# Keep printable PDFs byte-for-byte intact on Windows.
+*.pdf binary
+*.sh text eol=lf

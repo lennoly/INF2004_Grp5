@@ -1,0 +1,9 @@
+{
+  "pdfs_checked": 27,
+  "combined_pages": 7,
+  "letters_render_verified": 26,
+  "bar_span_mm": 141,
+  "height_mm": 50,
+  "wide_narrow_ratio": 3,
+  "verification": "Downloaded patterns match independent ReportLab Code 39 encoder. All A-Z rendered PDF patterns match downloads. All PDF rectangle spans and heights verified."
+}

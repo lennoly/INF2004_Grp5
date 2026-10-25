@@ -41,6 +41,7 @@ typedef struct
     line_follow_state_t  line_state;
     float32_t            line_error;
     barcode_decode_nav_t pending_nav;
+    char                 pending_code; /* decoded letter kept until junction */
     barcode_decode_nav_t last_nav;
     uint32_t             barcodes;
     avoidance_action_t   last_action;
