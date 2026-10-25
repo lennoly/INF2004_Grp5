@@ -1,0 +1,22 @@
+/** @file app_tests.h
+ *
+ * @brief Standalone subsystem test programs (one per buddy), selected at
+ *        build time with make APP_MODE=TEST_xxx.  This shared runner starts
+ *        the test task; each test lives in its subsystem's folder
+ *        (subsystemN/subsystemN_test.c) and prints CSV-style lines for the
+ *        evaluation reports.
+ */
+
+#ifndef APP_TESTS_H
+#define APP_TESTS_H
+
+#include <stdint.h>
+#include <tk/tkernel.h>
+#include "car_types.h"
+
+int32_t app_tests_start(void);
+INT     app_tests_print_int(float32_t value);
+
+#endif /* APP_TESTS_H */
+
+/*** end of file ***/

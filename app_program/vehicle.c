@@ -575,8 +575,8 @@ execute_nav (barcode_decode_nav_t cmd)
     bool b_ok = true;
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
-    (void) tm_printf((UB const *) "[vehicle] executing %s\n",
-                     barcode_decode_command_name(cmd));
+    (void) tm_printf((UB const *) "[vehicle] barcode %c: executing %s\n",
+                     g_st.pending_code, barcode_decode_command_name(cmd));
 
     switch (cmd)
     {
@@ -607,6 +607,7 @@ execute_nav (barcode_decode_nav_t cmd)
 
     g_st.last_nav    = cmd;
     g_st.pending_nav = NAV_NONE;
+    g_st.pending_code = '\0';
     line_follow_init(&g_lf);
 
     if (b_ok)
@@ -820,6 +821,7 @@ take_barcode (void)
     if ((barcode_get_event(&event, TMO_POL)) && (NAV_NONE != event.cmd))
     {
         g_st.pending_nav = event.cmd;
+        g_st.pending_code = event.text[0];
         g_st.barcodes++;
     }
 }
@@ -966,6 +968,7 @@ start_run (void)
 
         line_follow_init(&g_lf);
         g_st.pending_nav      = NAV_NONE;
+        g_st.pending_code     = '\0';
         g_st.barcodes         = 0u;
         g_st.obstacles_passed = 0u;
         g_attempts            = 0u;

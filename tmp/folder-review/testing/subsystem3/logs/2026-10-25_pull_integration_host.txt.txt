@@ -1,0 +1,27 @@
+Pull integration verification - 2026-10-25 (Asia/Singapore)
+Base before pull: c6793d4
+Fetched origin/max integrated: eb13a84 (fast-forward, two commits)
+Local barcode work preserved: stash 80285462c6c8cdb942021baad2645a73635deaa7
+Independent ZIP backup: before-pull-complete-backup.zip in this chat's visualization workspace.
+
+Resolved vehicle startup overlap: runtime mapping required, scans flushed at
+start in both modes, IMU reset only in full mission. Kept incoming Buddy 3
+mode, motor-only driving and stop-button behaviour. Added command-only
+telemetry in Buddy 3 startup so runtime mappings can be configured via UART
+(or MQTT when enabled). Updated firmware instructions; UF2 remains unchanged.
+
+Validation:
+- TEST_IR + TEST_BARCODE, both IR polarities: 3022 checks each, no failures.
+- Mission vehicle + telemetry strict syntax checks: PASS.
+- WiFi-enabled telemetry syntax check: PASS.
+- Junction navigation decision: 13 checks PASS.
+- Buddy 3 driving integration: PASS (unconfigured start refused, dynamic map,
+  start/stop/restart, steering, junction wait, U-turn waits past 500 mm,
+  and line loss). No IMU/sonar/servo stubs required.
+- General host suite: 136 passed, 0 failed.
+- All 88 saved barcode-folder files: byte-for-byte match with backup.
+- No conflict markers or unmerged Git entries.
+
+No firmware build or physical robot tests performed. Rebuild before flashing.
+Changes remain uncommitted; backup stash retained. Incoming tracked tmp files
+were retained, not deleted as part of conflict resolution.

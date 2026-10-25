@@ -1,0 +1,73 @@
+Infrared Reflective Sensor User Manual   Waveshare 
+1 
+ 
+Infrared Reflective Sensor User Manual 
+1. Features 
+Sensor ST188 
+Voltage comparator 
+chip LM393 
+Operating voltage 3.0V-5.3V 
+Dimensions 30.2mm*11.9mm 
+Fixing hole size 2.0mm 
+Operating principle:  
+An infrared sensor contains two parts: an infrared transmitter and an infrared 
+receiver.  
+The infrared transmitter consists of an infrared LED array as a luminophor, and 
+a PN junction made of a special material with high infrared radiation efficiency, 
+which usually is GaAs. When a current injected into the PN junction by a 
+forward bias voltage, it can excite a source of infrared light with a center 
+wavelength range of 830nm-950nm. The power of the infrared light excited is 
+proportional to the current injected. However, in the case that the injected 
+current excesses the maximum rating, the power of the infrared light  may 
+decline as the current increases.  
+The infrared receiver is a semiconductor device for translating the infrared light 
+signal into the electrical signal. And the core component of it is a PN junction 
+made of a  special material. Its PN junction  has a different structure from the 
+general purpose diode, enabling more infrared light to be received. As the 
+intensity of the infrared light enhances, more current can be generated. 
+ 
+2. Applications 
+This module can be applied to  intellectual robot, obstacle avoidance car, 
+counter device in the pipeline, black and white lines tracking device, etc. 
+3. Interfaces 
+Pin No. Symbol Descriptions 
+1 DOUT Digital output 
+2 AOUT Analog output 
+3 GND Power ground 
+4 VCC Positive power supply 
+(3.0V-5.3V) 
+4. How to use 
+We will illustrate the usage of the module with an example of obstacle 
+detection by connecting a development board. 
+Infrared Reflective Sensor User Manual   Waveshare 
+2 
+ 
+① Download the relative codes to the development board. 
+② Connect the development board to a PC via a serial wire and the 
+module to the development board. Then, power up the development 
+board and start the serial debugging software. Here is the configuration 
+of the connection between the module and the development board. 
+Port STM32 MUC pin 
+DOUT GPIOA.4 
+AOUT GPIOA.6 
+GND GND 
+VCC 3.3V 
+ 
+Port Arduino pin 
+DOUT D2 
+AOUT A0 
+GND GND 
+VCC 5V 
+ 
+Here is the configuration of the serial port. 
+Baud rate 115200 
+Data bits 8 
+Stop bit 1 
+Parity bit None 
+ 
+③ The detected result can be checked by a signal indicator on the module. 
+The signal indicator will turn on, when the sensor is close to a barrier. 
+And it will turn off, when the sensor is away from the barrier. 
+Also, you can find that the serial output chan ges along with the 
+distance from the sensor to the barrier. 
+ 

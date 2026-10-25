@@ -1,0 +1,4 @@
+18mm
+20mm Gap between barcode and line
+Width of line
+141mm Approx Length of Barcode

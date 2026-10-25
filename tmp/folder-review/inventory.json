@@ -1,0 +1,1357 @@
+[
+  {
+    "path": ".gitattributes",
+    "bytes": 88,
+    "text_chars": 88
+  },
+  {
+    "path": ".gitignore",
+    "bytes": 896,
+    "text_chars": 896
+  },
+  {
+    "path": "app_program/.clang-format",
+    "bytes": 1914,
+    "sha256": "4257c9f72285f802fc6212c77ec2091f95f181ec44a3f3eea3a50f945201f1ef"
+  },
+  {
+    "path": "app_program/app_main.c",
+    "bytes": 6431,
+    "text_chars": 6431
+  },
+  {
+    "path": "app_program/app_main.h",
+    "bytes": 454,
+    "text_chars": 454
+  },
+  {
+    "path": "app_program/app_tests.c",
+    "bytes": 5705,
+    "text_chars": 5705
+  },
+  {
+    "path": "app_program/app_tests.h",
+    "bytes": 611,
+    "text_chars": 611
+  },
+  {
+    "path": "app_program/car_config.h",
+    "bytes": 9660,
+    "text_chars": 9660
+  },
+  {
+    "path": "app_program/car_math.c",
+    "bytes": 7167,
+    "text_chars": 7167
+  },
+  {
+    "path": "app_program/car_math.h",
+    "bytes": 1218,
+    "text_chars": 1218
+  },
+  {
+    "path": "app_program/car_types.h",
+    "bytes": 601,
+    "text_chars": 601
+  },
+  {
+    "path": "app_program/demo_tasks.c",
+    "bytes": 2108,
+    "text_chars": 2108
+  },
+  {
+    "path": "app_program/demo_tasks.h",
+    "bytes": 512,
+    "text_chars": 512
+  },
+  {
+    "path": "app_program/hal.c",
+    "bytes": 23613,
+    "text_chars": 23613
+  },
+  {
+    "path": "app_program/hal.h",
+    "bytes": 3170,
+    "text_chars": 3170
+  },
+  {
+    "path": "app_program/hal_irq.c",
+    "bytes": 5140,
+    "text_chars": 5140
+  },
+  {
+    "path": "app_program/hal_irq.h",
+    "bytes": 1010,
+    "text_chars": 1010
+  },
+  {
+    "path": "app_program/subsystem1/command.c",
+    "bytes": 19335,
+    "text_chars": 19335
+  },
+  {
+    "path": "app_program/subsystem1/command.h",
+    "bytes": 2870,
+    "text_chars": 2870
+  },
+  {
+    "path": "app_program/subsystem1/console_in.c",
+    "bytes": 1886,
+    "text_chars": 1886
+  },
+  {
+    "path": "app_program/subsystem1/console_in.h",
+    "bytes": 869,
+    "text_chars": 869
+  },
+  {
+    "path": "app_program/subsystem1/mqtt_bridge.c",
+    "bytes": 8131,
+    "text_chars": 8131
+  },
+  {
+    "path": "app_program/subsystem1/mqtt_bridge.h",
+    "bytes": 2708,
+    "text_chars": 2708
+  },
+  {
+    "path": "app_program/subsystem1/mqtt_lwip.c",
+    "bytes": 15148,
+    "text_chars": 15148
+  },
+  {
+    "path": "app_program/subsystem1/mqtt_lwip.h",
+    "bytes": 586,
+    "text_chars": 586
+  },
+  {
+    "path": "app_program/subsystem1/telemetry.c",
+    "bytes": 29142,
+    "text_chars": 29142
+  },
+  {
+    "path": "app_program/subsystem1/telemetry.h",
+    "bytes": 1368,
+    "text_chars": 1368
+  },
+  {
+    "path": "app_program/subsystem2/encoder.c",
+    "bytes": 6141,
+    "text_chars": 6141
+  },
+  {
+    "path": "app_program/subsystem2/encoder.h",
+    "bytes": 821,
+    "text_chars": 821
+  },
+  {
+    "path": "app_program/subsystem2/motion.c",
+    "bytes": 24253,
+    "text_chars": 24253
+  },
+  {
+    "path": "app_program/subsystem2/motion.h",
+    "bytes": 3142,
+    "text_chars": 3142
+  },
+  {
+    "path": "app_program/subsystem2/motor.c",
+    "bytes": 2971,
+    "text_chars": 2971
+  },
+  {
+    "path": "app_program/subsystem2/motor.h",
+    "bytes": 325,
+    "text_chars": 325
+  },
+  {
+    "path": "app_program/subsystem2/pid.c",
+    "bytes": 3067,
+    "text_chars": 3067
+  },
+  {
+    "path": "app_program/subsystem2/pid.h",
+    "bytes": 1346,
+    "text_chars": 1346
+  },
+  {
+    "path": "app_program/subsystem2/subsystem2_test.c",
+    "bytes": 12074,
+    "text_chars": 12074
+  },
+  {
+    "path": "app_program/subsystem2/subsystem2_test.h",
+    "bytes": 395,
+    "text_chars": 395
+  },
+  {
+    "path": "app_program/subsystem3/barcode.c",
+    "bytes": 8838,
+    "text_chars": 8838
+  },
+  {
+    "path": "app_program/subsystem3/barcode.h",
+    "bytes": 1150,
+    "text_chars": 1150
+  },
+  {
+    "path": "app_program/subsystem3/barcode_decode.c",
+    "bytes": 11500,
+    "text_chars": 11500
+  },
+  {
+    "path": "app_program/subsystem3/barcode_decode.h",
+    "bytes": 1638,
+    "text_chars": 1638
+  },
+  {
+    "path": "app_program/subsystem3/ir_sensor.c",
+    "bytes": 12970,
+    "text_chars": 12970
+  },
+  {
+    "path": "app_program/subsystem3/ir_sensor.h",
+    "bytes": 1814,
+    "text_chars": 1814
+  },
+  {
+    "path": "app_program/subsystem3/line_follow.c",
+    "bytes": 7063,
+    "text_chars": 7063
+  },
+  {
+    "path": "app_program/subsystem3/line_follow.h",
+    "bytes": 2156,
+    "text_chars": 2156
+  },
+  {
+    "path": "app_program/subsystem3/subsystem3_test.c",
+    "bytes": 6937,
+    "text_chars": 6937
+  },
+  {
+    "path": "app_program/subsystem3/subsystem3_test.h",
+    "bytes": 355,
+    "text_chars": 355
+  },
+  {
+    "path": "app_program/subsystem4/imu.c",
+    "bytes": 19938,
+    "text_chars": 19938
+  },
+  {
+    "path": "app_program/subsystem4/imu.h",
+    "bytes": 1275,
+    "text_chars": 1275
+  },
+  {
+    "path": "app_program/subsystem4/subsystem4_test.c",
+    "bytes": 6828,
+    "text_chars": 6828
+  },
+  {
+    "path": "app_program/subsystem4/subsystem4_test.h",
+    "bytes": 367,
+    "text_chars": 367
+  },
+  {
+    "path": "app_program/subsystem4/terrain.c",
+    "bytes": 7553,
+    "text_chars": 7553
+  },
+  {
+    "path": "app_program/subsystem4/terrain.h",
+    "bytes": 2037,
+    "text_chars": 2037
+  },
+  {
+    "path": "app_program/subsystem5/avoidance.c",
+    "bytes": 11669,
+    "text_chars": 11669
+  },
+  {
+    "path": "app_program/subsystem5/avoidance.h",
+    "bytes": 1918,
+    "text_chars": 1918
+  },
+  {
+    "path": "app_program/subsystem5/obstacle.c",
+    "bytes": 8344,
+    "text_chars": 8344
+  },
+  {
+    "path": "app_program/subsystem5/obstacle.h",
+    "bytes": 610,
+    "text_chars": 610
+  },
+  {
+    "path": "app_program/subsystem5/servo.c",
+    "bytes": 1715,
+    "text_chars": 1715
+  },
+  {
+    "path": "app_program/subsystem5/servo.h",
+    "bytes": 368,
+    "text_chars": 368
+  },
+  {
+    "path": "app_program/subsystem5/subsystem5_test.c",
+    "bytes": 3447,
+    "text_chars": 3447
+  },
+  {
+    "path": "app_program/subsystem5/subsystem5_test.h",
+    "bytes": 318,
+    "text_chars": 318
+  },
+  {
+    "path": "app_program/subsystem5/ultrasonic.c",
+    "bytes": 7536,
+    "text_chars": 7536
+  },
+  {
+    "path": "app_program/subsystem5/ultrasonic.h",
+    "bytes": 1204,
+    "text_chars": 1204
+  },
+  {
+    "path": "app_program/timing.c",
+    "bytes": 6110,
+    "text_chars": 6110
+  },
+  {
+    "path": "app_program/timing.h",
+    "bytes": 2096,
+    "text_chars": 2096
+  },
+  {
+    "path": "app_program/usb_console_compat.h",
+    "bytes": 1281,
+    "text_chars": 1281
+  },
+  {
+    "path": "app_program/vehicle.c",
+    "bytes": 30717,
+    "text_chars": 30717
+  },
+  {
+    "path": "app_program/vehicle.h",
+    "bytes": 1751,
+    "text_chars": 1751
+  },
+  {
+    "path": "config/mqtt_config.example.h",
+    "bytes": 816,
+    "text_chars": 816
+  },
+  {
+    "path": "config/mqtt_config.h",
+    "bytes": 445,
+    "text_chars": 445
+  },
+  {
+    "path": "config/wifi_credentials.h",
+    "bytes": 368,
+    "text_chars": 368
+  },
+  {
+    "path": "docs/ABBREVIATIONS.md",
+    "bytes": 4819,
+    "text_chars": 4810
+  },
+  {
+    "path": "docs/BARCODE_SETUP.md",
+    "bytes": 3393,
+    "text_chars": 3393
+  },
+  {
+    "path": "docs/BUDDY2_DATA_SHEET.md",
+    "bytes": 7832,
+    "text_chars": 7706
+  },
+  {
+    "path": "docs/img/arch.dot",
+    "bytes": 2680,
+    "text_chars": 2680
+  },
+  {
+    "path": "docs/img/arch.png",
+    "bytes": 293814,
+    "sha256": "cdcd460a5c58aaef2870354856c38630ca41202fa925d521f04ab5e85a87031c"
+  },
+  {
+    "path": "docs/img/dashboard.png",
+    "bytes": 226073,
+    "sha256": "b3fb6d49f92cab20b96be9f8b364eb1d14b499634aebdcb0d1061a30a89d11e8"
+  },
+  {
+    "path": "docs/img/states.dot",
+    "bytes": 1190,
+    "text_chars": 1190
+  },
+  {
+    "path": "docs/img/states.png",
+    "bytes": 194929,
+    "sha256": "b2e3439b57d41a48ed22ceb23e426e678baeb83fd2f76a9de0315e0fc1d31c41"
+  },
+  {
+    "path": "docs/img/wiring.dot",
+    "bytes": 1807,
+    "text_chars": 1807
+  },
+  {
+    "path": "docs/img/wiring.png",
+    "bytes": 263188,
+    "sha256": "8067f0d22aa88d81cf21c91830ea4cf106545a2db6fbbd9a1326eed945e39b30"
+  },
+  {
+    "path": "docs/REPORT.md",
+    "bytes": 51316,
+    "text_chars": 51068
+  },
+  {
+    "path": "docs/template_changes.patch",
+    "bytes": 10857,
+    "text_chars": 10857
+  },
+  {
+    "path": "docs/templates/module.c",
+    "bytes": 2711,
+    "text_chars": 2711
+  },
+  {
+    "path": "docs/templates/module.h",
+    "bytes": 1431,
+    "text_chars": 1431
+  },
+  {
+    "path": "docs/WIRING.md",
+    "bytes": 1628,
+    "text_chars": 1607
+  },
+  {
+    "path": "firmware/picocar_TEST_BARCODE_usbcdc.uf2",
+    "bytes": 164864,
+    "sha256": "aabf9df342836a4a9ff68ecbe056c5432a71b7dd94f0300dcde48d6a2eeb2186"
+  },
+  {
+    "path": "firmware/picocar_TEST_BUDDY3_uart.build.txt",
+    "bytes": 1579,
+    "text_chars": 1579
+  },
+  {
+    "path": "firmware/picocar_TEST_BUDDY3_uart.uf2",
+    "bytes": 139264,
+    "sha256": "818f087acee65ad72340729b65452d76b97249555b62adaf38da052c85ed4be8"
+  },
+  {
+    "path": "firmware/picocar_TEST_IR_usbcdc.uf2",
+    "bytes": 165376,
+    "sha256": "a2f4d8d53fd496b1c711d0f248b0a99745c84f8aa3c37ff223afeff738f937c9"
+  },
+  {
+    "path": "firmware/README.md",
+    "bytes": 3672,
+    "text_chars": 3672
+  },
+  {
+    "path": "max/briefing/barcode/Barcode & Line Specification.pdf",
+    "bytes": 418384,
+    "pages": 1,
+    "text_chars": 83
+  },
+  {
+    "path": "max/briefing/barcode/barcode questions answer.png",
+    "bytes": 117123,
+    "sha256": "1bbab5d1963cc59103988f7ca9dbc2249d6b15a38a05ee51b0be522cbd1336a0"
+  },
+  {
+    "path": "max/briefing/barcode/Barcode Sample.pdf",
+    "bytes": 32773,
+    "pages": 4,
+    "text_chars": 7
+  },
+  {
+    "path": "max/briefing/barcode/BARCODE.pptx",
+    "bytes": 62342,
+    "text_chars": 22
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/build_print_pack.py",
+    "bytes": 5273,
+    "text_chars": 5273
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/A.png",
+    "bytes": 1696,
+    "sha256": "53d0ad03669ce6547b28326399d2a18cb036ed6b8ee5cb48056b1a0b0893be33"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/B.png",
+    "bytes": 1149,
+    "sha256": "31d28ead5bd644d90d71340ff0fb3e50d9e9662437523f1b5ff6907efcee51c7"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/C.png",
+    "bytes": 1383,
+    "sha256": "8bdbaeafaefbb0f022cbf1a2df4db7c0bfd5f24789f2381203f957e8aba21d30"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/D.png",
+    "bytes": 1825,
+    "sha256": "61c365f0f4dee23183a7b709fd4117198a4a5e0bb71c5b8c456b59141d5ec51b"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/E.png",
+    "bytes": 1831,
+    "sha256": "9054ff45136d7992d0734387dd6c1d0bf093e519f8c7f9e1e090c04661632533"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/F.png",
+    "bytes": 1807,
+    "sha256": "09d2e573f21321ae37ea79bb6167edf54111d7b8514c164db9bb5e76b074bbf8"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/G.png",
+    "bytes": 1187,
+    "sha256": "123466a7e1c4a12642694f0708abac16c9df9da78c8efcc5ee653940c0ee961d"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/H.png",
+    "bytes": 1583,
+    "sha256": "4b24d713d06ba8f13b2722c515821602e9eb1c98f700bcc60f24d3222d9c617e"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/I.png",
+    "bytes": 2009,
+    "sha256": "cf97b6ef8be41b66750be4bf7d39df9eccec6d9c597f73428fc61cd3ff583385"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/J.png",
+    "bytes": 1993,
+    "sha256": "37d94bba1165d522a4bd9c1dcef7f133fdf0a6d1cab3cdee6e48923504c2ed12"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/K.png",
+    "bytes": 1778,
+    "sha256": "4736a11e73ce1ba9874150bf9af2eca3c06f11c01f2614dfee72e36ef976ec7f"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/L.png",
+    "bytes": 1837,
+    "sha256": "1e8b4d03f4a8f24eedd2579789dc56767a23cb0fc7a99db39b643493b88d618a"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/M.png",
+    "bytes": 2111,
+    "sha256": "688f4eaa51e02118f2f5da5d126b45d8023e0dcc779a2e8e36df4c9f4735a6e6"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/N.png",
+    "bytes": 1585,
+    "sha256": "1c8e293f654308db744d01dce31941a95e2502e067ce1ca7b0b865cef6144038"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/O.png",
+    "bytes": 1998,
+    "sha256": "49f8add55b318515bcb3b47223d2a0a0a8ae538dc88b7237ff482605d76ebc06"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/P.png",
+    "bytes": 2083,
+    "sha256": "ef3879d891e8c9280a68b39ef4d9931e654ecae859dfd3dbaf95fa29796c73d6"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/Q.png",
+    "bytes": 1228,
+    "sha256": "e477cc9059c64387e936a654f1d8dda5fcbf4a49034e56db2ff432ba0c003002"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/R.png",
+    "bytes": 1806,
+    "sha256": "4d8e13b6e56ada4742f4da3b88cae57c0d8dc8bf8f348214290445c134508e9a"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/S.png",
+    "bytes": 1834,
+    "sha256": "3f0e962ffa6823130d61bc48460d6292724e3cf44f3ed317113e619e96b76426"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/T.png",
+    "bytes": 1411,
+    "sha256": "44fb214da99b9b4899719049aef64fa6313fc3f66dfde2e1f30139bab25c333e"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/U.png",
+    "bytes": 1183,
+    "sha256": "c3217c7d36985d6fa147b15b00ce73de62ff4d59b6eab6935adb408631b0f1e1"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/V.png",
+    "bytes": 1501,
+    "sha256": "9e50c94cc617dacc5c2e31c6c939ee82ee002740644672485f91d467a3a49fbc"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/W.png",
+    "bytes": 1512,
+    "sha256": "0b5acbc6993b315ad745332f6adefbb08e530dae42449f0bcee6dc1225b1d877"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/X.png",
+    "bytes": 1615,
+    "sha256": "2cbf4271d5bf00b294ba4b9aa4095b4074a0f0e2caaecd1cd5e56c977a30707d"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/Y.png",
+    "bytes": 1642,
+    "sha256": "f4c43b76cace1f9ba0605b724035a46c9105df8d3377195bcc915bc41f9e66c2"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/downloaded_png/Z.png",
+    "bytes": 1181,
+    "sha256": "3f35f51d8718a2fdf0486fe4ecf4dbb3e09404f522f5f445c5d213299416c55f"
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/A_141mm_A4.pdf",
+    "bytes": 2106,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/B_141mm_A4.pdf",
+    "bytes": 2108,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/C_141mm_A4.pdf",
+    "bytes": 2104,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/D_141mm_A4.pdf",
+    "bytes": 2106,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/E_141mm_A4.pdf",
+    "bytes": 2105,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/F_141mm_A4.pdf",
+    "bytes": 2106,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/G_141mm_A4.pdf",
+    "bytes": 2104,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/H_141mm_A4.pdf",
+    "bytes": 2110,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/I_141mm_A4.pdf",
+    "bytes": 2110,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/J_141mm_A4.pdf",
+    "bytes": 2109,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/K_141mm_A4.pdf",
+    "bytes": 2111,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/L_141mm_A4.pdf",
+    "bytes": 2109,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/M_141mm_A4.pdf",
+    "bytes": 2108,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/N_141mm_A4.pdf",
+    "bytes": 2108,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/O_141mm_A4.pdf",
+    "bytes": 2109,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/P_141mm_A4.pdf",
+    "bytes": 2110,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/Q_141mm_A4.pdf",
+    "bytes": 2101,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/R_141mm_A4.pdf",
+    "bytes": 2108,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/S_141mm_A4.pdf",
+    "bytes": 2111,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/T_141mm_A4.pdf",
+    "bytes": 2105,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/U_141mm_A4.pdf",
+    "bytes": 2113,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/V_141mm_A4.pdf",
+    "bytes": 2109,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/W_141mm_A4.pdf",
+    "bytes": 2108,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/X_141mm_A4.pdf",
+    "bytes": 2108,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/Y_141mm_A4.pdf",
+    "bytes": 2110,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_pdf/Z_141mm_A4.pdf",
+    "bytes": 2105,
+    "pages": 1,
+    "text_chars": 229
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/A_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/B_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/C_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/D_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/E_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/F_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/G_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/H_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/I_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/J_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/K_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/L_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/M_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/N_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/O_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/P_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/Q_141mm.svg",
+    "bytes": 833,
+    "text_chars": 833
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/R_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/S_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/T_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/U_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/V_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/W_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/X_141mm.svg",
+    "bytes": 834,
+    "text_chars": 834
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/Y_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/individual_svg/Z_141mm.svg",
+    "bytes": 835,
+    "text_chars": 835
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/PRINT_ALL_A-Z_141mm_A4.pdf",
+    "bytes": 10168,
+    "pages": 7,
+    "text_chars": 2256
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/README_PRINT_FIRST.md",
+    "bytes": 3220,
+    "text_chars": 3220
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/source_manifest.json",
+    "bytes": 3609,
+    "text_chars": 3609
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z/verification.json",
+    "bytes": 327,
+    "text_chars": 327
+  },
+  {
+    "path": "max/briefing/barcode/printable_A-Z_141mm.zip",
+    "bytes": 68940,
+    "members": 83
+  },
+  {
+    "path": "max/briefing/BARCODE.pptx",
+    "bytes": 62342,
+    "text_chars": 22
+  },
+  {
+    "path": "max/briefing/Project Briefing.pdf",
+    "bytes": 1489498,
+    "pages": 10,
+    "text_chars": 3675
+  },
+  {
+    "path": "max/briefing/Project Write-up.pdf",
+    "bytes": 156282,
+    "pages": 11,
+    "text_chars": 8502
+  },
+  {
+    "path": "max/briefing/Walkthrough Video - Basic - INF2004-Embedded Systems Programming [2026_27 T1].mp4",
+    "bytes": 157044736,
+    "sha256": "962bf596f437325ada8109a1328f08f303d999df4a5bc9fd48d0763924ce6567"
+  },
+  {
+    "path": "max/Change Requirement .docx",
+    "bytes": 17600,
+    "text_chars": 2177
+  },
+  {
+    "path": "max/CSC05_ImmTri1.docx",
+    "bytes": 68612,
+    "text_chars": 46173
+  },
+  {
+    "path": "max/datasheet/barr_c_coding_standard_2018.pdf",
+    "bytes": 3900241,
+    "pages": 87,
+    "text_chars": 102277
+  },
+  {
+    "path": "max/datasheet/HCSR04.pdf",
+    "bytes": 80625,
+    "pages": 3,
+    "text_chars": 2246,
+    "error": "'charmap' codec can't encode characters in position 101-102: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/Infrared-Reflective-Sensor-UserManual.pdf",
+    "bytes": 27401,
+    "pages": 2,
+    "text_chars": 2729
+  },
+  {
+    "path": "max/datasheet/LM393-D.PDF",
+    "bytes": 448851,
+    "pages": 13,
+    "text_chars": 27217,
+    "error": "'charmap' codec can't encode character '\\u2212' in position 92: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/lsm303dlhc.pdf",
+    "bytes": 833044,
+    "pages": 42,
+    "text_chars": 72534,
+    "error": "'charmap' codec can't encode character '\\uf0b7' in position 225: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/OKY3231-2.pdf",
+    "bytes": 117148,
+    "pages": 1,
+    "text_chars": 1251,
+    "error": "'charmap' codec can't encode character '\\uff1a' in position 114: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/Robo Pico Board Datasheet.pdf",
+    "bytes": 2250520,
+    "pages": 10,
+    "text_chars": 8313,
+    "error": "'charmap' codec can't encode character '\\u24c7' in position 60: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/Robo_Pico.pdf",
+    "bytes": 1969548,
+    "pages": 10,
+    "text_chars": 7271,
+    "error": "'charmap' codec can't encode character '\\u24c7' in position 56: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/RP-008312-DS-2-pico-w-datasheet.pdf",
+    "bytes": 20175431,
+    "pages": 26,
+    "text_chars": 40132,
+    "error": "'charmap' codec can't encode character '\\ufe0e' in position 196: character maps to <undefined>"
+  },
+  {
+    "path": "max/datasheet/tcrt5000.pdf",
+    "bytes": 176657,
+    "pages": 7,
+    "text_chars": 9883,
+    "error": "'charmap' codec can't encode character '\\x81' in position 493: character maps to <undefined>"
+  },
+  {
+    "path": "max/link to sharepoint.url",
+    "bytes": 240,
+    "text_chars": 240
+  },
+  {
+    "path": "max/submission/Change Requirement 1.docx",
+    "bytes": 17600,
+    "text_chars": 2177
+  },
+  {
+    "path": "max/submission/week 6 design review feedback.txt",
+    "bytes": 3512,
+    "text_chars": 3504
+  },
+  {
+    "path": "max/submission/Week8_Tribunal1_Template.docx",
+    "bytes": 44522,
+    "text_chars": 11628
+  },
+  {
+    "path": "max/submission/Week_6_Design_Review_CSC05.pdf",
+    "bytes": 3637738,
+    "pages": 24,
+    "text_chars": 56098
+  },
+  {
+    "path": "README.md",
+    "bytes": 12114,
+    "text_chars": 12091
+  },
+  {
+    "path": "setup.sh",
+    "bytes": 2692,
+    "text_chars": 2692
+  },
+  {
+    "path": "SUBSYSTEM3_REVIEW.md",
+    "bytes": 9813,
+    "text_chars": 9807
+  },
+  {
+    "path": "TEAM.md",
+    "bytes": 7323,
+    "text_chars": 7251
+  },
+  {
+    "path": "testing/integration/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/integration/TEST_LOG.md",
+    "bytes": 1945,
+    "text_chars": 1939
+  },
+  {
+    "path": "testing/README.md",
+    "bytes": 3215,
+    "text_chars": 3165
+  },
+  {
+    "path": "testing/subsystem1/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/subsystem1/TEST_LOG.md",
+    "bytes": 2363,
+    "text_chars": 2355
+  },
+  {
+    "path": "testing/subsystem2/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/subsystem2/TEST_LOG.md",
+    "bytes": 1668,
+    "text_chars": 1662
+  },
+  {
+    "path": "testing/subsystem3/DATA_REPRESENTATION.md",
+    "bytes": 3358,
+    "text_chars": 3348
+  },
+  {
+    "path": "testing/subsystem3/host/fakes.c",
+    "bytes": 3293,
+    "text_chars": 3293
+  },
+  {
+    "path": "testing/subsystem3/host/fakes.h",
+    "bytes": 362,
+    "text_chars": 362
+  },
+  {
+    "path": "testing/subsystem3/host/test_driving.c",
+    "bytes": 4831,
+    "text_chars": 4831
+  },
+  {
+    "path": "testing/subsystem3/host/test_navigation.c",
+    "bytes": 897,
+    "text_chars": 897
+  },
+  {
+    "path": "testing/subsystem3/host/test_subsystem3.c",
+    "bytes": 12165,
+    "text_chars": 12165
+  },
+  {
+    "path": "testing/subsystem3/host/tk/tkernel.h",
+    "bytes": 1101,
+    "text_chars": 1101
+  },
+  {
+    "path": "testing/subsystem3/host/tm/tmonitor.h",
+    "bytes": 171,
+    "text_chars": 171
+  },
+  {
+    "path": "testing/subsystem3/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/subsystem3/logs/2026-10-20_host_working_tree.txt",
+    "bytes": 3674,
+    "text_chars": 3674
+  },
+  {
+    "path": "testing/subsystem3/logs/2026-10-25_dynamic_mapping_host.txt",
+    "bytes": 1385,
+    "text_chars": 1385
+  },
+  {
+    "path": "testing/subsystem3/logs/2026-10-25_pull_integration_host.txt",
+    "bytes": 1553,
+    "text_chars": 1553
+  },
+  {
+    "path": "testing/subsystem3/README.md",
+    "bytes": 7842,
+    "text_chars": 7840
+  },
+  {
+    "path": "testing/subsystem3/run_driving_tests.sh",
+    "bytes": 635,
+    "text_chars": 635
+  },
+  {
+    "path": "testing/subsystem3/run_host_tests.py",
+    "bytes": 3041,
+    "text_chars": 3041
+  },
+  {
+    "path": "testing/subsystem3/TEST_LOG.md",
+    "bytes": 3064,
+    "text_chars": 3050
+  },
+  {
+    "path": "testing/subsystem4/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/subsystem4/TEST_LOG.md",
+    "bytes": 1131,
+    "text_chars": 1124
+  },
+  {
+    "path": "testing/subsystem5/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/subsystem5/logs/2026-10-16_a9_check.txt.jpg",
+    "bytes": 129446,
+    "sha256": "10fd4dc7f7f81ab158625764fc3db0def899006d961edf162e8ff88668cd5df6"
+  },
+  {
+    "path": "testing/subsystem5/TEST_LOG.md",
+    "bytes": 1520,
+    "text_chars": 1511
+  },
+  {
+    "path": "testing/system/logs/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "testing/system/TEST_LOG.md",
+    "bytes": 1623,
+    "text_chars": 1614
+  },
+  {
+    "path": "tests/host/.clang-format",
+    "bytes": 1914,
+    "sha256": "4257c9f72285f802fc6212c77ec2091f95f181ec44a3f3eea3a50f945201f1ef"
+  },
+  {
+    "path": "tests/host/hal_stub.c",
+    "bytes": 1365,
+    "text_chars": 1365
+  },
+  {
+    "path": "tests/host/hal_stub.h",
+    "bytes": 401,
+    "text_chars": 401
+  },
+  {
+    "path": "tests/host/lwip/apps/mqtt.h",
+    "bytes": 3974,
+    "text_chars": 3974
+  },
+  {
+    "path": "tests/host/lwip/apps/mqtt_priv.h",
+    "bytes": 104,
+    "text_chars": 104
+  },
+  {
+    "path": "tests/host/lwip/dhcp.h",
+    "bytes": 104,
+    "text_chars": 104
+  },
+  {
+    "path": "tests/host/lwip/fake_lwip.c",
+    "bytes": 3633,
+    "text_chars": 3633
+  },
+  {
+    "path": "tests/host/lwip/netif.h",
+    "bytes": 104,
+    "text_chars": 104
+  },
+  {
+    "path": "tests/host/lwip/sys.h",
+    "bytes": 104,
+    "text_chars": 104
+  },
+  {
+    "path": "tests/host/Makefile",
+    "bytes": 1205,
+    "text_chars": 1205
+  },
+  {
+    "path": "tests/host/mqtt_config.h",
+    "bytes": 485,
+    "text_chars": 485
+  },
+  {
+    "path": "tests/host/picocar_tests",
+    "bytes": 51232,
+    "sha256": "22e5da3f09c35c4164a9d9dcc3b6d2ac63eb4800c1f6255b124938e89a384b42"
+  },
+  {
+    "path": "tests/host/test_main.c",
+    "bytes": 43225,
+    "text_chars": 43225
+  },
+  {
+    "path": "tests/host/test_main.h",
+    "bytes": 276,
+    "text_chars": 276
+  },
+  {
+    "path": "tests/host/timing_stub.c",
+    "bytes": 609,
+    "text_chars": 609
+  },
+  {
+    "path": "tests/host/timing_stub.h",
+    "bytes": 293,
+    "text_chars": 293
+  },
+  {
+    "path": "tools/barr_check.py",
+    "bytes": 28395,
+    "text_chars": 28395
+  },
+  {
+    "path": "tools/barr_format.sh",
+    "bytes": 1392,
+    "text_chars": 1392
+  },
+  {
+    "path": "tools/barr_layout.py",
+    "bytes": 4635,
+    "text_chars": 4635
+  },
+  {
+    "path": "tools/build_buddy3.sh",
+    "bytes": 2367,
+    "text_chars": 2367
+  },
+  {
+    "path": "tools/dashboard/dashboard_example.png",
+    "bytes": 226073,
+    "sha256": "b3fb6d49f92cab20b96be9f8b364eb1d14b499634aebdcb0d1061a30a89d11e8"
+  },
+  {
+    "path": "tools/dashboard/picocar_dashboard.py",
+    "bytes": 33901,
+    "text_chars": 33901
+  },
+  {
+    "path": "tools/dashboard/README.md",
+    "bytes": 5236,
+    "text_chars": 5234
+  },
+  {
+    "path": "tools/dashboard/requirements.txt",
+    "bytes": 114,
+    "text_chars": 114
+  },
+  {
+    "path": "tools/dashboard/sim_car.py",
+    "bytes": 13097,
+    "text_chars": 13097
+  },
+  {
+    "path": "tools/dashboard/wifi_test.py",
+    "bytes": 19552,
+    "text_chars": 19552
+  },
+  {
+    "path": "videos/README.md",
+    "bytes": 1388,
+    "text_chars": 1386
+  }
+]

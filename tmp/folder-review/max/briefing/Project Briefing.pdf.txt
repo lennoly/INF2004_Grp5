@@ -1,0 +1,143 @@
+STUDENT BRIEFING
+Autonomous
+Robotic Car Challenge
+Five specialised subsystems. One integrated 
+mission.
+Embedded Systems Project
+Design • Test • Integrate • Demonstrate
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+The Challenge
+Build an autonomous robotic car that senses, decides, moves and reports as one dependable system.
+1
+FOLLOW
+Track the line reliably
+2
+DECODE
+Read navigation barcodes
+3
+MEASURE
+Detect and measure 
+humps
+4
+AVOID
+Profile and bypass 
+obstacles
+5
+REPORT
+Publish status and 
+telemetry
+Success depends on clean interfaces, repeatable subsystem tests and 
+disciplined integration.
+2
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+How the Five Buddies Fit Together
+Each buddy owns a subsystem, but the robot succeeds only when data and commands flow cleanly.
+Buddy 3
+Line + barcode
+Buddy 5
+Obstacle scan
+Vehicle Controller
+Mission state
++ coordination
+Buddy 2
+Motion control
+Buddy 4
+IMU + terrain
+Buddy 1
+WiFi + telemetry
+3
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+Buddy 1: WiFi Communication, Command and Telemetry
+Primary hardware: WiFi
+Core work
+Establish WiFi and MQTT
+Design topics and message structures
+Publish telemetry and subscribe to commands
+Recover connections and report heartbeat
+Expected deliverables
+Communication API
+Telemetry framework
+MQTT documentation
+Telemetry demonstration
+4
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+Buddy 2: Motion Control System
+Primary hardware: Motors + wheel encoders
+Core work
+Integrate motor drivers and encoders
+Estimate speed and distance
+Tune PID speed control
+Correct straight motion and execute turns
+Expected deliverables
+Motion-control library
+PID tuning report
+Motion accuracy evaluation
+5
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+Buddy 3: Barcode Decoding and IR Line Following
+Primary hardware: 3 × IR sensors
+Core work
+Calibrate sensors and estimate line position
+Follow lines and detect junctions
+Detect and decode barcodes
+Generate navigation commands
+Expected deliverables
+Line-following module
+Barcode decoder
+Navigation command interface
+6
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+Buddy 4: IMU-Based Motion and Terrain Monitoring
+Primary hardware: IMU
+Core work
+Calibrate the IMU
+Detect tilt, humps and peak height
+Classify motion and detect collision
+Report turn rate and motion events
+Expected deliverables
+IMU processing module
+Hump-detection algorithm
+Terrain analysis report
+7
+
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+Buddy 5: Adaptive Ultrasonic Scanning and Obstacle Profiling
+Primary hardware: Ultrasonic sensor + servo
+Core work
+Coarse scan, then fine scan around obstacles
+Estimate location, width and clearance
+Plan stop, turn or reverse actions
+Recover and reacquire the original line
+Expected deliverables
+Scanning subsystem
+Obstacle profile generator
+Avoidance and recovery algorithms
+8
+
+E M B E D D E D  S Y S T E M S  P R O J E C T STUDENT BRIEFING
+What the Team Will Be Assessed On
+A fast subsystem is not enough if the integrated robot is unreliable.
+Mission
+Objectives completed
+Navigation
+Accuracy and control
+Perception
+Barcode, hump, obstacle
+Robustness
+Recovery and stable operation
+Engineering
+Software quality and efficiency
+Integration
+Interfaces and teamwork
+Demonstration
+Clear evidence under test
+9
+Start With Interfaces,
+Then Build Evidence
+1 Define inputs, outputs and ownership
+2 Create repeatable subsystem tests
+3 Record measurements and calibration
+4 Integrate early through stable APIs
+5 Practise the Week 10 demonstration
+The goal is a dependable integrated robot, supported by 
+measurable engineering evidence.

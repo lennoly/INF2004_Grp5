@@ -7,8 +7,11 @@ are no default letters assigned to movements in the firmware.
 ## Send the instructor's assignments
 
 Build and flash the updated `MISSION` firmware with `WIFI_MQTT=1`, using your
-WiFi/broker settings as described in the root README. Existing prebuilt UF2
-files do not contain these changes. Connect the dashboard to the broker.
+WiFi/broker settings as described in the root README. Alternatively use the
+moving Buddy 3 MQTT build described in `firmware/README.md`. The rebuilt
+`picocar_TEST_BUDDY3_uart.uf2` supports runtime assignments over UART only;
+older bench UF2 files do not contain these changes. Connect the dashboard
+to the broker for an MQTT build.
 
 With the car IDLE or STOPPED, use the dashboard command box or publish a
 plain text MQTT message to `picocar/<car-id>/cmd`:

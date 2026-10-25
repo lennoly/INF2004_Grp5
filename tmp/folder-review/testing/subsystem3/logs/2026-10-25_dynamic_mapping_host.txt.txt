@@ -1,0 +1,30 @@
+Dynamic barcode mapping - host verification
+Date: 2026-10-25 (Asia/Singapore)
+Compiler: GCC 14.2.0, C99, warnings treated as errors
+Source: working tree (not committed)
+
+python testing/subsystem3/run_host_tests.py
+TEST_IR, black-low:      3022 checks, 0 failures
+TEST_IR, black-high:     3022 checks, 0 failures
+TEST_BARCODE, black-low: 3022 checks, 0 failures
+TEST_BARCODE, black-high:3022 checks, 0 failures
+MISSION vehicle/telemetry syntax checks: PASS
+WiFi-enabled telemetry syntax check: PASS
+Actual vehicle navigation decision: 13 checks passed
+
+Coverage added: all A-Z symbols in both directions, full simulated sensor
+stream, every letter assigned to each movement, unconfigured boot,
+invalid/duplicate mapping preservation, and junction-only execution.
+
+General host suite compiled from tests/host/Makefile source list directly
+with GCC (Windows make include glob includes files as well as directories):
+136 passed, 0 failed. Includes MQTT transport and mapping command parser.
+
+BARR checker on changed decoder/command/telemetry/vehicle modules:
+0 findings excluding documented void-discard deviations.
+git diff --check: PASS
+
+No robot tests performed. Full Pico firmware build not performed: fetched
+course template and Pico SDK are not present in this workspace. Existing
+prebuilt UF2 files are unchanged. Rebuild MISSION with WIFI_MQTT=1 before
+flashing for the MQTT demo.

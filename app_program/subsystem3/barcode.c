@@ -2,8 +2,8 @@
  *
  * @brief Buddy 3 - barcode framing task (see barcode.h).
  *
- * Course frames contain exactly one symbol (*A* through *D*, or report-only
- * symbols). Decode at element 29, then require white quiet before rearming.
+ * Course frames contain exactly one symbol (*A* through *Z*). Decode at
+ * element 29, then require white quiet before rearming.
  */
 
 #include <stdint.h>

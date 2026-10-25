@@ -1,9 +1,10 @@
 # Buddy 3 moving-car test
 
-**Rebuild before flashing:** the committed UF2 predates runtime barcode mapping.
-Flash the rebuilt **picocar_TEST_BUDDY3_uart.uf2** for combined black-line following and
-barcode navigation. The older TEST_IR and TEST_BARCODE files are stationary
-bench tests, not driving firmware.
+**Rebuilt on 25 October 2026:** **picocar_TEST_BUDDY3_uart.uf2** includes runtime
+barcode mapping and stores the pending decoded letter until its junction.
+Flash this file for combined black-line following and
+barcode navigation. Only the Buddy 3 driving UF2 is kept here. TEST_IR and
+TEST_BARCODE are stationary bench modes that can be rebuilt from source.
 
 1. Hold BOOTSEL while connecting USB, then copy the UF2 to RPI-RP2.
 2. Power the car and its motors normally. Connect the UART console on GP0/GP1
@@ -46,3 +47,24 @@ python3 testing/subsystem3/run_host_tests.py
 
 The build script caches the pinned course template and Pico SDK in
 `~/.cache/picocar-buddy3` and copies the resulting UF2 into this folder.
+
+## MQTT version
+
+The reference `max/briefing/barcode/barcode questions answer.png` requires
+movement assignments to arrive via MQTT. The rebuilt UART file is suitable
+for local testing but does not meet that network requirement by itself.
+Wi-Fi SSID/password and broker IP have been left blank as requested.
+The template rejects blank Wi-Fi settings, so no MQTT UF2 is supplied yet.
+
+Fill in the ignored local files `config/wifi_credentials.h` and
+`config/mqtt_config.h`, enable their `SET` values, then build:
+
+```sh
+sh tools/build_buddy3.sh "$HOME/.cache/picocar-buddy3" mqtt
+```
+
+This produces `firmware/picocar_TEST_BUDDY3_mqtt.uf2`. Send
+`map=<forward>,<uturn>,<left>,<right>` to `picocar/car1/cmd` (or your configured
+car ID), then `mapping` to verify. The MQTT build also streams barcode events,
+telemetry and heartbeat. It runs the same IR/motor controller as the UART
+build; sonar, servo and IMU remain inactive.

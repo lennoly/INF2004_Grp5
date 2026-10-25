@@ -1,0 +1,1543 @@
+This is information on a product in full production. 
+November 2013 DocID018771 Rev 2 1/42
+LSM303DLHC
+Ultra-compact high-performance eCompass module:
+ 3D accelerometer and 3D magnetometer
+Datasheet - production data
+Features
+ 3 magnetic field channels and 3 acceleration 
+channels
+ From ±1.3 to ±8.1 gauss magnetic field full 
+scale
+ ±2g/±4g/±8g/±16g linear acceleration full scale
+ 16-bit data output
+ I2C serial interface
+ Analog supply voltage 2.16 V to 3.6 V
+ Power-down mode / low-power mode
+ 2 independent programmable interrupt 
+generators for free-fall and motion detection
+ Embedded temperature sensor
+ Embedded FIFO
+ 6D/4D-orientation detection
+ ECOPACK® RoHS and “Green” compliant
+Applications
+ Tilt-compensated compasses
+ Map rotation
+ Position detection
+ Motion-activated functions
+ Free-fall detection
+ Click/double-click recognition
+ Pedometers
+ Intelligent power-saving for handheld devices
+ Display orientation
+ Gaming and virtual reality input devices
+ Impact recognition and logging
+ Vibration monitoring and compensation
+Description
+The LSM303DLHC is a system-in-package 
+featuring a 3D digital linear acceleration sensor 
+and a 3D digital magnetic sensor.
+The LSM303DLHC has linear acceleration full 
+scales of ±2g / ±4g / ±8g / ±16g and a magnetic 
+field full scale of ±1.3 / ±1.9 / ±2.5 / ±4.0 / ±4.7 / 
+±5.6 / ±8.1 gauss.
+The LSM303DLHC includes an I
+2C serial bus 
+interface that supports standard and fast mode 
+100 kHz and 400 kHz. The system can be 
+configured to generate interrupt signals by inertial 
+wake-up/free-fall events as well as by the position 
+of the device itself. Thresholds and timing of 
+interrupt generators are programmable by the end 
+user. Magnetic and accelerometer blocks can be 
+enabled or put into power-down mode separately.
+The LSM303DLHC is available in a plastic land 
+grid array package (LGA) and is guaranteed to 
+operate over an extended temperature range 
+from -40 °C to +85 °C. 
+LGA-14 (3x5x1mm) 
+Table 1. Device summary
+Part number Temperature 
+range [°C] Package Packing
+LSM303DLHC -40 to +85 LGA-14 Tray
+LSM303DLHCTR -40 to +85 LGA-14 Tape 
+and reel
+www.st.com
+Contents LSM303DLHC
+2/42 DocID018771 Rev 2
+Contents
+1 Block diagram and pin description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+1.1 Block diagram . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+1.2 Pin description  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+2 Module specifications . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+2.1 Sensor characteristics  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
+2.2 Temperature sensor characteristics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+2.3 Electrical characteristics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+2.4 Communication interfaces characteristics  . . . . . . . . . . . . . . . . . . . . . . . . 13
+2.4.1 Sensor I 2C - inter IC control interface  . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+2.5 Absolute maximum ratings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+2.6 Terminology  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+2.6.1 Linear acceleration sensitivity  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+2.6.2 Zero-g level  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3 Functionality  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.1 Factory calibration  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+4 Application hints . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+4.1 Capacitors  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+4.2 Pull-up resistors  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+4.3 Digital interface power supply  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+4.4 Soldering information . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+4.5 High-current wiring effects  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+5 Digital interfaces . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+5.1 I 2C serial interface  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+5.1.1 I 2C operation  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+5.1.2 Linear acceleration digital interface . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+5.1.3 Magnetic field digital interface . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+6 Register mapping  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+DocID018771 Rev 2 3/42
+LSM303DLHC Contents
+42
+7 Register description  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+7.1 Linear acceleration register description  . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+7.1.1 CTRL_REG1_A (20h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+7.1.2 CTRL_REG2_A (21h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+7.1.3 CTRL_REG3_A (22h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+7.1.4 CTRL_REG4_A (23h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+7.1.5 CTRL_REG5_A (24h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+7.1.6 CTRL_REG6_A (25h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+7.1.7 REFERENCE_A (26h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+7.1.8 STATUS_REG_A (27h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+7.1.9 OUT_X_L_A (28h), OUT_X_H_A (29h) . . . . . . . . . . . . . . . . . . . . . . . . . 29
+7.1.10 OUT_Y_L_A (2Ah), OUT_Y_H_A (2Bh)  . . . . . . . . . . . . . . . . . . . . . . . . 29
+7.1.11 OUT_Z_L_A (2Ch), OUT_Z_H_A (2Dh)  . . . . . . . . . . . . . . . . . . . . . . . . 29
+7.1.12 FIFO_CTRL_REG_A (2Eh) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+7.1.13 FIFO_SRC_REG_A (2Fh) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+7.1.14 INT1_CFG_A (30h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+7.1.15 INT1_SRC_A (31h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+7.1.16 INT1_THS_A (32h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+7.1.17 INT1_DURATION_A (33h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+7.1.18 INT2_CFG_A (34h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+7.1.19 INT2_SRC_A (35h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 33
+7.1.20 INT2_THS_A (36h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+7.1.21 INT2_DURATION_A (37h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+7.1.22 CLICK_CFG_A (38h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+7.1.23 CLICK_SRC_A (39h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+7.1.24 CLICK_THS_A (3Ah) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+7.1.25 TIME_LIMIT_A (3Bh) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+7.1.26 TIME_LATENCY_A (3Ch)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+7.1.27 TIME_WINDOW_A (3Dh)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+7.2 Magnetic field sensing register description  . . . . . . . . . . . . . . . . . . . . . . . 37
+7.2.1 CRA_REG_M (00h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+7.2.2 CRB_REG_M (01h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+7.2.3 MR_REG_M (02h) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+7.2.4 OUT_X_H_M (03), OUT_X_L_M (04h) . . . . . . . . . . . . . . . . . . . . . . . . . 39
+7.2.5 OUT_Z_H_M (05), OUT_Z_L_M (06h)  . . . . . . . . . . . . . . . . . . . . . . . . . 39
+7.2.6 OUT_Y_H_M (07), OUT_Y_L_M (08h) . . . . . . . . . . . . . . . . . . . . . . . . . 39
+7.2.7 SR_REG_M (09h)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39
+Contents LSM303DLHC
+4/42 DocID018771 Rev 2
+7.2.8 IRx_REG_M (0Ah/0Bh/0Ch)  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39
+7.2.9 TEMP_OUT_H_M (31h), TEMP_OUT_L_M (32h)  . . . . . . . . . . . . . . . . 39
+8 Package information . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40
+9 Revision history  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 41
+DocID018771 Rev 2 5/42
+LSM303DLHC List of tables
+42
+List of tables
+Table 1. Device summary . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . . 1
+Table 2. Pin description  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . . . . 9
+Table 3. Sensor characteristics. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . 10
+Table 4. Temperature sensor characteristics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 1
+Table 5. Electrical characteristics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . 12
+Table 6. I 2C slave timing values . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+Table 7. Absolute maximum ratings . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+Table 8. Accelerometer operating mode selection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+Table 9. Serial interface pin description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+Table 10. Serial interface pin description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 19
+Table 11. Transfer when master is writing one byte to slave . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+Table 12. Transfer when master is writing multiple bytes to slave:. . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+Table 13. Transfer when master is receiving (reading) one byte of data from slave: . . . . . . . . . . . . . 20
+Table 14. SAD+Read/Write patterns  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+Table 15. Transfer when master is receiving (reading) multiple bytes of data from slave . . . . . . . . . 21
+Table 16. SAD  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+Table 17. Register address map. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+Table 18. CTRL_REG1_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+Table 19. CTRL_REG1_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 5
+Table 20. Data rate configuration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 25
+Table 21. CTRL_REG2_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+Table 22. CTRL_REG2_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 6
+Table 23. High-pass filter mode configuration  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 6
+Table 24. CTRL_REG3_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+Table 25. CTRL_REG3_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 6
+Table 26. CTRL_REG4_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+Table 27. CTRL_REG4_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 7
+Table 28. CTRL_REG5_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 27
+Table 29. CTRL_REG5_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 7
+Table 30. CTRL_REG6_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+Table 31. CTRL_REG6_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 8
+Table 32. REFERENCE_A register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  .2 8
+Table 33. REFERENCE_A register description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+Table 34. STATUS_A register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+Table 35. STATUS_A register description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .2 9
+Table 36. FIFO_CTRL_REG_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 9
+Table 37. FIFO_CTRL_REG_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+Table 38. FIFO mode configuration  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+Table 39. FIFO_SRC_REG_A register. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+Table 40. INT1_CFG_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 30
+Table 41. INT1_CFG_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 30
+Table 42. Interrupt mode  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . . . 31
+Table 43. INT1_SRC_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 31
+Table 44. INT1_SRC_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 31
+Table 45. INT1_THS_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+Table 46. INT1_THS_A description  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 32
+Table 47. INT1_DURATION_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+Table 48. INT1_DURATION_A description. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 32
+List of tables LSM303DLHC
+6/42 DocID018771 Rev 2
+Table 49. INT2_CFG_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 32
+Table 50. INT2_CFG_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 32
+Table 51. Interrupt mode  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . . . 33
+Table 52. INT2_SRC_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 33
+Table 53. INT2_SRC_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 33
+Table 54. INT2_THS_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+Table 55. INT2_THS_A description  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 34
+Table 56. INT2_DURATION_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+Table 57. INT2_DURATION_A description. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+Table 58. CLICK_CFG_A register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 35
+Table 59. CLICK_CFG_A description. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  .3 5
+Table 60. CLICK_SRC_A register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 35
+Table 61. CLICK_SRC_A description. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  .3 5
+Table 62. CLICK_THS_A register. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+Table 63. CLICK_SRC_A description. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  .3 6
+Table 64. TIME_LIMIT_A register. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 36
+Table 65. TIME_LIMIT_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+Table 66. TIME_LATENCY_A register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+Table 67. TIME_LATENCY_A description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 36
+Table 68. TIME_WINDOW_A register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+Table 69. TIME_WINDOW_A description. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+Table 70. CRA_REG_M register. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 37
+Table 71. CRA_REG_M description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  .3 7
+Table 72. Data rate configurations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . 37
+Table 73. CRB_REG_M register. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+Table 74. CRB_REG_M description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  .3 8
+Table 75. Gain setting. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+Table 76. MR_REG_M register. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 38
+Table 77. MR_REG_M description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+Table 78. Magnetic sensor operating mode . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+Table 79. SR_REG_M register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 39
+Table 80. SR_REG_M description . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . 39
+Table 81. IRA_REG_M register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 39
+Table 82. IRB_REG_M register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 39
+Table 83. IRC_REG_M register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 39
+Table 84. TEMP_OUT_H_M register . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .3 9
+Table 85. TEMP_OUT_L_M register  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .3 9
+Table 86. TEMP_OUT resolution . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39
+Table 87. Document revision history. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . 41
+DocID018771 Rev 2 7/42
+LSM303DLHC List of figures
+42
+List of figures
+Figure 1. Block diagram . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .  . . . . . . . 8
+Figure 2. Pin connections  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+Figure 3. I 2C slave timing diagram  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13
+Figure 4. LSM303DLHC electrical connections . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+Figure 5. LGA-14: mechanical data and package dimensions. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40
+Block diagram and pin description LSM303DLHC
+8/42 DocID018771 Rev 2
+1 Block diagram and pin description
+1.1 Block diagram
+Figure 1. Block diagram
+Y+
+Z+
+Y-
+Z-
+X+
+X-
+MUX
+SDA
+SCL
+I (a) +
+-
+CHARGE
+AMPLIFIER
+Sensing Block Sensing Interface A/D Control 
+Logicconverter
+DI 
+I2C INT1
+INT2
+MUX
+I (M) +
+-
+CHARGEAMPLIFIER
+Y+
+Z+
+Y-
+Z-
+X+
+X-
+INTERRUPT GEN. CLOCK
+TRIMMING
+CIRCUITSREFERENCE
+OFFSET
+CIRCUITS
+BUILT-IN 
+CIRCUITS
+SET/RESET TEMPERATUREFIFO SENSOR
+AM09236V1
+DocID018771 Rev 2 9/42
+LSM303DLHC Block diagram and pin description
+42
+1.2 Pin description
+Figure 2. Pin connections
+Table 2. Pin description
+Pin# Name Function
+1 Vdd_IO Power supply for I/O pins
+2 SCL Signal interface I 2C serial clock (SCL)
+3 SDA Signal interface I 2C serial data (SDA)
+4 INT2 Inertial interrupt 2
+5 INT1 Inertial interrupt 1
+6 C1 Reserved capacitor connection (C1)
+7 GND 0 V supply
+8 Reserved Leave unconnected
+9 DRDY Data ready
+10 Reserved Connect to GND
+11 Reserved Connect to GND
+12 SETP S/R capacitor connection (C2)
+13 SETC S/R capacitor connection (C2)
+14 Vdd Power supply
+DIRECTION OF
+DETECTABLE
+MAGNETIC FIELDS
+DIRECTION OF
+DETECTABLE
+ACCELERATIONS
+1
+13 8
+6
+1
+BOTTOM VIEW
+13
+8
+6
+TOP VIEW
+X
+Z
+Y
+1
+13
+8
+6
+TOP VIEW
+X
+Z
+Y
+AM09237V1
+Module specifications LSM303DLHC
+10/42 DocID018771 Rev 2
+2 Module specifications
+2.1 Sensor characteristics
+@ Vdd = 2.5 V, T = 25 °C unless otherwise noted(a).
+a. The product is factory calibrated at 2.5 V. The operational power supply range is from 2.16 V to 3.6 V.
+Table 3. Sensor characteristics 
+Symbol Parameter Test conditions Min. Typ. (1) Max. Unit
+LA_FS Linear acceleration 
+measurement range(2)
+FS bit set to 00 ±2
+g
+FS bit set to 01 ±4
+FS bit set to 10 ±8
+FS bit set to 11 ±16
+M_FS Magnetic measurement range
+GN bits set to 001 ±1.3
+gauss
+GN bits set to 010 ±1.9
+GN bits set to 011 ±2.5
+GN bits set to 100 ±4.0
+GN bits set to 101 ±4.7
+GN bits set to 110 ±5.6
+GN bits set to 111 ±8.1
+LA_So Linear acceleration sensitivity
+FS bit set to 00 1
+mg/LSB
+FS bit set to 01 2
+FS bit set to 10 4
+FS bit set to 11 12
+M_GN Magnetic gain setting
+GN bits set to 001 (X,Y) 1100
+LSB/
+gauss
+GN bits set to 001 (Z) 980
+GN bits set to 010 (X,Y) 855
+GN bits set to 010 (Z) 760
+GN bits set to 011 (X,Y) 670
+GN bits set to 011 (Z) 600
+GN bits set to 100 (X,Y) 450
+GN bits set to 100 (Z) 400
+GN bits set to 101 (X,Y) 400
+GN bits set to 101 (Z) 355
+GN bits set to 110 (X,Y) 330
+GN bits set to 110 (Z) 295
+GN bits set to 111
+(2) (X,Y) 230
+GN bits set to 111(2) (Z) 205
+DocID018771 Rev 2 11/42
+LSM303DLHC Module specifications
+42
+2.2 Temperature sensor characteristics
+@ Vdd = 2.5 V, T = 25 °C unless otherwise noted (b).
+LA_TCSo Linear acceleration sensitivity 
+change vs. temperature FS bit set to 00 ±0.01 %/°C
+LA_TyOff
+Linear acceleration typical 
+Zero-g level offset 
+accuracy(3),(4)
+FS bit set to 00 ±60 m g
+LA_TCOff Linear acceleration Zero-g 
+level change vs. temperature Max delta from 25 °C ±0.5 m g/°C
+LA_An Acceleration noise density
+FS bit set to 00, normal 
+mode(Table 8.), ODR bit 
+set to 1001
+220
+M_R Magnetic resolution 2 mgauss
+M_CAS Magnetic cross-axis sensitivity Cross field = 0.5 gauss
+H applied = ±3 gauss ±1 %FS/
+gauss
+M_EF Maximum exposed field No permanent effect on 
+sensor performance 10000 gauss
+M_DF Magnetic disturbance field
+Sensitivity starts to 
+degrade. Use S/R pulse to 
+restore sensitivity
+20 gauss
+Top Operating temperature range -40 +85 °C
+1. Typical specifications are not guaranteed.
+2. Verified by wafer level test and measurement of initial offset and sensitivity.
+3. Typical Zero-g level offset value after MSL3 preconditioning.
+4. Offset can be eliminated by enabling the built-in high-pass filter.
+Table 3. Sensor characteristics (continued)
+Symbol Parameter Test conditions Min. Typ. (1) Max. Unit
+ug Hz
+b. The product is factory calibrated at 2.5 V.
+Table 4. Temperature sensor characteristics
+Symbol Parameter Test condition Min. Typ. (1) Max. Unit
+TSDr Temperature sensor output 
+change vs. temperature
+-
+8 LSB/°C (2)
+TODR Temperature refresh rate ODR (3) Hz
+Top Operating temperature range -40 +85 °C
+1. Typical specifications are not guaranteed.
+2. 12-bit resolution.
+3. For ODR configuration refer to Table 72.
+Module specifications LSM303DLHC
+12/42 DocID018771 Rev 2
+2.3 Electrical characteristics
+@ Vdd = 2.5 V, T = 25 °C unless otherwise noted.
+Table 5. Electrical characteristics
+Symbol Parameter Test 
+conditions Min. Typ. (1) Max. Unit
+Vdd Supply voltage
+-
+2.16 3.6 V
+Vdd_IO Module power supply for I/O 1.71 1.8 Vdd+0.1
+Idd Current consumption in normal 
+mode(2) 110 μA
+IddSL Current consumption in 
+sleep-mode(3) 1 μA
+Top Operating temperature range -40 +85 °C
+1. Typical specifications are not guaranteed.
+2. Magnetic sensor setting ODR = 7.5 Hz, Accelerometer sensor ODR = 50 Hz.
+3. Linear accelerometer in sleep-mode and magnetic sensor in power-down mode.
+DocID018771 Rev 2 13/42
+LSM303DLHC Module specifications
+42
+2.4 Communication interfaces characteristics
+External pull-up resistors are required to support I2C standard and fast speed modes. 
+2.4.1 Sensor I 2C - inter IC control interface
+Subject to general operating conditions for Vdd and Top.
+           
+Figure 3. I2C slave timing diagram 
+Note: Measurement points are done at 0.2·Vdd_IO and 0.8·Vdd_IO, for both ports.
+Table 6. I2C slave timing values 
+Symbol Parameter
+I2C standard mode (1) I2C fast mode (1)
+Unit
+Min. Max. Min. Max.
+f(SCL) SCL clock frequency 0 100 0 400 kHz
+tw(SCLL) SCL clock low time 4.7 1.3
+μs
+tw(SCLH) SCL clock high time 4.0 0.6
+tsu(SDA) SDA setup time 250 100 ns
+th(SDA) SDA data hold time 0.01 3.45 0.01 0.9 μs
+tr(SDA) tr(SCL) SDA and SCL rise time 1000 20 + 0.1Cb
+(2) 300
+ns
+tf(SDA) tf(SCL) SDA and SCL fall time 300 20 + 0.1Cb
+(2) 300
+th(ST) START condition hold time 4 0.6
+μs
+tsu(SR)
+Repeated START condition 
+setup time 4.7 0.6
+tsu(SP) STOP condition setup time 4 0.6
+tw(SP:SR)
+Bus free time between STOP 
+and START condition 4.7 1.3
+1. Data based on standard I 2C protocol requirement, not tested in production.
+2. C b = total capacitance of one bus line, in pF.
+SDA 
+SCL 
+tf(SDA)
+tsu(SP)
+tw(SCLL)
+tsu(SDA)tr(SDA)
+tsu(SR)
+th(ST) tw(SCLH)
+th(SDA)
+tr(SCL) tf(SCL)
+tw(SP:SR)
+START 
+REPEATED
+START
+STOP
+START
+AM09238V1
+Module specifications LSM303DLHC
+14/42 DocID018771 Rev 2
+2.5 Absolute maximum ratings
+Stresses above those listed as “absolute maximum ratings” may cause permanent damage 
+to the device. This is a stress rating only and functional operation of the device under these 
+conditions is not implied. Exposure to maximum rating conditions for extended periods may 
+affect device reliability.
+           
+Table 7. Absolute maximum ratings
+Symbol Ratings Maximum value Unit
+Vdd Supply voltage -0.3 to 4.8 V
+Vdd_IO I/O pins supply voltage -0.3 to 4.8 V
+Vin Input voltage on any control pin (SCL, SDA)  -0.3 to Vdd_IO +0.3 V
+APOW Acceleration (any axis, powered, Vdd = 2.5 V)
+3,000 for 0.5 ms g
+10,000 for 0.1 ms g
+AUNP Acceleration (any axis, unpowered)
+3,000 for 0.5 ms g
+10,000 for 0.1 ms g
+TOP Operating temperature range -40 to +85 °C
+TSTG Storage temperature range -40 to +125 °C
+ESD Electrostatic discharge protection 2 (HBM) kV
+This device is sensitive to mechanical shock, improper handling can cause 
+permanent damage to the part.
+This device is sensitive to electrostatic discharge (ESD), improper handling can 
+cause permanent damage to the part.
+
+DocID018771 Rev 2 15/42
+LSM303DLHC Module specifications
+42
+2.6 Terminology
+2.6.1 Linear acceleration sensitivity
+Linear acceleration sensitivity describes the gain of the accelerometer sensor and can be 
+determined by applying 1 g acceleration to it. As the sensor can measure DC accelerations, 
+this can be done easily by pointing the axis of interest towards the center of the Earth, 
+noting the output value, rotating the sensor by 180 degrees (pointing to the sky) and noting 
+the output value again. By doing so, ±1 g acceleration is applied to the sensor. Subtracting 
+the larger output value from the smaller one, and dividing the result by 2, leads to the actual 
+sensitivity of the sensor. This value changes very little over temperature and also very little 
+over time. The sensitivity tolerance describes the range of sensitivities of a large population 
+of sensors.
+2.6.2 Zero-g level
+Zero-g level offset (TyOff) describes the deviation of an actual output signal from the ideal 
+output signal if no acceleration is present. A sensor in a steady-state on a horizontal surface 
+measures 0 g on the X axis and 0 g on the Y axis whereas the Z axis measures 1 g. The 
+output is ideally in the middle of the dynamic range of the sensor (content of OUT registers 
+00h, data expressed as two’s complement number). A deviation from the ideal value in this 
+case is called Zero-g offset. Offset is, to some extent, a result of stress to the MEMS sensor 
+and therefore the offset can slightly change after mounting the sensor onto a printed circuit 
+board or exposing it to extensive mechanical stress. Offset changes little over temperature, 
+see “Zero-g level change vs. temperature”. The Zero-g level tolerance (TyOff) describes the 
+standard deviation of the range of Zero-g levels of a population of sensors. 
+Functionality LSM303DLHC
+16/42 DocID018771 Rev 2
+3 Functionality
+The LSM303DLHC is a system-in-package featuring a 3D digital linear acceleration and 3D 
+digital magnetic field detection sensor.
+The system includes specific sensing elements and an IC interface capable of measuring 
+both the linear acceleration and magnetic field applied to it and providing a signal to the 
+external world through an I
+2C serial interface with separated digital output.
+The sensing system is manufactured using specialized micromachining processes, while 
+the IC interfaces are manufactured using CMOS technology that allows designing a 
+dedicated circuit which is trimmed to better match the sensing element characteristics.
+The LSM303DLHC features two data-ready signals (RDY) which indicate when a new set of 
+measured acceleration data and magnetic data are available, therefore simplifying data 
+synchronization in the digital system that uses the device.
+The LSM303DLHC may also be configured to generate a free-fall interrupt signal according 
+to a programmed acceleration event along the enabled axes. 
+Linear acceleration operating mode
+The LSM303DLHC provides two different acceleration operating modes: “normal mode” and 
+“low-power mode”. While normal mode guarantees high resolution, low-power mode further 
+reduces current consumption.
+Table 8 summarizes how to select the operating mode.
+3.1 Factory calibration
+The IC interface is factory calibrated for linear acceleration sensitivity (LA_So), and linear
+acceleration Zero-g level (LA_TyOff).
+The trim values are stored inside the device in nonvolatile memory. Any time the device is
+turned on, the trimming parameters are downloaded into the registers to be used during
+normal operation. This allows the user to use the device without further calibration.
+Table 8. Accelerometer operating mode selection
+Operating mode CTRL_REG1[3]
+(LPen bit)
+CTRL_REG4[3]
+(HR bit)
+BW 
+[Hz]
+Turn-on time 
+[ms]
+Low-power mode 1 0 ODR/2 1
+Normal mode 0 1 ODR/9 7/ODR
+DocID018771 Rev 2 17/42
+LSM303DLHC Application hints
+42
+4 Application hints
+Figure 4. LSM303DLHC electrical connections
+4.1 Capacitors
+The C1 and C2 external capacitors should be low SR value ceramic type constructions (typ. 
+recommended value 200 mOhm). Reservoir capacitor C1 is nominally 4.7 μF in 
+capacitance, with the set/reset capacitor C2 nominally 0.22 F in capacitance.
+The device core is supplied through the Vdd line. Power supply decoupling capacitors 
+(C4 = 100 nF ceramic, C3 = 10 μF Al) should be placed as near as possible to the supply 
+pin of the device (common design practice). All the voltage and ground supplies must be 
+present at the same time to have proper behavior of the IC (refer to Figure 4).
+The functionality of the device and the measured acceleration/magnetic field data are 
+selectable and accessible through the I
+2C interface.
+The functions, the threshold, and the timing of the two interrupt pins (INT1 and INT2) can be 
+completely programmed by the user through the I2C interface.
+4.2 Pull-up resistors
+Pull-up resistors (recommended value 10 kOhm) are placed on the two I2C bus lines.
+TOP VIEW
+Vdd_IO
+INT2
+INT1
+6 1
+SCL
+SDA
+C1
+C1=4.7uF
+GND
+8 13
+C2=0.22uF
+Vdd
+C4 = 100nF
+C3 = 10uF
+Digital signal from/to signal controller.Signals levels are defined by proper selection of Vdd
+Vdd I2C bus
+Rpu Rpu
+10kOhm10kOhm1
+13
+8
+6
+TOP VIEW
+X
+Z
+Y
+1
+13
+8
+6
+TOP VIEW
+X
+Z
+Y
+DRDY
+AM09239V1
+Application hints LSM303DLHC
+18/42 DocID018771 Rev 2
+4.3 Digital interface power supply
+This digital interface, dedicated to the linear acceleration and to the magnetic field signal, is
+capable of operating with a standard power supply (Vdd) or using a dedicated power supply
+(Vdd_IO).
+4.4 Soldering information
+The LGA package is compliant with the ECOPACK®, RoHS, and “Green” standard. 
+It is qualified for soldering heat resistance according to JEDEC J-STD-020.
+Leave “Pin 1 Indicator” unconnected during soldering.
+Land pattern and soldering recommendations are available at 
+www.st.com/mems.
+4.5 High-current wiring effects
+High current in the wiring and printed circuit traces can be culprits in causing errors in
+magnetic field measurements for compassing.
+Conductor-generated magnetic fields add to the Earth’s magnetic field, causing errors in
+compass-heading computation.
+Keep currents higher than 10 mA a few millimeters further away from the sensor IC.
+DocID018771 Rev 2 19/42
+LSM303DLHC Digital interfaces
+42
+5 Digital interfaces
+The registers embedded inside the LSM303DLHC are accessible through two separate I2C 
+serial interfaces, one for the accelerometer core and one for the magnetometer core.
+5.1 I 2C serial interface
+The LSM303DLHC I2C is a bus slave. The I2C is employed to write the data into the 
+registers whose content can also be read back.
+The relevant I2C terminology is given in the table below.
+There are two signals associated with the I2C bus, the serial clock line (SCL) and the serial 
+data line (SDA). The latter is a bidirectional line used for sending and receiving the data 
+to/from the interface.
+Table 9. Serial interface pin description
+Pin name Pin description
+SCL I 2C serial clock (SCL)
+SDA I 2C serial data (SDA)
+Table 10. Serial interface pin description
+Term Description
+Transmitter The device which sends data to the bus
+Receiver The device which receives data from the bus
+Master The device which initiates a transfer, generates clock signals, and terminates a 
+transfer
+Slave The device addressed by the master
+Digital interfaces LSM303DLHC
+20/42 DocID018771 Rev 2
+5.1.1 I 2C operation
+The transaction on the bus is started through a START (ST) signal. A START condition is 
+defined as a high-to-low transition on the data line while the SCL line is held high. After this 
+has been transmitted by the master, the bus is considered busy. The next byte of data 
+transmitted after the start condition contains the address of the slave in the first 7 bits and bit 
+8 tells whether the master is receiving data from the slave or transmitting data to the slave. 
+When an address is sent, each device in the system compares the first seven bits after a 
+start condition with its address. If they match, the device considers itself addressed by the 
+master. 
+Data transfer with acknowledge is mandatory. The transmitter must release the SDA line 
+during the acknowledge pulse. The receiver must then pull the data line low so that it 
+remains stable low during the high period of the acknowledge clock pulse. A receiver which 
+has been addressed is obliged to generate an acknowledge after each byte of data 
+received.
+The I
+2C embedded inside the LSM303DLHC behaves like a slave device and the following 
+protocol must be adhered to. After the START condition (ST) a slave address is sent, once a 
+slave acknowledge (SAK) has been returned, an 8-bit sub-address (SUB) is transmitted; the 
+7 LSBs represent the actual register address while the MSB enables address auto-
+increment. If the MSB of the SUB field is ‘1’, the SUB (register address) is automatically 
+increased to allow multiple data Read/Write.
+Data are transmitted in byte format (DATA). Each data transfer contains 8 bits. The number 
+of bytes transferred per transfer is unlimited. Data is transferred with the most significant bit 
+(MSB) first. If a receiver can’t receive another complete byte of data until it has performed 
+some other function, it can hold the clock line SCL low to force the transmitter into a wait 
+state. Data transfer only continues when the receiver is ready for another byte and releases 
+the data line. If a slave receiver doesn’t acknowledge the slave address (i.e. it is not able to 
+receive because it is performing some real-time function) the data line must be left high by 
+the slave. The master can then abort the transfer. A low-to-high transition on the SDA line 
+while the SCL line is high is defined as a STOP condition. Each data transfer must be 
+terminated by the generation of a STOP (SP) condition.
+Table 11. Transfer when master is writing one byte to slave
+Master ST SAD + W SUB DATA SP
+Slave SAK SAK SAK
+Table 12. Transfer when master is writing multiple bytes to slave:
+Master ST SAD + W SUB DATA DATA SP
+Slave SAK SAK SAK SAK
+Table 13. Transfer when master is receiving (reading) one byte of data from slave:
+Master ST SAD + W SUB SR SAD + R NMAK SP
+Slave SAK SAK SAK DATA
+DocID018771 Rev 2 21/42
+LSM303DLHC Digital interfaces
+42
+5.1.2 Linear acceleration digital interface
+For linear acceleration the default (factory) 7-bit slave address is 0011001b. 
+The slave address is completed with a Read/Write bit. If the bit is ‘1’ (read), a repeated 
+START (SR) condition must be issued after the two sub-address bytes; if the bit is ‘0’ (write) 
+the master transmits to the slave with the direction unchanged. Table 14 explains how the 
+read/write bit pattern is composed, listing all the possible configurations.
+In order to read multiple bytes, it is necessary to assert the most significant bit of the sub-
+address field. In other words, SUB(7) must be equal to 1 while SUB(6-0) represents the 
+address of the first register to be read.
+In the presented communication format, MAK is master acknowledge and NMAK is no 
+master acknowledge.
+ 
+Table 14. SAD+Read/Write patterns
+Command SAD[7:1] R/W SAD+R/W
+Read 0011001 1 00110011 (33h)
+Write 0011001 0 00110010 (32h)
+Table 15. Transfer when master is receiving (reading) multiple bytes of data from slave
+Master ST SAD
++W SUB SR SAD
++R MAK MAK NMAK SP
+Slave SAK SAK SAK DATA DATA DATA
+Digital interfaces LSM303DLHC
+22/42 DocID018771 Rev 2
+5.1.3 Magnetic field digital interface
+For magnetic sensors the default (factory) 7-bit slave address is 0011110xb. 
+The slave address is completed with a Read/Write bit. If the bit is ‘1’ (read), a repeated 
+START (SR) condition must be issued after the two sub-address bytes. If the bit is ‘0’ (write) 
+the master transmits to the slave with the direction unchanged. Table 16 explains how the 
+SAD is composed.
+Magnetic signal interface reading/writing
+The interface uses an address pointer to indicate which register location is to be read from 
+or written to. These pointer locations are sent from the master to this slave device and 
+succeed the 7-bit address plus 1 bit Read/Write identifier.
+To minimize the communication between the master and magnetic digital interface of 
+LSM303DLHC, the address pointer updates automatically without master intervention. 
+This automatic address pointer update has two additional features. First, when address 12 
+or higher is accessed, the pointer updates to address 00, and secondly, when address 08 is 
+reached, the pointer rolls back to address 03. Logically, the address pointer operation 
+functions as shown below.
+If (address pointer = 08) then the address pointer = 03
+Or else, if (address pointer >= 12) then the address pointer = 0
+Or else, (address pointer) = (address pointer) + 1
+The address pointer value itself cannot be read via the I
+2C bus.
+Any attempt to read an invalid address location returns 0, and any write to an invalid 
+address location, or an undefined bit within a valid address location, is ignored by this 
+device. 
+Table 16. SAD
+Command SAD[6:0] R/W SAD+R/W
+Read 0011110 1 00111101 (3Dh)
+Write 0011110 0 00111100 (3Ch)
+DocID018771 Rev 2 23/42
+LSM303DLHC Register mapping
+42
+6 Register mapping
+Table 17 provides a listing of the 8-bit registers embedded in the device and the 
+corresponding addresses:
+Table 17. Register address map 
+Name Slave 
+address Type
+Register address
+Default Comment
+Hex Binary
+Reserved (do not modify) Table 14 00 - 1F -- -- Reserved
+CTRL_REG1_A Table 14 rw 20 010 0000 00000111
+CTRL_REG2_A Table 14 rw 21 010 0001 00000000
+CTRL_REG3_A Table 14 rw 22 010 0010 00000000
+CTRL_REG4_A Table 14 rw 23 010 0011 00000000
+CTRL_REG5_A Table 14 rw 24 010 0100 00000000
+CTRL_REG6_A Table 14 rw 25 010 0101 00000000
+REFERENCE_A Table 14 rw 26 010 0110 00000000
+STATUS_REG_A Table 14 r 27 010 0111 00000000
+OUT_X_L_A Table 14 r 28 010 1000 output
+OUT_X_H_A Table 14 r 29 010 1001 output
+OUT_Y_L_A Table 14 r 2A 010 1010 output
+OUT_Y_H_A Table 14 r 2B 010 1011 output
+OUT_Z_L_A Table 14 r 2C 010 1100 output
+OUT_Z_H_A Table 14 r 2D 010 1101 output
+FIFO_CTRL_REG_A Table 14 rw 2E 010 1110 00000000
+FIFO_SRC_REG_A Table 14 r 2F 010 1111
+INT1_CFG_A Table 14 rw 30 011 0000 00000000
+INT1_SRC_A Table 14 r 31 011 0001 00000000
+INT1_THS_A Table 14 rw 32 011 0010 00000000
+INT1_DURATION_A Table 14 rw 33 011 0011 00000000
+INT2_CFG_A Table 14 rw 34 011 0100 00000000
+INT2_SRC_A Table 14 r 35 011 0101 00000000
+INT2_THS_A Table 14 rw 36 011 0110 00000000
+INT2_DURATION_A Table 14 rw 37 011 0111 00000000
+CLICK_CFG_A Table 14 rw 38 011 1000 00000000
+CLICK_SRC_A Table 14 rw 39 011 1001 00000000
+CLICK_THS_A Table 14 rw 3A 011 1010 00000000
+Register mapping LSM303DLHC
+24/42 DocID018771 Rev 2
+Registers marked as “Reserved” must not be changed. Writing to these registers may cause 
+permanent damage to the device.
+The content of the registers that are loaded at boot should not be changed. They contain the 
+factory calibrated values. Their content is automatically restored when the device is 
+powered up.
+TIME_LIMIT_A Table 14 rw 3B 011 1011 00000000
+TIME_LATENCY_A Table 14 rw 3C 011 1100 00000000
+TIME_WINDOW_A Table 14 rw 3D 011 1101 00000000
+Reserved (do not modify) Table 14 3E-3F -- -- Reserved
+CRA_REG_M Table 16 rw 00 00000000 0001000
+CRB_REG_M Table 16 rw 01 00000001 0010000
+MR_REG_M Table 16 rw 02 00000010 00000011
+OUT_X_H_M Table 16 r 03 00000011 output
+OUT_X_L_M Table 16 r 04 00000100 output
+OUT_Z_H_M Table 16 r 05 00000101 output
+OUT_Z_L_M Table 16 r 06 00000110 output
+OUT_Y_H_M Table 16 r 07 00000111 output
+OUT_Y_L_M Table 16 r 08 00001000 output
+SR_REG_M Table 16 r 09 00001001 00000000
+IRA_REG_M Table 16 r 0A 00001010 01001000
+IRB_REG_M Table 16 r 0B 00001011 00110100
+IRC_REG_M Table 16 r 0C 00001100 00110011
+Reserved (do not modify) Table 16 0D-30 -- -- Reserved
+TEMP_OUT_H_M Table 16 31 00000000 output
+TEMP_OUT_L_M Table 16 32 00000000 output
+Reserved (do not modify) Table 16 33-3A -- -- Reserved
+Table 17. Register address map (continued)
+Name Slave 
+address Type
+Register address
+Default Comment
+Hex Binary
+DocID018771 Rev 2 25/42
+LSM303DLHC Register description
+42
+7 Register description
+The device contains a set of registers which are used to control its behavior and to retrieve 
+acceleration data. The register address, made up of 7 bits, is used to identify them and to 
+write the data through the serial interface.
+7.1 Linear acceleration register description
+7.1.1 CTRL_REG1_A (20h)
+          
+          
+ODR[3:0] is used to set the power mode and ODR selection. In the following table bit 
+selection of ODR [3:0] for all frequencies is shown.
+          
+Table 18. CTRL_REG1_A register
+ODR3 ODR2 ODR1 ODR0 LPen Zen Yen Xen
+Table 19. CTRL_REG1_A description 
+ODR[3:0] Data rate selection. Default value: 0000
+(0000: power-down, others: refer to Table 20)
+LPen Low-power mode enable. Default value: 0
+(0: normal mode, 1: low-power mode)
+Zen Z-axis enable. Default value: 1
+(0: Z-axis disabled, 1: Z-axis enabled)
+Yen Y-axis enable. Default value: 1
+(0: Y-axis disabled, 1: Y-axis enabled)
+Xen X-axis enable. Default value: 1
+(0: X-axis disabled, 1: X-axis enabled)
+Table 20. Data rate configuration 
+ODR3 ODR2 ODR1 ODR0 Power mode and ODR selection
+0 0 0 0 Power-down mode
+0 0 0 1 Normal / low-power mode (1 Hz)
+0 0 1 0 Normal / low-power mode (10 Hz)
+0 0 1 1 Normal / low-power mode (25 Hz)
+0 1 0 0 Normal / low-power mode (50 Hz)
+0 1 0 1 Normal / low-power mode (100 Hz)
+0 1 1 0 Normal / low-power mode (200 Hz)
+0 1 1 1 Normal / low-power mode (400 Hz)
+1 0 0 0 Low-power mode (1.620 kHz)
+1 0 0 1 Normal (1.344 kHz) / low-power mode (5.376 kHz)
+Register description LSM303DLHC
+26/42 DocID018771 Rev 2
+7.1.2 CTRL_REG2_A (21h)
+7.1.3 CTRL_REG3_A (22h)  
+ 
+Table 21. CTRL_REG2_A register
+HPM1 HPM0 HPCF2 HPCF1 FDS HPCLICK HPIS2 HPIS1
+Table 22. CTRL_REG2_A description
+HPM[1:0] High-pass filter mode selection. Default value: 00
+(refer to Table 23)
+HPCF[2:1] High-pass filter cutoff frequency selection
+FDS
+Filtered data selection. Default value: 0
+(0: internal filter bypassed, 1: data from internal filter sent to output register and 
+FIFO)
+HPCLICK High-pass filter enabled for click function
+(0: filter bypassed, 1: filter enabled)
+HPIS2 High-pass filter enabled for AOI function on Interrupt 2 
+(0: filter bypassed, 1: filter enabled)
+HPIS1 High-pass filter enabled for AOI function on Interrupt 1 
+(0: filter bypassed, 1: filter enabled)
+Table 23. High-pass filter mode configuration
+HPM1 HPM0 High-pass filter mode
+0 0 Normal mode (reset reading HP_RESET_FILTER)
+0 1 Reference signal for filtering
+1 0 Normal mode
+1 1 Autoreset on interrupt event
+Table 24. CTRL_REG3_A register
+I1_CLICK I1_AOI1 I1_AOI2 I1_DRDY1 I1_DRDY2 I1_WTM I1_OVERRUN --
+Table 25. CTRL_REG3_A description 
+I1_CLICK CLICK interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+I1_AOI1 AOI1 interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+I1_AOI2 AOI2 interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+DocID018771 Rev 2 27/42
+LSM303DLHC Register description
+42
+7.1.4 CTRL_REG4_A (23h)
+           
+          
+7.1.5 CTRL_REG5_A (24h)
+           
+          
+I1_DRDY1 DRDY1 interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+I1_DRDY2 DRDY2 interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+I1_WTM FIFO watermark interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+I1_OVERRUN FIFO overrun interrupt on INT1. Default value 0
+(0: disable, 1: enable)
+Table 25. CTRL_REG3_A description (continued)
+Table 26. CTRL_REG4_A register
+BDU BLE FS1 FS0 HR 0 (1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+0(1) SIM
+Table 27. CTRL_REG4_A description 
+BDU Block data update. Default value: 0
+(0: continuous update, 1: output registers not updated until MSB and LSB 
+have been read
+BLE Big/little endian data selection. Default value 0.
+(0: data LSB @ lower address, 1: data MSB @ lower address)
+FS[1:0] Full-scale selection. Default value: 00
+(00: ±2 g, 01: ±4 g, 10: ±8 g, 11: ±16 g)
+HR High-resolution output mode: Default value: 0
+(0: high-resolution disable, 1: high-resolution enable)
+SIM SPI serial interface mode selection. Default value: 0
+(0: 4-wire interface, 1: 3-wire interface).
+Table 28. CTRL_REG5_A register
+BOOT FIFO_EN -- -- LIR_INT1 D4D_INT1 LIR_INT2 D4D_INT2
+Table 29. CTRL_REG5_A description 
+BOOT Reboot memory content. Default value: 0
+(0: normal mode, 1: reboot memory content)
+FIFO_EN FIFO enable. Default value: 0
+(0: FIFO disable, 1: FIFO enable)
+LIR_INT1 Latch interrupt request on INT1_SRC register, with INT1_SRC register cleared by 
+reading INT1_SRC itself. Default value: 0.
+(0: interrupt request not latched, 1: interrupt request latched)
+D4D_INT1 4D enable: 4D detection is enabled on INT1 when 6D bit on INT1_CFG is set to 1.
+Register description LSM303DLHC
+28/42 DocID018771 Rev 2
+7.1.6 CTRL_REG6_A (25h)
+ 
+7.1.7 REFERENCE_A (26h)
+          
+7.1.8 STATUS_REG_A (27h)
+ 
+LIR_INT2 Latch interrupt request on INT2_SRC register, with INT2_SRC register cleared by 
+reading INT2_SRC itself. Default value: 0.
+(0: interrupt request not latched, 1: interrupt request latched)
+D4D_INT2 4D enable: 4D detection is enabled on INT2 when 6D bit on INT2_CFG is set to 1.
+Table 29. CTRL_REG5_A description (continued)
+Table 30. CTRL_REG6_A register
+I2_CLICKen I2_INT1 I2_INT2 BOOT_I1 P2_ACT - - H_LACTIVE --
+Table 31. CTRL_REG6_A description 
+I2_CLICKen CLICK interrupt on PAD2. Default value 0.
+(0: disable, 1: enable)
+I2_INT1 Interrupt 1 on PAD2. Default value 0.
+(0: disable, 1: enable)
+I2_INT2 Interrupt 2 on PAD2. Default value 0.
+(0: disable, 1: enable)
+BOOT_I1 Reboot memory content on PAD2. Default value: 0
+(0: disable, 1: enable)
+P2_ACT Active function status on PAD2. Default value 0
+(0: disable, 1: enable)
+H_LACTIVE Interrupt active high, low. Default value 0.
+(0: active high, 1: active low)
+Table 32. REFERENCE_A register
+Ref7 Ref6 Ref5 Ref4 Ref3 Ref2 Ref1 Ref0
+Table 33. REFERENCE_A register description 
+Ref[7:0] Reference value for interrupt generation. Default value: 0000 0000
+Table 34. STATUS_A register
+ZYXOR ZOR YOR XOR ZYXDA ZDA YDA XDA
+DocID018771 Rev 2 29/42
+LSM303DLHC Register description
+42
+          
+7.1.9 OUT_X_L_A (28h), OUT_X_H_A (29h)
+X-axis acceleration data. The value is expressed in two’s complement.
+7.1.10 OUT_Y_L_A (2Ah), OUT_Y_H_A (2Bh)
+Y-axis acceleration data. The value is expressed in two’s complement.
+7.1.11 OUT_Z_L_A (2Ch), OUT_Z_H_A (2Dh)
+Z-axis acceleration data. The value is expressed in two’s complement.
+7.1.12 FIFO_CTRL_REG_A (2Eh)
+          
+          
+Table 35. STATUS_A register description 
+ZYXOR X-, Y-, and Z-axis data overrun. Default value: 0
+(0: no overrun has occurred, 1: a new set of data has overwritten the previous data)
+ZOR Z-axis data overrun. Default value: 0
+(0: no overrun has occurred, 1: new data for the Z-axis has overwritten the previous data)
+YOR Y-axis data overrun. Default value: 0
+(0: no overrun has occurred, 
+1: new data for the Y-axis has overwritten the previous data)
+XOR X-axis data overrun. Default value: 0
+(0: no overrun has occurred, 
+1: new data for the X-axis has overwritten the previous data)
+ZYXDA X-, Y-, and Z-axis new data available. Default value: 0
+(0: a new set of data is not yet available, 1: a new set of data is available)
+ZDA Z-axis new data available. Default value: 0
+(0: new data for the Z-axis is not yet available, 
+1: new data for the Z-axis is available)
+YDA Y-axis new data available. Default value: 0
+(0: new data for the Y-axis is not yet available, 
+1: new data for the Y-axis is available)
+XDA X-axis new data available. Default value: 0
+(0: new data for the X-axis is not yet available, 
+1: new data for the X-axis is available)
+Table 36. FIFO_CTRL_REG_A register
+FM1 FM0 TR FTH4 FTH3 FTH2 FTH1 FTH0
+Table 37. FIFO_CTRL_REG_A description 
+FM[1:0] FIFO mode selection. Default value: 00 (see Table 38)
+TR Trigger selection. Default value: 0
+0: trigger event linked to trigger signal on INT1 
+1: trigger event linked to trigger signal on INT2
+FTH[4:0] Default value: 00000
+Register description LSM303DLHC
+30/42 DocID018771 Rev 2
+7.1.13 FIFO_SRC_REG_A (2Fh)
+7.1.14 INT1_CFG_A (30h)
+Content of this register is loaded at boot. Write operation at this address is possible only 
+after system boot.
+Table 38. FIFO mode configuration
+FM1 FM0 FIFO mode configuration
+0 0 Bypass mode
+0 1 FIFO mode
+1 0 Stream mode
+1 1 Trigger mode
+Table 39. FIFO_SRC_REG_A register
+WTM OVRN_FIFO EMPTY FSS4 FSS3 FSS2 FSS1 FSS0
+Table 40. INT1_CFG_A register
+AOI 6D ZHIE/
+ZUPE
+ZLIE/
+ZDOWNE
+YHIE/
+YUPE
+YLIE/
+YDOWNE
+XHIE/
+XUPE
+XLIE/
+XDOWNE
+Table 41. INT1_CFG_A description 
+AOI AND/OR combination of interrupt events. Default value: 0 (refer to Table 42)
+6D 6-direction detection function enabled. Default value: 0 (refer to Table 42)
+ZHIE/
+ZUPE
+Enable interrupt generation on Z high event or on direction recognition. Default 
+value: 0 (0: disable interrupt request, 1: enable interrupt request)
+ZLIE/
+ZDOWNE
+Enable interrupt generation on Z low event or on direction recognition. Default 
+value: 0 (0: disable interrupt request, 1: enable interrupt request)
+YHIE/
+YUPE
+Enable interrupt generation on Y high event or on direction recognition. Default 
+value: 0 (0: disable interrupt request, 1: enable interrupt request.)
+YLIE/
+YDOWNE
+Enable interrupt generation on Y low event or on direction recognition. Default 
+value: 0 (0: disable interrupt request, 1: enable interrupt request.)
+XHIE/
+XUPE
+Enable interrupt generation on X high event or on direction recognition. Default 
+value: 0 (0: disable interrupt request, 1: enable interrupt request.)
+XLIE/XDOWNE Enable interrupt generation on X low event or on direction recognition. Default 
+value: 0 (0: disable interrupt request, 1: enable interrupt request.)
+DocID018771 Rev 2 31/42
+LSM303DLHC Register description
+42
+          
+Difference between AOI-6D = ‘01’ and AOI-6D = ‘11’.
+AOI-6D = ‘01’ is movement recognition. An interrupt is generated when the orientation 
+moves from an unknown zone to a known zone. The interrupt signal remains for a duration 
+ODR.
+AOI-6D = ‘11’ is direction recognition. An interrupt is generated when the orientation is 
+inside a known zone. The interrupt signal stays until the orientation is inside the zone.
+7.1.15 INT1_SRC_A (31h)
+           
+          
+Interrupt 1 source register. Read-only register. 
+Reading at this address clears the INT1_SRC IA bit (and the interrupt signal on the INT 1 
+pin) and allows the refresh of data in the INT1_SRC register if the latched option was 
+chosen.
+Table 42. Interrupt mode
+AOI 6D Interrupt mode
+0 0 OR combination of interrupt events
+0 1 6-direction movement recognition
+1 0 AND combination of interrupt events
+1 1 6-direction position recognition
+Table 43. INT1_SRC_A register
+0(1)
+1. This bit must be set to ‘0’ for correct working of the device.
+IA ZH ZL YH YL XH XL
+Table 44. INT1_SRC_A description 
+IA Interrupt active. Default value: 0
+(0: no interrupt has been generated, 1: one or more interrupts have been generated)
+ZH Z high. Default value: 0
+(0: no interrupt, 1: Z high event has occurred)
+ZL Z low. Default value: 0
+(0: no interrupt, 1: Z low event has occurred)
+YH Y high. Default value: 0
+(0: no interrupt, 1: Y high event has occurred)
+YL Y low. Default value: 0
+(0: no interrupt, 1: Y low event has occurred)
+XH X high. Default value: 0
+(0: no interrupt, 1: X high event has occurred)
+XL X low. Default value: 0
+(0: no interrupt, 1: X low event has occurred)
+Register description LSM303DLHC
+32/42 DocID018771 Rev 2
+7.1.16 INT1_THS_A (32h)
+ 
+7.1.17 INT1_DURATION_A (33h)
+D6 - D0 bits set the minimum duration of the Interrupt 1 event to be recognized. Duration 
+steps and maximum values depend on the ODR chosen. 
+7.1.18 INT2_CFG_A (34h)
+ 
+ 
+Table 45. INT1_THS_A register
+0(1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+THS6 THS5 THS4 THS3 THS2 THS1 THS0
+Table 46. INT1_THS_A description
+THS[6:0] Interrupt 1 threshold. Default value: 000 0000
+Table 47. INT1_DURATION_A register
+0(1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+D6 D5 D4 D3 D2 D1 D0
+Table 48. INT1_DURATION_A description
+D[6:0] Duration value. Default value: 000 0000
+Table 49. INT2_CFG_A register
+AOI 6D ZHIE ZLIE YHIE YLIE XHIE XLIE
+Table 50. INT2_CFG_A description 
+AOI AND/OR combination of interrupt events. Default value: 0
+(see Table 51)
+6D 6-direction detection function enabled. Default value: 0 (refer to Table 51)
+ZHIE
+Enable interrupt generation on Z high event. Default value: 0
+(0: disable interrupt request,
+1: enable interrupt request on measured accel. value higher than preset threshold)
+ZLIE
+Enable interrupt generation on Z low event. Default value: 0
+(0: disable interrupt request,
+1: enable interrupt request on measured accel. value lower than preset threshold)
+YHIE
+Enable interrupt generation on Y high event. Default value: 0
+(0: disable interrupt request,
+1: enable interrupt request on measured accel. value higher than preset threshold)
+DocID018771 Rev 2 33/42
+LSM303DLHC Register description
+42
+ 
+Difference between AOI-6D = ‘01’ and AOI-6D = ‘11’.
+AOI-6D = ‘01’ is movement recognition. An interrupt is generated when the orientation 
+moves from an unknown zone to a known zone. The interrupt signal remains for a duration 
+ODR.
+AOI-6D = ‘11’ is direction recognition. An interrupt is generated when the orientation is 
+inside a known zone. The interrupt signal remains until the orientation is inside the zone.
+7.1.19 INT2_SRC_A (35h)
+ 
+YLIE
+Enable interrupt generation on Y low event. Default value: 0
+(0: disable interrupt request,
+1: enable interrupt request on measured accel. value lower than preset threshold)
+XHIE
+Enable interrupt generation on X high event. Default value: 0 
+(0: disable interrupt request,
+1: enable interrupt request on measured accel. value higher than preset threshold)
+XLIE
+Enable interrupt generation on X low event. Default value: 0 
+(0: disable interrupt request,
+1: enable interrupt request on measured accel. value lower than preset threshold)
+Table 51. Interrupt mode
+AOI 6D Interrupt mode
+0 0 OR combination of interrupt events
+0 1 6-direction movement recognition
+1 0 AND combination of interrupt events
+1 1 6-direction position recognition
+Table 50. INT2_CFG_A description (continued)
+Table 52. INT2_SRC_A register
+0(1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+IA ZH ZL YH YL XH XL
+Table 53. INT2_SRC_A description 
+IA Interrupt active. Default value: 0
+(0: no interrupt has been generated, 1: one or more interrupts have been generated)
+ZH Z high. Default value: 0
+(0: no interrupt, 1: Z high event has occurred)
+ZL Z low. Default value: 0
+(0: no interrupt, 1: Z low event has occurred)
+YH Y high. Default value: 0
+(0: no interrupt, 1: Y high event has occurred)
+Register description LSM303DLHC
+34/42 DocID018771 Rev 2
+Interrupt 2 source register. Read-only register. 
+Reading at this address clears the INT2_SRC IA bit (and the interrupt signal on the INT2 
+pin) and allows the refresh of data in the INT2_SRC register if the latched option was 
+chosen.
+7.1.20 INT2_THS_A (36h)
+ 
+7.1.21 INT2_DURATION_A (37h)
+ 
+D6 - D0 bits set the minimum duration of the Interrupt 2 event to be recognized. Duration 
+time steps and maximum values depend on the ODR chosen.
+YL Y low. Default value: 0
+(0: no interrupt, 1: Y low event has occurred)
+XH X high. Default value: 0
+(0: no interrupt, 1: X high event has occurred)
+XL X Low. Default value: 0
+(0: no interrupt, 1: X low event has occurred)
+Table 53. INT2_SRC_A description (continued)
+Table 54. INT2_THS_A register
+0(1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+THS6 THS5 THS4 THS3 THS2 THS1 THS0
+Table 55. INT2_THS_A description
+THS[6:0] Interrupt 2 threshold. Default value: 000 0000
+Table 56. INT2_DURATION_A register
+0(1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+D6 D5 D4 D3 D2 D1 D0
+Table 57. INT2_DURATION_A description
+D[6:0] Duration value. Default value: 000 0000
+DocID018771 Rev 2 35/42
+LSM303DLHC Register description
+42
+7.1.22 CLICK_CFG_A (38h)
+           
+          
+7.1.23 CLICK_SRC_A (39h)
+           
+          
+Table 58. CLICK_CFG_A register
+-- -- ZD ZS YD YS XD XS
+Table 59. CLICK_CFG_A description
+ZD Enable interrupt double-click on Z-axis. Default value: 0
+(0: disable interrupt request, 1: enable interrupt request on measured accel. value 
+higher than preset threshold)
+ZS Enable interrupt single-click on Z-axis. Default value: 0
+(0: disable interrupt request, 1: enable interrupt request on measured accel. value 
+higher than preset threshold)
+YD Enable interrupt double-click on Y-axis. Default value: 0
+(0: disable interrupt request, 1: enable interrupt request on measured accel. value 
+higher than preset threshold)
+YS Enable interrupt single-click on Y-axis. Default value: 0
+(0: disable interrupt request, 1: enable interrupt request on measured accel. value 
+higher than preset threshold)
+XD Enable interrupt double-click on X-axis. Default value: 0
+(0: disable interrupt request, 1: enable interrupt request on measured accel. value 
+higher than preset threshold)
+XS Enable interrupt single-click on X-axis. Default value: 0
+(0: disable interrupt request, 1: enable interrupt request on measured accel. value 
+higher than preset threshold)
+Table 60. CLICK_SRC_A register
+-- IA DCLICK SCLICK Sign Z Y X
+Table 61. CLICK_SRC_A description 
+IA Interrupt active. Default value: 0
+(0: no interrupt has been generated, 1: one or more interrupts have been generated)
+DCLICK Double-click enable. Default value: 0 (0: double-click detection disable, 1: double-click 
+detection enable)
+SCLICK Single-click enable. Default value: 0 (0: Single-click detection disable, 1: single-click 
+detection enable)
+Sign Click sign. 0: positive detection, 1: negative detection
+Z Z-click detection. Default value: 0
+(0: no interrupt, 1: Z high event has occurred)
+Y Y-click detection. Default value: 0
+(0: no interrupt, 1: Y high event has occurred)
+X X-click detection. Default value: 0
+(0: no interrupt, 1: X high event has occurred)
+Register description LSM303DLHC
+36/42 DocID018771 Rev 2
+7.1.24 CLICK_THS_A (3Ah)
+ 
+1 LSB = full-scale / 128. Ths6 through Ths0 define the threshold which is used by the 
+system to start the click-detection procedure. The threshold value is expressed over 7 bits 
+as an unsigned number.
+7.1.25 TIME_LIMIT_A (3Bh)
+ 
+1 LSB = 1/ODR. TLI6 through TLI0 define the maximum time interval that can elapse 
+between the start of the click-detection procedure (the acceleration on the selected channel 
+exceeds the programmed threshold) and when the acceleration falls below the threshold.
+7.1.26 TIME_LATENCY_A (3Ch)
+ 
+1 LSB = 1/ODR. TLA7 through TLA0 define the time interval that starts after the first click 
+detection where the click-detection procedure is disabled, in cases where the device is 
+configured for double-click detection.
+Table 62. CLICK_THS_A register
+-- Ths6 Ths5 Ths4 Ths3 Ths2 Ths1 Ths0
+Table 63. CLICK_SRC_A description
+Ths[6:0] Click threshold. Default value: 000 0000
+Table 64. TIME_LIMIT_A register
+-- TLI6 TLI5 TLI4 TLI3 TLI2 TLI1 TLI0
+Table 65. TIME_LIMIT_A description 
+TLI[6:0] Click time limit. Default value: 000 0000
+Table 66. TIME_LATENCY_A register
+TLA7 TLA6 TLA5 TLA4 TLA3 TLA2 TLA1 TLA0
+Table 67. TIME_LATENCY_A description
+TLA[7:0] Double-click time latency. Default value: 0000 0000
+DocID018771 Rev 2 37/42
+LSM303DLHC Register description
+42
+7.1.27 TIME_WINDOW_A (3Dh)
+ 
+ 
+1 LSB = 1/ODR. TW7 through TW0 define the maximum interval of time that can elapse 
+after the end of the latency interval in which the click detection procedure can start, in cases 
+where the device is configured for double-click detection.
+7.2 Magnetic field sensing register description
+7.2.1 CRA_REG_M (00h)
+ 
+ 
+Table 68. TIME_WINDOW_A register
+TW7 TW6 TW5 TW4 TW3 TW2 TW1 TW0
+Table 69. TIME_WINDOW_A description
+TW[7:0] Double-click time window
+Table 70. CRA_REG_M register
+TEMP_EN 0 (1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+0(1) DO2 DO1 DO0 0 (1) 0(1)
+Table 71. CRA_REG_M description
+TEMP _EN Temperature sensor enable. 
+0: temperature sensor disabled (default), 1: temperature sensor enabled
+DO[2:0] Data output rate bits. These bits set the rate at which data is written to all three data 
+output registers (refer to Table 72). Default value: 100
+Table 72. Data rate configurations 
+DO2 DO1 DO0 Minimum data output rate (Hz)
+0 0 0 0.75
+0 0 1 1.5
+0 1 0 3.0
+0 1 1 7.5
+1 0 0 15 
+10 1 3 0
+11 0 7 5
+1 1 1 220
+Register description LSM303DLHC
+38/42 DocID018771 Rev 2
+7.2.2 CRB_REG_M (01h)
+ 
+ 
+7.2.3 MR_REG_M (02h)
+          
+          
+          
+Table 73. CRB_REG_M register
+GN2 GN1 GN0 0 (1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+0(1) 0(1) 0(1) 0(1)
+Table 74. CRB_REG_M description
+GN[2:0] Gain configuration bits. The gain configuration is common for all channels (refer to 
+Table 75)
+Table 75. Gain setting
+GN2 GN1 GN0
+Sensor input 
+field range 
+[Gauss]
+Gain X, Y, and Z
+[LSB/Gauss]
+Gain Z
+[LSB/Gauss] Output range
+0 0 1 ±1.3 1100 980
+0xF800–0x07FF
+(-2048 to +2047)
+0 1 0 ±1.9 855 760
+0 1 1 ±2.5 670 600
+1 0 0 ±4.0 450 400
+1 0 1 ±4.7 400 355
+1 1 0 ±5.6 330 295
+1 1 1 ±8.1 230 205
+Table 76. MR_REG_M register
+0(1)
+1. This bit must be set to ‘0’ for correct operation of the device.
+0(1) 0(1) 0(1) 0(1) 0(1) MD1 MD0
+Table 77. MR_REG_M description
+MD[1:0] Mode select bits. These bits select the operation mode of this device (refer to 
+Table 78) 
+Table 78. Magnetic sensor operating mode
+MD1 MD0 Mode
+0 0 Continuous-conversion mode
+0 1 Single-conversion mode
+1 0 Sleep mode. Device is placed in sleep mode
+1 1 Sleep mode. Device is placed in sleep mode
+DocID018771 Rev 2 39/42
+LSM303DLHC Register description
+42
+7.2.4 OUT_X_H_M (03), OUT_X_L_M (04h)
+X-axis magnetic field data. The value is expressed as two’s complement.
+7.2.5 OUT_Z_H_M (05), OUT_Z_L_M (06h)
+Z-axis magnetic field data. The value is expressed as two’s complement.
+7.2.6 OUT_Y_H_M (07), OUT_Y_L_M (08h)
+Y-axis magnetic field data. The value is expressed as two’s complement.
+7.2.7 SR_REG_M (09h)
+           
+          
+7.2.8 IRx_REG_M (0Ah/0Bh/0Ch)
+           
+          
+          
+7.2.9 TEMP_OUT_H_M (31h), TEMP_OUT_L_M (32h)
+          
+          
+          
+Table 79. SR_REG_M register
+-- -- -- -- -- -- LOCK DRDY
+Table 80. SR_REG_M description
+LOCK Data output register lock. Once a new set of measurements is available, this bit is
+set when the first magnetic file data register has been read.
+DRDY Data-ready bit. This bit is when a new set of measurements is available.
+Table 81. IRA_REG_M register
+01001000
+Table 82. IRB_REG_M register
+00110100
+Table 83. IRC_REG_M register
+00110011
+Table 84. TEMP_OUT_H_M register
+TEMP11 TEMP10 TEMP9 TEMP8 TEMP7 TEMP6 TEMP5 TEMP4
+Table 85. TEMP_OUT_L_M register
+TEMP3 TEMP2 TEMP1 TEMP0 -- -- -- --
+Table 86. TEMP_OUT resolution
+TEMP[11:0] Temperature data (8 LSB/deg - 12-bit resolution). The value is expressed as 
+two’s complement.
+Package information LSM303DLHC
+40/42 DocID018771 Rev 2
+8 Package information
+In order to meet environmental requirements, ST offers these devices in different grades of
+ECOPACK® packages, depending on their level of environmental compliance. ECOPACK ®
+specifications, grade definitions and product status are available at: www.st.com.
+ECOPACK® is an ST trademark.
+Figure 5. LGA-14: mechanical data and package dimensions
+Dimens ions
+Re f . mm
+Min. Typ. Max.
+A1 1
+A2 0.785
+A3 0.16 0.2 0.24
+D1 2.85 3 3.15
+E1 4.85 5 5.15
+N1 0.8
+L1 4
+T1 0.8
+T2 0.5
+M 0.1
+k 0.05
+LGA 3x5x1 14L
+Land Grid Array Package
+Outline and
+8265271_A
+mechanical data
+DocID018771 Rev 2 41/42
+LSM303DLHC Revision history
+42
+9 Revision history
+          
+Table 87. Document revision history 
+Date Revision Changes
+21-Apr-2011 1 Initial release
+05-Nov-2013 2
+Document status promoted from preliminary to production data
+Added ESD to Table 7
+Minor textual updates throughout document
+LSM303DLHC
+42/42 DocID018771 Rev 2
+          
+Please Read Carefully:
+Information in this document is provided solely in connection with ST products. STMicroelectronics NV and its subsidiaries (“ST”) reserve the
+right to make changes, corrections, modifications or improvements, to this document, and the products and services described herein at any
+time, without notice.
+All ST products are sold pursuant to ST’s terms and conditions of sale.
+Purchasers are solely responsible for the choice, selection and use of the ST products and services described herein, and ST as sumes no
+liability whatsoever relating to the choice, selection or use of the ST products and services described herein.
+No license, express or implied, by estoppel or otherwise, to any intellectual property rights is granted under this document. If any part of this
+document refers to any third party products or services it shall not be deemed a license grant by ST for the use of such third party products
+or services, or any intellectual property contained therein or considered as a warranty covering the use in any manner whatsoev er of such
+third party products or services or any intellectual property contained therein.
+UNLESS OTHERWISE SET FORTH IN ST’S TERMS AND CONDITIONS OF SALE ST DISCLAIMS ANY EXPRESS OR IMPLIED
+WARRANTY WITH RESPECT TO THE USE AND/OR SALE OF ST PRODUCTS INCLUDING WITHOUT LIMITATION IMPLIED
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE (AND THEIR EQUIVALENTS UNDER THE LAWS
+OF ANY JURISDICTION), OR INFRINGEMENT OF ANY PATENT, COPYRIGHT OR OTHER INTELLECTUAL PROPERTY RIGHT.
+ST PRODUCTS ARE NOT DESIGNED OR AUTHORIZED FOR USE IN: (A) SAFETY CRITICAL APPLICATIONS SUCH AS LIFE
+SUPPORTING, ACTIVE IMPLANTED DEVICES OR SYSTEMS WITH PRODUCT FUNCTIONAL SAFETY REQUIREMENTS; (B)
+AERONAUTIC APPLICATIONS; (C) AUTOMOTIVE APPLICATIONS OR ENVIRONMENTS, AND/OR (D) AEROSPACE APPLICATIONS
+OR ENVIRONMENTS. WHERE ST PRODUCTS ARE NOT DESIGNED FOR SUCH USE, THE PURCHASER SHALL USE PRODUCTS AT
+PURCHASER’S SOLE RISK, EVEN IF ST HAS BEEN INFORMED IN WRITING OF SUCH USAGE, UNLESS A PRODUCT IS
+EXPRESSLY DESIGNATED BY ST AS BEING INTENDED FOR “AUTOMOTIVE, AUTOMOTIVE SAFETY OR MEDICAL” INDUSTR
+Y
+DOMAINS ACCORDING TO ST PRODUCT DESIGN SPECIFICATIONS. PRODUCTS FORMALLY ESCC, QML OR JAN QUALIFIED ARE
+DEEMED SUITABLE FOR USE IN AEROSPACE BY THE CORRESPONDING GOVERNMENTAL AGENCY.
+Resale of ST products with provisions different from the statements and/or technical features set forth in this document shall immediately void
+any warranty granted by ST for the ST product or service described herein and shall not create or extend in any manner whatsoev er, any
+liability of ST.
+ST and the ST logo are trademarks or registered trademarks of ST in various countries.
+Information in this document supersedes and replaces all information previously supplied.
+The ST logo is a registered trademark of STMicroelectronics. All other names are the property of their respective owners.
+© 2013 STMicroelectronics - All rights reserved
+STMicroelectronics group of companies
+Australia - Belgium - Brazil - Canada - China - Czech Republic - Finland - France - Germany - Hong Kong - India - Israel - Italy - Japan - 
+Malaysia - Malta - Morocco - Philippines - Singapore - Spain - Sweden - Switzerland - United Kingdom - United States of America
+www.st.com

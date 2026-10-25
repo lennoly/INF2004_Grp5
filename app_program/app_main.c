@@ -120,7 +120,11 @@ usermain (void)
     if (E_OK == ercd)
     {
         /* Receive runtime barcode assignments over UART or MQTT. */
+#if defined(TM_WIFI_MQTT) && TM_WIFI_MQTT
+        report_init("commands", telemetry_init(true));
+#else
         report_init("commands", telemetry_init(false));
+#endif
     }
 
     (void) tm_printf((UB const *) "Buddy 3: GP20=start, GP21=stop. "

@@ -1,0 +1,33 @@
+Built: 2026-10-25 (Asia/Singapore)
+File: picocar_TEST_BUDDY3_uart.uf2
+Mode: TEST_BUDDY3, UART0 GP0/GP1, 115200 baud, Wi-Fi disabled
+Size: 139264 bytes
+SHA256: 818f087acee65ad72340729b65452d76b97249555b62adaf38da052c85ed4be8
+
+Reference: max/briefing/barcode/barcode questions answer.png
+Behaviour: Code 39 A-Z in both directions; runtime four-letter mapping;
+retain mapped letter and movement in RAM until a junction; execute there.
+Commands: map=<forward>,<uturn>,<left>,<right>, then mapping to verify.
+GP20 starts; GP21 stops. Configure mapping again after reboot.
+
+Build dependencies:
+- Course template sirfonzie/mtk3smp-rp2040 commit 2e8e6ad plus repository patch
+- Pico SDK 2.2.0
+- arm-none-eabi-gcc 10.3.1 (20210621)
+- Build command: sh tools/build_buddy3.sh
+
+Validation:
+- Subsystem 3: 3022 checks x 4 configurations, zero failures
+- Mission source/telemetry compile checks, including MQTT telemetry
+- Navigation: 13 junction decisions passed
+- Buddy 3 driving integration passed, including pending letter retention
+- General command/MQTT host suite: 136 passed, zero failed
+- UF2: 272 blocks, RP2040 family ID, sequential flash addresses,
+  valid vector table and expected updated firmware strings
+- git diff --check passed
+
+Network settings are intentionally blank. This file accepts runtime mapping
+via UART only. The reference requires MQTT for the demo: fill in local
+config/wifi_credentials.h and config/mqtt_config.h and rebuild the mqtt
+profile before the network demo. Blank settings cannot build that profile.
+No flashing or physical robot tests were performed.

@@ -1,0 +1,37 @@
+OKY3231-2
+Product Name: GY-511 LSM303DLHC Module 3 Axis E-Compass Accelerometer
+Magnetometer Sensor
+Product Module：OKY3231-2
+Product Description:
+The LSM303DLHC is a digital 3 axis accelerometer and 3 axis magnetometer
+with I2C interface. It has full-scale acceleration range of ±2g to ±16g and
+full scale magnetic field range of ±1.3 to ±8.1 gauss. All the full scale ranges
+are user selectable.
+Voltage: 3-5V.
+I2C serial interface
+16 bit data output
+3 magnetic field axis and 3 acceleration axis
+Full scale range of ± 1.3 to ±8.1 magnetic field
+±2g/±4g/±8g /±16g user selectable full-scale acceleration ranges
+Other Features:
+· Embedded temperature sensor
+· 6D/4D-orientation detection
+· Embedded FIFO
+· 2 independent programmable interrupt generators for free-fall and motion
+detection
+· Power-down mode / low-power mode
+Applications:
+· Tilt-compensated compasses
+· Map rotation
+· Position detection
+· Motion-activated functions
+· Free-fall detection
+· Click/double-click recognition
+· Pedometers
+· Intelligent power-saving for hand held devices
+· Display orientation
+· Gaming and virtual reality input devices
+· Impact recognition and logging
+· Vibration monitoring and compensation
+Package Included:
+1 PCS 1 x GY-511 Module and 1 x straight pins

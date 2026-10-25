@@ -1,0 +1,18 @@
+/** @file hal_stub.h
+ *
+ * @brief Host-test replacement for the HAL: hal_stub.c implements the part
+ *        of hal.h that the pure modules under test call.
+ */
+
+#ifndef HAL_STUB_H
+#define HAL_STUB_H
+
+#include <stdbool.h>
+#include "hal.h"
+
+/* What hal_wifi_join_failed() reports; set by the tests. */
+extern bool gb_stub_join_failed;
+
+#endif /* HAL_STUB_H */
+
+/*** end of file ***/

@@ -1,0 +1,1208 @@
+DATA SHEET
+www.onsemi.com
+©  Semiconductor Components Industries, LLC, 2016
+September, 2025 − Rev. 34
+1 Publication Order Number:
+LM393/D
+Low Offset Voltage 
+Dual Comparators
+LM393, LM393E, LM293,
+LM2903, LM2903E, LM2903V,
+NCV2903
+The LM393 series are dual independent precision voltage
+comparators capable of single or split supply operation. These devices
+are designed to permit a common mode range-to-ground level with
+single supply operation. Input offset voltage specifications as low as
+2.0 mV make this device an excellent selection for many applications
+in consumer, automotive, and industrial electronics.
+Features
+• Wide Single-Supply Range: 2.0 Vdc to 36 Vdc
+• Split-Supply Range: ±1.0 Vdc to ±18 Vdc
+• Very Low Current Drain Independent of Supply V oltage: 0.4 mA
+• Low Input Bias Current: 25 nA
+• Low Input Offset Current: 5.0 nA
+• Low Input Offset V oltage: 5.0 mV (max) LM293/393
+• Input Common Mode Range to Ground Level
+• Differential Input V oltage Range Equal to Power Supply V oltage
+• Output V oltage Compatible with DTL, ECL, TTL, MOS, and CMOS
+Logic Levels
+• ESD Clamps on the Inputs Increase the Ruggedness of the Device
+without Affecting Performance
+• NCV Prefix for Automotive and Other Applications Requiring
+Unique Site and Control Change Requirements; AEC-Q100 
+Qualified and PPAP Capable
+• These Devices are Pb-Free, Halogen Free/BFR Free and are RoHS
+Compliant
+VCC + Input - Input Output
+Q3 R4
+Q4
+Q5
+R2
+Q6 Q14
+Q16
+Q15
+Q12
+Q11
+Q10
+Q9Q8
+Q2
+Q1
+F1
+2.0 k
+2.1 k
+R1
+4.6 k
+Figure 1. Representative Schematic Diagram
+(Diagram shown is for 1 comparator)
+See detailed marking information and ordering and shipping
+information on page 6 of this data sheet.
+DEVICE MARKING AND ORDERING
+INFORMATION
+PDIP-8
+N SUFFIX
+CASE 626
+1
+8
+SOIC-8
+D SUFFIX
+CASE 751
+1
+8
+PIN CONNECTIONS
+(Top View)
+ GND
+Inputs A
+Inputs B
+Output B
+Output A  VCC
+−
+−
++
++
+1
+2
+3
+4
+8
+7
+6
+5
+Micro8/C0069
+DM SUFFIX
+CASE 846A8
+1
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+2
+MAXIMUM RATINGS
+Rating Symbol Value Unit
+Power Supply Voltage VCC +36 or ±18 V
+Input Differential Voltage VIDR 36 V
+Input Common Mode Voltage Range VICR −0.3 to +36 V
+Output Voltage VO 36 V
+Output Short Circuit-to-Ground
+Output Sink Current (Note 1)
+ISC
+ISink
+Continuous
+20
+mA
+Power Dissipation @ TA = 25 °C
+Derate above 25 °C
+PD
+1/R/C0113JA
+570
+5.7
+mW
+mW/°C
+Operating Ambient Temperature Range
+LM293
+LM393, LM393E
+LM2903, LM2903E
+LM2903V, NCV2903 (Note 2)
+TA
+−25 to +85
+0 to +70
+−40 to +105
+−40 to +125
+°C
+Maximum Operating Junction Temperature
+LM393, LM393E, LM2903, LM2903E, LM2903V
+LM293, NCV2903
+TJ(max)
+150
+150
+°C
+Storage Temperature Range Tstg −65 to +150 °C
+Stresses exceeding those listed in the Maximum Ratings table may damage the device. If any of these limits are exceeded, device functionality
+should not be assumed, damage may occur and reliability may be affected.
+1. The maximum output current may be as high as 20 mA, independent of the magnitude of V
+CC, output short circuits to V CC can cause
+excessive heating and eventual destruction.
+2. NCV2903 is qualified for automotive use.
+ESD RATINGS
+Rating HBM MM Unit
+ESD Protection at any Pin (Human Body Model − HBM, Machine Model − MM)
+NCV2903 (Note 2)
+LM393E, LM2903E
+LM393DG/DR2G, LM2903DG/DR2G
+All Other Devices
+2000
+1500
+250
+1500
+200
+150
+100
+150
+V
+V
+V
+V
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+3
+ELECTRICAL CHARACTERISTICS (VCC = 5.0 Vdc, Tlow ≤ TA ≤ Thigh, unless otherwise noted.)
+Characteristic Symbol
+LM293, LM393, LM393E
+LM2903/E/V, 
+NCV2903
+UnitMin Typ Max Min Typ Max
+Input Offset Voltage (Note 4) VIO mV
+TA = 25 °C − ±1.0 ±5.0 − ±2.0 ±7.0
+Tlow ≤ TA ≤ Thigh − − ±9.0 − ±9.0 ±15
+Input Offset Current IIO nA
+TA = 25 °C − ±5.0 ±50 − ±5.0 ±50
+Tlow ≤ TA ≤ Thigh − − ±150 − ±50 ±200
+Input Bias Current (Note 5) IIB nA
+TA = 25 °C − 20 250 − 20 250
+Tlow ≤ TA ≤ Thigh − − 400 − 20 500
+Input Common Mode Voltage Range (Note 6) VICR V
+TA = 25 °C 0 − VCC −1.5 0 − VCC −1.5
+Tlow ≤ TA ≤ Thigh 0 − VCC −2.0 0 − VCC −2.0
+Voltage Gain AVOL 50 200 − 25 200 − V/mV
+RL ≥ 15 k/C0087, VCC = 15 Vdc, TA = 25 °C
+Large Signal Response Time − − 300 − − 300 − ns
+Vin = TTL Logic Swing, Vref = 1.4 Vdc
+VRL = 5.0 Vdc, RL = 5.1 k/C0087, TA = 25 °C
+Response Time (Note 7) tTLH − 1.3 − − 1.5 − /C0109s
+VRL = 5.0 Vdc, RL = 5.1 k/C0087, TA = 25 °C
+Input Differential Voltage (Note 8) VID − − VCC − − VCC V
+All Vin ≥ GND or V− Supply (if used)
+Output Sink Current ISink 6.0 16 − 6.0 16 − mA
+Vin ≥ 1.0 Vdc, Vin+ = 0 Vdc, VO ≤ 1.5 Vdc TA = 25 °C
+Output Saturation Voltage VOL mV
+Vin ≥ 1.0 Vdc, Vin+ = 0, ISink ≤ 4.0 mA, TA = 25 °C − 150 400 − − 400
+Tlow ≤ TA ≤ Thigh − − 700 − 200 700
+Output Leakage Current IOL nA
+Vin− = 0 V, Vin+ ≥ 1.0 Vdc, VO = 5.0 Vdc, TA = 25 °C − 0.1 − − 0.1 −
+Vin− = 0 V, Vin+ ≥ 1.0 Vdc, VO = 30 Vdc, 
+Tlow ≤ TA ≤ Thigh − − 1000 − − 1000
+Supply Current ICC mA
+RL = ∞  Both Comparators, TA = 25 °C − 0.4 1.0 − 0.4 1.0
+RL = ∞  Both Comparators, VCC = 30 V − − 2.5 − − 2.5
+Product parametric performance is indicated in the Electrical Characteristics for the listed test conditions, unless otherwise noted. Product
+performance may not be indicated by the Electrical Characteristics if operated under different conditions.
+LM293 Tlow = −25 °C, Thigh = +85 °C
+LM393, LM393E Tlow = 0 °C, Thigh = +70 °C
+LM2903, LM2903E Tlow = −40 °C, Thigh = +105 °C
+LM2903V & NCV2903 Tlow = −40 °C, Thigh = +125 °C
+NCV2903 is qualified for automotive use.
+3. The maximum output current may be as high as 20 mA, independent of the magnitude of V CC, output short circuits to V CC can cause
+excessive heating and eventual destruction.
+4. At output switch point, V O/C00931.4 Vdc, RS = 0 /C0087 with VCC from 5.0 Vdc to 30 Vdc, and over the full input common mode range 
+(0 V to VCC = −1.5 V).
+5. Due to the PNP transistor inputs, bias current will flow out of the inputs. This current is essentially constant, independent of the output state,
+therefore, no loading changes will exist on the input lines.
+6. Input common mode of either input should not be permitted to go more than 0.3 V negative of ground or minus supply. The upper  limit of
+common mode range is VCC −1.5 V.
+7. Response time is specified with a 100 mV step and 5.0 mV of overdrive. With larger magnitudes of overdrive faster response ti mes are
+obtainable.
+8. The comparator will exhibit proper output state if one of the inputs becomes greater than VCC, the other input must remain within the common
+mode range. The low input state must not be less than −0.3 V of ground or minus supply.
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+4
+LM293/393 LM2903
+Figure 2. Input Bias Current versus
+Power Supply Voltage
+Figure 3. Input Bias Current versus
+Power Supply Voltage
+Figure 4. Output Saturation Voltage
+versus Output Sink Current
+Figure 5. Output Saturation Voltage
+versus Output Sink Current
+Figure 6. Power Supply Current versus
+Power Supply Voltage
+Figure 7. Power Supply Current versus
+Power Supply Voltage
+VCC, SUPPLY VOLTAGE (Vdc) V CC, SUPPLY VOLTAGE (Vdc)
+VCC, SUPPLY VOLTAGE (Vdc) V CC, SUPPLY VOLTAGE (Vdc)
+ISink, OUTPUT SINK CURRENT (mA) I Sink, OUTPUT SINK CURRENT (mA)
+I    , INPUT BIAS CURRENT (nA)IBV     , SATURATION VOLTAGE (Vdc)OLI      , SUPPLY CURRENT (mA)CC
+7
+0 5 10 15 20 25 30 35 40
+13
+0 5 10 15 20 25 30 35 40
+10
+1.0
+0.1
+0.01
+0.001
+0.01 0.1 1.0 10 100
+1.0
+0.8
+0.6
+0.4
+0.2
+0
+5.0 10 15 20 25 30 35 40
+1.2
+0.4
+10
+1.0
+0.1
+0.01
+0.001
+0.01 0.1 1.0 10 100
+0 5.0 10 15 20 25 30 35 40
+TA = 0°C
+TA = +25°C
+TA = +70° C
+TA = +125°C
+RL = /C0082
+TA = 0° C
+TA = +25° C
+TA = +25° C
+TA = 0° C
+TA = +25° C
+TA = -40° C
+TA = -40° C
+TA = 0° C
+TA = +25° C
+TA = +85° C
+1.0
+0.8
+0.6
+I      , SUPPLY CURRENT (mA)CC V     , SATURATION VOLTAGE (Vdc)OL I    , INPUT BIAS CURRENT (nA)IB
+TA = +125°C
+RL = /C0082
+TA = -40°C
+TA = +70°C
+TA = +125°C
+TA = -55° C
+Out of
+Saturation
+TA = +85° C
+Out of
+Saturation
+TA = -55° C
+8
+9
+10
+11
+12
+13
+14
+TA = +85°C
+TA = +105°C15
+17
+19
+21
+23
+25 TA = 0°C
+TA = +25°C
+TA = -40°C
+TA = +70°C
+TA = +125°C
+TA = +85°C
+TA = +105°C
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+5
+APPLICATIONS INFORMATION
+These dual comparators feature high gain, wide
+bandwidth characteristics. This gives device oscillation
+tendencies if the outputs are capacitively coupled to the
+inputs via stray capacitance during output transients. To
+minimize risk of these oscillations, avoid routing output and
+negative input traces in parallel or put VCC or GND trace
+between them for coupling reduction. It is also good to keep
+input resistors as low as possible and place them close to
+device.
+The addition of positive feedback (<10 mV) is also
+recommended. It is good design practice to ground all
+unused pins.
+Differential input voltages may be larger than supply
+voltage without damaging the comparator’s inputs. Voltages
+more negative than −0.3 V should not be used.
+Figure 8. Zero Crossing Detector
+(Single Supply)
+Figure 9. Zero Crossing Detector
+(Split Supply)
+Figure 10. Free−Running Square−Wave Oscillator Figure 11. Time Delay Generator
+Figure 12. Comparator with Hysteresis
+10
+D1 prevents input from going negative by more than 0.6 V.
+R1 + R2 = R3
+R3 ≤ R5 for small error in zero crossing.
+ Vin
+10 k
+ D1
+R1
+8.2 k
+6.8 k
+R2
+15 k
+R3
++15 V
+10 M
+R5
+220 k
+R4
+220 k
+LM393
+Vin(min) /C0091 0.4 V peak for 1% phase distortion (/C0068/C0081).
+/C0042
+/C0081
++VCC
+10 k
+Vin
+-VEE
+Vin
+Vin(min)
+VCC
+VO
+- VEE
+/C0068/C0081
+/C0081
+LM393
+-
++
+LM393
+51 k
+51 k
+51 k
+RL
+10 k
+ VCC
+ VCC
+ VCC
+VO
+VO
+t
+ 0
+1.0 M/C0087
+0.001 /C0109F
+-
++
+LM393
+ VCC  VCC
+VO
+Vin
+VO
+ + Vref
+Vref
+Vref
+0
+0
+0
+VC
+ tO
+ t
+``ON'' for t /C0173 tO + /C0068t
+where:
+ /C0068t = RC /C0527 n (
+Vref
+VCC
+)
+R  RL
+ VC  C
+LM393
+-
++
+RS
+VCC
+ RL
+ Vref
+ R1
+R2
+RS = R1 | | R2
+Vth1 = Vref +
+(VCC -Vref) R1
+R1 + R2 + RL
+Vth2 = Vref -
+(Vref -VO Low) R1
+R1 + R2
+R1
+t/C0527
++
+-
+LM393
+/C0041
+/C0042
+/C0041
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+6
+MARKING DIAGRAMS
+1
+8
+x = 2 or 3
+A = Assembly Location
+WL, L = Wafer Lot
+YY, Y = Year
+WW, W = Work Week
+/C0071, G = Pb −Free Package
+PDIP-8
+CASE 626
+SOIC-8
+CASE 751
+*
+*This marking diagram also applies to NCV2903DR2G
+Micro8
+CASE 846A
+LMx93
+ALYW
+/C0071
+1
+8
+2903V
+ALYW
+/C0071
+1
+8
+2903
+ALYW
+/C0071
+1
+8
+LM393NG
+AWL
+YYWW
+1
+8
+LM2903N
+AWL
+YYWWG
+x93
+AYW /C0071
+/C0071
+1
+8
+(Note: Microdot may be in either location)
+2903
+AYW /C0071
+/C0071
+1
+8
+903V
+AYW /C0071
+/C0071
+1
+8
+393E
+ALYW
+/C0071
+1
+8
+2903E
+ALYW
+/C0071
+1
+8
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+7
+ORDERING INFORMATION
+Device
+Operating Temperature
+Range Package Shipping†
+LM293DG
+−25 °C to +85 °C
+SOIC-8
+(Pb-Free)
+98 Units / Rail
+LM293DR2G 2500 / Tape & Reel
+LM293DMR2G Micro8
+(Pb-Free) 4000 / Tape and Reel
+LM393DG
+0 °C to +70 °C
+SOIC-8
+(Pb-Free)
+98 Units / Rail
+LM393DR2G 2500 / Tape & Reel
+LM393EDR2G SOIC-8
+(Pb-Free) 2500 / Tape & Reel
+LM393NG PDIP-8
+(Pb-Free) 50 Units / Rail
+LM393DMR2G Micro8
+(Pb-Free) 4000 / Tape and Reel
+LM2903DG
+−40 °C to +105 °C
+SOIC-8
+(Pb-Free)
+98 Units / Rail
+LM2903DR2G 2500 / Tape & Reel
+LM2903EDR2G SOIC-8
+(Pb-Free) 2500 / Tape & Reel
+LM2903DMR2G Micro8
+(Pb-Free) 4000 / Tape and Reel
+LM2903NG PDIP-8
+(Pb-Free) 50 Units / Rail
+LM2903VDG
+−40 °C to +125 °C
+SOIC-8
+(Pb-Free)
+98 Units / Rail
+LM2903VDR2G 2500 / Tape & Reel
+LM2903VNG PDIP-8
+(Pb-Free) 50 Units / Rail
+NCV2903DR2G* SOIC-8
+(Pb-Free) 2500 / Tape & Reel
+NCV2903DMR2G* Micro8
+(Pb-Free) 4000 / Tape & Reel
+† For information on tape and reel specifications, including part orientation and tape sizes, please refer to our Tape and Reel Packaging
+Specifications Brochure, BRD8011/D.
+* NCV Prefix for Automotive and Other Applications Requiring Unique Site and Control Change Requirements; AEC-Q100 Qualified and PPAP
+Capable
+Share FeedbackYour Opinion Matters
+LM393, LM393E, LM293, LM2903, LM2903E, LM2903V, NCV2903
+www.onsemi.com
+8
+REVISION HISTORY  
+Revision Description of Changes Date
+34 Front page layout update, update of the first paragraph of the Applications Information section
+(p.5) and an update of Figure 8 and Figure 10 (p.5)
+9/16/2025
+This document has undergone updates prior to the inclusion of this revision history table. The changes tracked here only reflect updates made
+on the noted approval dates.
+Share FeedbackYour Opinion Matters
+PDIP−8
+CASE 626−05
+ISSUE P
+DATE 22 APR 2015
+SCALE 1:1
+14
+58
+b2
+NOTE 8
+D
+b
+L
+A1
+A
+eB
+XXXXXXXXX
+AWL
+YYWWG
+E
+GENERIC
+MARKING DIAGRAM*
+XXXX = Specific Device Code
+A = Assembly Location
+WL = Wafer Lot
+YY = Year
+WW = Work Week
+G = Pb −Free Package
+A
+TOP VIEW
+C
+SEATING
+PLANE
+0.010 CASIDE VIEW
+END VIEW
+END VIEW
+WITH LEADS CONSTRAINED
+DIM MIN MAX
+INCHES
+A −−−− 0.210
+A1 0.015 −−−−
+b 0.014 0.022
+C 0.008 0.014
+D 0.355 0.400
+D1 0.005 −−−−
+e 0.100 BSC
+E 0.300 0.325
+M −−−− 10
+−−− 5.33
+0.38 −−−
+0.35 0.56
+0.20 0.36
+9.02 10.16
+0.13 −−−
+2.54 BSC
+7.62 8.26
+−−− 10
+MIN MAX
+MILLIMETERS
+NOTES:
+1. DIMENSIONING AND TOLERANCING PER ASME Y14.5M, 1994.
+2. CONTROLLING DIMENSION: INCHES.
+3. DIMENSIONS A, A1 AND L ARE MEASURED WITH THE PACK-
+AGE SEATED IN JEDEC SEATING PLANE GAUGE GS−3.
+4. DIMENSIONS D, D1 AND E1 DO NOT INCLUDE MOLD FLASH
+OR PROTRUSIONS. MOLD FLASH OR PROTRUSIONS ARE
+NOT TO EXCEED 0.10 INCH.
+5. DIMENSION E IS MEASURED AT A POINT 0.015 BELOW DATUM
+PLANE H WITH THE LEADS CONSTRAINED PERPENDICULAR
+TO DATUM C.
+6. DIMENSION eB IS MEASURED AT THE LEAD TIPS WITH THE
+LEADS UNCONSTRAINED.
+7. DATUM PLANE H IS COINCIDENT WITH THE BOTTOM OF THE
+LEADS, WHERE THE LEADS EXIT THE BODY .
+8. PACKAGE CONTOUR IS OPTIONAL (ROUNDED OR SQUARE
+CORNERS).
+E1 0.240 0.280 6.10 7.11
+b2
+eB −−−− 0.430 −−− 10.92
+0.060 TYP 1.52 TYP
+E1
+M
+8X
+c
+D1
+B
+A2 0.115 0.195 2.92 4.95
+L 0.115 0.150 2.92 3.81
+°°
+H
+NOTE 5
+e
+e/2 A2
+NOTE 3
+M B M NOTE 6
+M
+STYLE 1:
+PIN 1. AC IN
+2. DC + IN
+3. DC − IN
+4. AC IN
+5. GROUND
+6. OUTPUT
+7. AUXILIARY
+8. V
+CC
+*This information is generic. Please refer to
+device data sheet for actual part marking.
+Pb−Free indicator, “G” or microdot “ /C0071”, may
+or may not be present. Some products may
+not follow the Generic Marking.
+MECHANICAL CASE OUTLINE
+PACKAGE DIMENSIONS
+98ASB42420BDOCUMENT NUMBER:
+DESCRIPTION:
+Electronic versions are uncontrolled except when accessed directly from the Document Repository.
+Printed  versions are uncontrolled  except when stamped  “CONTROLLED COPY” in red.
+PAGE 1 OF 1PDIP−8
+onsemi and                     are trademarks of Semiconductor Components Industries, LLC dba onsemi or its subsidiaries in the United States and/or other countries. onsemi reserves
+the right to make changes without further notice to any products herein. onsemi makes no warranty, representation or guarantee regarding the suitability of its products for any particular
+purpose, nor does onsemi assume any liability arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation
+special, consequential or incidental damages. onsemi does not convey any license under its patent rights nor the rights of others.
+©  Semiconductor Components Industries, LLC, 2019 www.onsemi.com
+SOIC−8 NB
+CASE 751−07
+ISSUE AK
+DATE 16 FEB 2011
+SEATING
+PLANE
+1
+4
+58
+N
+J
+X 45 /C0095
+K
+NOTES:
+1. DIMENSIONING AND TOLERANCING PER
+ANSI Y14.5M, 1982.
+2. CONTROLLING DIMENSION: MILLIMETER.
+3. DIMENSION A AND B DO NOT INCLUDE
+MOLD PROTRUSION.
+4. MAXIMUM MOLD PROTRUSION 0.15 (0.006)
+PER SIDE.
+5. DIMENSION D DOES NOT INCLUDE DAMBAR
+PROTRUSION. ALLOWABLE DAMBAR
+PROTRUSION SHALL BE 0.127 (0.005) TOTAL
+IN EXCESS OF THE D DIMENSION AT
+MAXIMUM MATERIAL CONDITION.
+6. 751 −01 THRU 751−06 ARE OBSOLETE. NEW
+STANDARD IS 751−07.
+A
+B S
+DH
+C
+0.10 (0.004)
+SCALE 1:1
+STYLES ON PAGE 2
+DIM
+A
+MIN MAX MIN MAX
+INCHES
+4.80 5.00 0.189 0.197
+MILLIMETERS
+B 3.80 4.00 0.150 0.157
+C 1.35 1.75 0.053 0.069
+D 0.33 0.51 0.013 0.020
+G 1.27 BSC 0.050 BSC
+H 0.10 0.25 0.004 0.010
+J 0.19 0.25 0.007 0.010
+K 0.40 1.27 0.016 0.050
+M 0  8  0  8  
+N 0.25 0.50 0.010 0.020
+S 5.80 6.20 0.228 0.244
+−X−
+−Y−
+G
+MYM0.25 (0.010)
+−Z−
+YM0.25 (0.010) Z S X S
+M
+/C0095/C0095/C0095/C0095
+XXXXX = Specific Device Code
+A = Assembly Location
+L = Wafer Lot
+Y = Year
+W = Work Week
+/C0071 = Pb−Free Package
+GENERIC
+MARKING DIAGRAM*
+1
+8
+XXXXX
+ALYWX
+1
+8
+IC Discrete
+XXXXXX
+AYWW
+ /C0071
+1
+8
+1.52
+0.060
+7.0
+0.275
+0.6
+0.024
+1.270
+0.050
+4.0
+0.155
+/C0466mm
+inches/C0467SCALE 6:1
+*For additional information on our Pb−Free strategy and soldering
+details, please download the onsemi Soldering and Mounting
+Techniques Reference Manual, SOLDERRM/D.
+SOLDERING FOOTPRINT*
+Discrete
+XXXXXX
+AYWW
+1
+8
+(Pb−Free)
+XXXXX
+ALYWX
+ /C0071
+1
+8
+IC
+(Pb−Free)
+XXXXXX = Specific Device Code
+A = Assembly Location
+Y = Year
+WW = Work Week
+/C0071 = Pb−Free Package
+*This information is generic. Please refer to
+device data sheet for actual part marking.
+Pb−Free indicator, “G” or microdot “ /C0071”, may
+or may not be present. Some products may
+not follow the Generic Marking.
+MECHANICAL CASE OUTLINE
+PACKAGE DIMENSIONS
+98ASB42564BDOCUMENT NUMBER:
+DESCRIPTION:
+Electronic versions are uncontrolled except when accessed directly from the Document Repository.
+Printed  versions are uncontrolled  except when stamped  “CONTROLLED COPY” in red.
+PAGE 1 OF 2SOIC−8 NB
+onsemi and                     are trademarks of Semiconductor Components Industries, LLC dba onsemi or its subsidiaries in the United States and/or other countries. onsemi reserves
+the right to make changes without further notice to any products herein. onsemi makes no warranty, representation or guarantee regarding the suitability of its products for any particular
+purpose, nor does onsemi assume any liability arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation
+special, consequential or incidental damages. onsemi does not convey any license under its patent rights nor the rights of others.
+©  Semiconductor Components Industries, LLC, 2019 www.onsemi.com
+www.onsemi.com
+2
+SOIC−8 NB
+CASE 751−07
+ISSUE AK
+DATE 16 FEB 2011
+STYLE 4:
+PIN 1. ANODE
+2. ANODE
+3. ANODE
+4. ANODE
+5. ANODE
+6. ANODE
+7. ANODE
+8. COMMON CATHODE
+STYLE 1:
+PIN 1. EMITTER
+2. COLLECTOR
+3. COLLECTOR
+4. EMITTER
+5. EMITTER
+6. BASE
+7. BASE
+8. EMITTER
+STYLE 2:
+PIN 1. COLLECTOR, DIE, #1
+2. COLLECTOR, #1
+3. COLLECTOR, #2
+4. COLLECTOR, #2
+5. BASE, #2
+6. EMITTER, #2
+7. BASE, #1
+8. EMITTER, #1
+STYLE 3:
+PIN 1. DRAIN, DIE #1
+2. DRAIN, #1
+3. DRAIN, #2
+4. DRAIN, #2
+5. GATE, #2
+6. SOURCE, #2
+7. GATE, #1
+8. SOURCE, #1
+STYLE 6:
+PIN 1. SOURCE
+2. DRAIN
+3. DRAIN
+4. SOURCE
+5. SOURCE
+6. GATE
+7. GATE
+8. SOURCE
+STYLE 5:
+PIN 1. DRAIN
+2. DRAIN
+3. DRAIN
+4. DRAIN
+5. GATE
+6. GATE
+7. SOURCE
+8. SOURCE
+STYLE 7:
+PIN 1. INPUT
+2. EXTERNAL  BYPASS
+3. THIRD STAGE SOURCE
+4. GROUND
+5. DRAIN
+6. GATE 3
+7. SECOND STAGE Vd
+8. FIRST STAGE Vd
+STYLE 8:
+PIN 1. COLLECTOR, DIE #1
+2. BASE, #1
+3. BASE, #2
+4. COLLECTOR, #2
+5. COLLECTOR, #2
+6. EMITTER, #2
+7. EMITTER, #1
+8. COLLECTOR, #1
+STYLE 9:
+PIN 1. EMITTER,  COMMON
+2. COLLECTOR, DIE #1
+3. COLLECTOR, DIE #2
+4. EMITTER, COMMON
+5. EMITTER, COMMON
+6. BASE, DIE #2
+7. BASE, DIE #1
+8. EMITTER, COMMON
+STYLE 10:
+PIN 1. GROUND
+2. BIAS 1
+3. OUTPUT
+4. GROUND
+5. GROUND
+6. BIAS 2
+7. INPUT
+8. GROUND
+STYLE 11:
+PIN 1. SOURCE 1
+2. GATE 1
+3. SOURCE 2
+4. GATE 2
+5. DRAIN 2
+6. DRAIN 2
+7. DRAIN 1
+8. DRAIN 1
+STYLE 12:
+PIN 1. SOURCE
+2. SOURCE
+3. SOURCE
+4. GATE
+5. DRAIN
+6. DRAIN
+7. DRAIN
+8. DRAIN
+STYLE 14:
+PIN 1. N −SOURCE
+2. N −GATE
+3. P −SOURCE
+4. P −GATE
+5. P −DRAIN
+6. P −DRAIN
+7. N −DRAIN
+8. N −DRAIN
+STYLE 13:
+PIN 1. N.C.
+2. SOURCE
+3. SOURCE
+4. GATE
+5. DRAIN
+6. DRAIN
+7. DRAIN
+8. DRAIN
+STYLE 15:
+PIN 1. ANODE 1
+2. ANODE 1
+3. ANODE 1
+4. ANODE 1
+5. CATHODE, COMMON
+6. CATHODE, COMMON
+7. CATHODE, COMMON
+8. CATHODE, COMMON
+STYLE 16:
+PIN 1. EMITTER, DIE #1
+2. BASE, DIE #1
+3. EMITTER, DIE #2
+4. BASE, DIE #2
+5. COLLECTOR, DIE #2
+6. COLLECTOR, DIE #2
+7. COLLECTOR, DIE #1
+8. COLLECTOR, DIE #1
+STYLE 17:
+PIN 1. VCC
+2. V2OUT
+3. V1OUT
+4. TXE
+5. RXE
+6. VEE
+7. GND
+8. ACC
+STYLE 18:
+PIN 1. ANODE
+2. ANODE
+3. SOURCE
+4. GATE
+5. DRAIN
+6. DRAIN
+7. CATHODE
+8. CATHODE
+STYLE 19:
+PIN 1. SOURCE 1
+2. GATE 1
+3. SOURCE 2
+4. GATE 2
+5. DRAIN 2
+6. MIRROR 2
+7. DRAIN 1
+8. MIRROR 1
+STYLE 20:
+PIN 1. SOURCE (N)
+2. GATE (N)
+3. SOURCE (P)
+4. GATE (P)
+5. DRAIN
+6. DRAIN
+7. DRAIN
+8. DRAIN
+STYLE 21:
+PIN 1. CATHODE 1
+2. CATHODE 2
+3. CATHODE 3
+4. CATHODE 4
+5. CATHODE 5
+6. COMMON ANODE
+7. COMMON ANODE
+8. CATHODE 6
+STYLE 22:
+PIN 1. I/O LINE 1
+2. COMMON CATHODE/VCC
+3. COMMON CATHODE/VCC
+4. I/O LINE 3
+5. COMMON ANODE/GND
+6. I/O LINE 4
+7. I/O LINE 5
+8. COMMON ANODE/GND
+STYLE 23:
+PIN 1. LINE 1 IN
+2. COMMON ANODE/GND
+3. COMMON ANODE/GND
+4. LINE 2 IN
+5. LINE 2 OUT
+6. COMMON ANODE/GND
+7. COMMON ANODE/GND
+8. LINE 1 OUT
+STYLE 24:
+PIN 1. BASE
+2. EMITTER
+3. COLLECTOR/ANODE
+4. COLLECTOR/ANODE
+5. CATHODE
+6. CATHODE
+7. COLLECTOR/ANODE
+8. COLLECTOR/ANODE
+STYLE 25:
+PIN 1. VIN
+2. N/C
+3. REXT
+4. GND
+5. IOUT
+6. IOUT
+7. IOUT
+8. IOUT
+STYLE 26:
+PIN 1. GND
+2. dv/dt
+3. ENABLE
+4. ILIMIT
+5. SOURCE
+6. SOURCE
+7. SOURCE
+8. VCC
+STYLE 27:
+PIN 1. ILIMIT
+2. OVLO
+3. UVLO
+4. INPUT+
+5. SOURCE
+6. SOURCE
+7. SOURCE
+8. DRAIN
+STYLE 28:
+PIN 1. SW_TO_GND
+2. DASIC_OFF
+3. DASIC_SW_DET
+4. GND
+5. V_MON
+6. VBULK
+7. VBULK
+8. VIN
+STYLE 29:
+PIN 1. BASE, DIE #1
+2. EMITTER, #1
+3. BASE, #2
+4. EMITTER, #2
+5. COLLECTOR, #2
+6. COLLECTOR, #2
+7. COLLECTOR, #1
+8. COLLECTOR, #1
+STYLE 30:
+PIN 1. DRAIN 1
+2. DRAIN 1
+3. GATE 2
+4. SOURCE 2
+5. SOURCE 1/DRAIN 2
+6. SOURCE 1/DRAIN 2
+7. SOURCE 1/DRAIN 2
+8. GATE 1
+98ASB42564BDOCUMENT NUMBER:
+DESCRIPTION:
+Electronic versions are uncontrolled except when accessed directly from the Document Repository.
+Printed  versions are uncontrolled  except when stamped  “CONTROLLED COPY” in red.
+PAGE 2 OF 2SOIC−8 NB
+onsemi and                     are trademarks of Semiconductor Components Industries, LLC dba onsemi or its subsidiaries in the United States and/or other countries. onsemi reserves
+the right to make changes without further notice to any products herein. onsemi makes no warranty, representation or guarantee regarding the suitability of its products for any particular
+purpose, nor does onsemi assume any liability arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation
+special, consequential or incidental damages. onsemi does not convey any license under its patent rights nor the rights of others.
+©  Semiconductor Components Industries, LLC, 2019 www.onsemi.com
+Micro8
+CASE 846A−02
+ISSUE K
+DATE 16 JUL 2020SCALE 2:1
+STYLE 1:
+PIN 1. SOURCE
+ 2. SOURCE
+ 3. SOURCE
+ 4. GATE
+ 5. DRAIN
+ 6. DRAIN
+ 7. DRAIN
+ 8. DRAIN
+STYLE 2:
+PIN 1. SOURCE 1
+ 2. GATE 1
+ 3. SOURCE 2
+ 4. GATE 2
+ 5. DRAIN 2
+ 6. DRAIN 2
+ 7. DRAIN 1
+ 8. DRAIN 1
+STYLE 3:
+PIN 1. N-SOURCE
+ 2. N-GATE
+ 3. P-SOURCE
+ 4. P-GATE
+ 5. P-DRAIN
+ 6. P-DRAIN
+ 7. N-DRAIN
+ 8. N-DRAIN
+GENERIC
+MARKING DIAGRAM*
+XXXX = Specific Device Code
+A = Assembly Location
+Y = Year
+W = Work Week
+/C0071 = Pb−Free Package
+XXXX
+AYW/C0071
+/C0071
+1
+8
+*This information is generic. Please refer to
+device data sheet for actual part marking.
+Pb−Free indicator, “G” or microdot “ /C0071”, may
+or may not be present. Some products may
+not follow the Generic Marking.
+(Note: Microdot may be in either location)
+MECHANICAL CASE OUTLINE
+PACKAGE DIMENSIONS
+98ASB14087CDOCUMENT NUMBER:
+DESCRIPTION:
+Electronic versions are uncontrolled except when accessed directly from the Document Repository.
+Printed  versions are uncontrolled  except when stamped  “CONTROLLED COPY” in red.
+PAGE 1 OF 1MICRO8
+onsemi and                     are trademarks of Semiconductor Components Industries, LLC dba onsemi or its subsidiaries in the United States and/or other countries. onsemi reserves
+the right to make changes without further notice to any products herein. onsemi makes no warranty, representation or guarantee regarding the suitability of its products for any particular
+purpose, nor does onsemi assume any liability arising out of the application or use of any product or circuit, and specifically disclaims any and all liability, including without limitation
+special, consequential or incidental damages. onsemi does not convey any license under its patent rights nor the rights of others.
+©  Semiconductor Components Industries, LLC, 2019 www.onsemi.com
+onsemi,  , and other names, marks, and brands are registered and/or common law trademarks of Semiconductor Components Industries, LLC  dba “onsemi” or its affiliates
+and/or subsidiaries in the United States and/or other countries. onsemi owns the rights to a number of patents, trademarks, copyrights, trade secrets, and other intellectual property.
+A listing of onsemi’s product/patent coverage may be accessed at www.onsemi.com/site/pdf/Patent−Marking.pdf. onsemi reserves the right to make changes at any time to any
+products or information herein, without notice. The information herein is provided “as−is” and onsemi makes no warranty, representation or guarantee regarding the accuracy of the
+information, product features, availability, functionality, or suitability of its products for any particular purpose, nor does onsemi assume any liability arising out of the application or use
+of any product or circuit, and specifically disclaims any and all liability, including without limitation special, consequential or incidental damages. Buyer is responsible for its products
+and applications using onsemi products, including compliance with all laws, regulations and safety requirements or standards, regardless of any support or applications information
+provided by onsemi. “Typical” parameters which may be provided in onsemi data sheets and/or specifications can and do vary in different applications and actual performance may
+vary over time. All operating parameters, including “Typicals” must be validated for each customer application by customer’s technical experts. onsemi does not convey any license
+under any of its intellectual property rights nor the rights of others. onsemi products are not designed, intended, or authorized for use as a critical component in life support systems
+or any FDA Class 3 medical devices or medical devices with a same or similar classification in a foreign jurisdiction or any devices intended for implantation in the human body. Should
+Buyer purchase or use onsemi products for any such unintended or unauthorized application, Buyer shall indemnify and hold onsemi and its officers, employees, subsidiaries, affiliates,
+and distributors harmless against all claims, costs, damages, and expenses, and reasonable attorney fees arising out of, direct ly or indirectly, any claim of personal injury or death
+associated with such unintended or unauthorized use, even if such claim alleges that onsemi was negligent regarding the design or manufacture of the part. onsemi is an Equal
+Opportunity/Affirmative Action Employer. This literature is subject to all applicable copyright laws and is not for resale in any manner.
+ADDITIONAL INFORMATION
+TECHNICAL PUBLICATIONS:
+Technical Library: www.onsemi.com/design/resources/technical−documentation
+onsemi Website: www.onsemi.com
+ONLINE SUPPORT: www.onsemi.com/support
+For additional information, please contact your local Sales Representative at
+www.onsemi.com/support/sales
+

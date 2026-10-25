@@ -1,0 +1,6 @@
+ROBOT TEST BARCODES | A-Z | 141 mm
+A4 - Actual size / 100% - Disable Fit / Shrink
+Single-letter test sheet; preserve at least 30 mm of white on each side.
+K
+Code 39  *K*  |  bars: 141 x 50 mm
+Ruler must measure 100 mm | Page 1/1

@@ -1,0 +1,68 @@
+Subsystem 3 host verification: 2026-10-20 (Asia/Singapore)
+Status: UNCOMMITTED working-tree verification, not hardware evidence.
+Base commit: d5f5199d7035f529dd78db65eeda378f689a01e9
+
+COMMAND: gcc --version
+gcc (Rev2, Built by MSYS2 project) 14.2.0
+Copyright (C) 2024 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+
+EXIT: 0
+
+COMMAND: python testing/subsystem3/run_host_tests.py
+
+TEST mode=3 black_is_high=0
+610 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 6 bytes
+
+TEST mode=3 black_is_high=1
+610 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 6 bytes
+
+TEST mode=4 black_is_high=0
+610 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 6 bytes
+
+TEST mode=4 black_is_high=1
+610 checks, 0 failures
+edge ring: 512 -> 192 bytes; queued event: 20 -> 6 bytes
+
+
+EXIT: 0
+
+COMMAND: python tools/barr_check.py app_program/subsystem3/barcode.c app_program/subsystem3/barcode.h app_program/subsystem3/barcode_decode.c app_program/subsystem3/barcode_decode.h app_program/subsystem3/ir_sensor.c app_program/subsystem3/ir_sensor.h app_program/subsystem3/line_follow.c app_program/subsystem3/line_follow.h app_program/subsystem3/subsystem3_test.c app_program/subsystem3/subsystem3_test.h app_program/app_tests.c
+deviation-note 1.6.a (void) discard cast                   35 in  3 files
+TOTAL (excluding deviations): 0
+
+
+EXIT: 0
+
+COMMAND: git diff --check
+
+
+EXIT: 0
+
+SHA-256 source manifest for tested working tree:
+5a60f5e79a10b8f778d3c624e1ca9c2865b40725bd08c148d39dc652dda44c52  app_program/app_tests.c
+a45b7092b68e6ccacd7b27435f21e2c3410048ed1ed2ef060fd56d22accb74a2  app_program/car_config.h
+42f15942b726459fde5ee2df6bb489ce74d9b9794da929a6c2735ef163627fcb  app_program/car_math.c
+f5604d2ba0944e9100cd222428f58c5715128532fdc7d4a1515a5648abf9e153  app_program/subsystem2/pid.c
+cd9da6921df9cf1077d0f0f9b27cbd476791c34de7d8188433b5434232b5d1ff  app_program/subsystem3/barcode.c
+c1675b0eff35d3ed519f70b770558f68e0bfc804e310bc7393cb23904b18e4c9  app_program/subsystem3/barcode.h
+be72a7dbe5bc25ecc7a2e37a1519eb3ae5c2380c50563b3d0098e271def28448  app_program/subsystem3/barcode_decode.c
+fbe10d1137b3b7e71ff4e2375dbad613440355bd67c173530303c486247f95b4  app_program/subsystem3/barcode_decode.h
+4cf479324d741d4f4b8bc45ee6f9cd038aea5868ed7a82471a0fa25fd6514447  app_program/subsystem3/ir_sensor.c
+74a8894b850606713a15c5d4d4632185aba665f69a9eba4a9b8820a4f642e1cd  app_program/subsystem3/ir_sensor.h
+16c36b96e2a1980588da2b8b59f27037b32259e3ee1d89325e3957794dbee642  app_program/subsystem3/line_follow.c
+a8e9c6b3d5f5c05472eb9ff52a8546f9e507de7f318124b51c67489a34148a90  app_program/subsystem3/line_follow.h
+550687c7307a4e0440972cc92bfba3536f66e28b74e8972e8b52bca03dca030d  app_program/subsystem3/subsystem3_test.c
+3fe4c1e6c9c76630b0ea033a1cb3dc4218deff9835d331ce86695855f9e86102  app_program/subsystem3/subsystem3_test.h
+742763ec82cb083a556829b8fb5f446960e5e403aa060479aedf75a49d4f49c3  testing/subsystem3/host/fakes.c
+13a3909fa5931ece2b30ce27f614c27276def60ee155c219202479b9eaef14ac  testing/subsystem3/host/fakes.h
+5fe9b5985fef847182938dc98bd6417a54a847eb4e61fce0f17848471479e0cf  testing/subsystem3/host/test_subsystem3.c
+11f29c4c5aa905e25352646822016832ed8195d8b0657c9d81a6ade43140bf5c  testing/subsystem3/host/tk/tkernel.h
+cfb381099bff600d5e253314d546de85d9b88ca59bb5f978da73c1ca69f2b2e2  testing/subsystem3/host/tm/tmonitor.h
+f9cfd56cbc7a2bd014c1c8fcd3cb1fe702ddfee2d69e22f6f2042501bdec6b5b  testing/subsystem3/run_host_tests.py

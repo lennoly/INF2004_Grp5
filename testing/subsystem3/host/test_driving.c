@@ -65,9 +65,17 @@ int main(void)
     assert(velocity_right > velocity_left);
 
     /* A left barcode waits for a junction. */
-    next_event.cmd = barcode_decode_to_command('Y'); event_ready = true;
+    next_event.cmd = barcode_decode_to_command('Y');
+    strcpy(next_event.text, "Y"); event_ready = true;
     handle_line_follow();
     assert(g_st.pending_nav == NAV_LEFT && g_st.state == VS_LINE_FOLLOW);
+    assert(g_st.pending_code == 'Y');
+
+    /* An unassigned scan must not overwrite the letter awaiting a junction. */
+    next_event.cmd = barcode_decode_to_command('A');
+    strcpy(next_event.text, "A"); event_ready = true;
+    handle_line_follow();
+    assert(g_st.pending_code == 'Y' && g_st.pending_nav == NAV_LEFT);
     sensor.norm[IR_LEFT] = 1.0f;
     sensor.norm[IR_RIGHT] = 1.0f;
     wheels.odo_mm = 11.0f;
@@ -86,6 +94,7 @@ int main(void)
     start_pressed = true;
     poll_buttons(); handle_requests();
     assert(g_st.state == VS_LINE_FOLLOW && g_st.pending_nav == NAV_NONE);
+    assert(g_st.pending_code == '\0');
 
     /* A cross without a barcode stays in line-follow mode. */
     wheels.odo_mm += 11.0f;
