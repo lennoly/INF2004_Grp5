@@ -103,9 +103,9 @@
 #define SPEED_OFFSET_PCT            (2.3f)    /* static friction offset     */
 #define STRAIGHT_KP                 (2.0f)    /* (mm/s) per mm L-R mismatch */
 
-#define SPEED_CRUISE_MM_S           (100.0f)  /* [CALIBRATE] barcode: 100 */
-#define SPEED_HUMP_UP_MM_S          (125.0f)  /* [CALIBRATE] climbing      */
-#define SPEED_HUMP_DOWN_MM_S        (75.0f)   /* [CALIBRATE] descending    */
+#define SPEED_CRUISE_MM_S           (200.0f)  /* [CALIBRATE] 26 Oct (barcodes were tuned at 100) */
+#define SPEED_HUMP_UP_MM_S          (200.0f)  /* [CALIBRATE] climbing: as cruise */
+#define SPEED_HUMP_DOWN_MM_S        (150.0f)  /* [CALIBRATE] descending    */
 #define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
 #define SPEED_TURN_MM_S             (120.0f)
 #define SPEED_BYPASS_MM_S           (300.0f)  /* [CALIBRATE] obstacle bypass legs (NFR2 max) */

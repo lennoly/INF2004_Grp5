@@ -2102,17 +2102,21 @@ test_vehicle_obstacle (void)
     check((11u == obstacle_get_points(points, SCAN_MAX_POINTS))
               && (65 == points[0].angle_deg) && (150 == points[2].dist_mm),
           "vehicle: last scan points kept (65..115 deg fine scan)");
-    check((2u == vehicle_sim_count("L45")) && (2u == vehicle_sim_count("R45"))
+    /* Out, straight, back: three 45 deg turns; the line is met on the
+       return leg, so line following starts without the fourth. */
+    check((1u == vehicle_sim_count("L45")) && (2u == vehicle_sim_count("R45"))
               && (0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
-          "vehicle: diagonal bypass, line rejoined");
+          "vehicle: diagonal bypass, line followed from the return leg");
     /* Box seen 75..105 deg, centred: side unsure, blind offset 280 mm.
        45 deg leg 280 x 1.414 = 396.  Box edge 280 - 80 - 60 = 140, near
        face 150 + sonar 70 = 220, so back off 140 + 0.707 x 160 + 1.414 x
        30 - 220 = 76; return at 220 + 76 + deepest 150 + 140 - 280 + 156 =
-       461, less the 280 the leg covered. */
+       461, less the 280 the leg covered.  The return leg may run 60 mm
+       past the original path while it looks for the line (456). */
     check((1u == vehicle_sim_count("back76;"))
-              && (2u == vehicle_sim_count("fwd396;"))
+              && (1u == vehicle_sim_count("fwd396;"))
+              && (1u == vehicle_sim_count("fwd456;"))
               && (1u == vehicle_sim_count("fwd181;")),
           "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
