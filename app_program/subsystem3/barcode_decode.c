@@ -175,6 +175,7 @@ barcode_decode_to_command (char symbol)
 void
 barcode_decode_set_symbol (barcode_decode_nav_t command, char symbol)
 {
+    /* Cast: the command is a table index. */
     if ((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
     {
         g_symbols[command] = symbol;
@@ -191,6 +192,7 @@ barcode_decode_set_symbol (barcode_decode_nav_t command, char symbol)
 char
 barcode_decode_symbol (barcode_decode_nav_t command)
 {
+    /* Cast: the command is a table index. */
     return (((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
                 ? g_symbols[command]
                 : '?');
@@ -327,12 +329,13 @@ decode_char (uint32_t const * p_widths)
     sort_widths(p_widths, 0u, BARS_PER_CHAR, bars);
     sort_widths(p_widths, 1u, SPACES_PER_CHAR, spaces);
 
-    if (wide_split(bars, &bar_cut) && wide_split(spaces, &space_cut))
+    if ((wide_split(bars, &bar_cut)) && (wide_split(spaces, &space_cut)))
     {
         for (idx = 0u; idx < BARCODE_ELEMENTS_PER_CHAR; idx++)
         {
             threshold = (0u == (idx % 2u)) ? bar_cut : space_cut;
-            pattern   = (pattern << 1) | ((p_widths[idx] > threshold) ? 1u : 0u);
+            pattern   = (pattern << 1)
+                        | ((p_widths[idx] > threshold) ? 1u : 0u);
         }
 
         symbol = lookup(pattern);
