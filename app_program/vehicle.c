@@ -65,8 +65,13 @@
 #define SPEED_MAX_CMD      (SPEED_CMD_MAX_MM_S)
 #define STOP_SETTLE_MS     (200u)
 #define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
+/* Line search: alternating sweeps, each REACQ_BASE_MS longer.  At 90 mm/s
+   per wheel on the 138 mm track the car turns about 75 deg/s, so 200 ms is
+   a 15 deg step: +15, -15, +30, -30, +45 deg (was 350 ms, out to 78 deg). */
 #define REACQ_SWEEPS       (5u)
-#define REACQ_BASE_MS      (350u)
+#define REACQ_BASE_MS      (200u)
+#define REJOIN_EXTRA_MM    (60.0f) /* return leg past the original path   */
+#define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
 
@@ -168,6 +173,7 @@ static void            start_settling(void);
 static void            execute_nav(barcode_decode_nav_t cmd);
 static bool            pass_obstacle(float32_t pass_mm);
 static bool            bypass(avoidance_plan_t const * p_plan);
+static bool            diagonal_to_line(float32_t dist_mm);
 static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
@@ -962,9 +968,9 @@ pass_obstacle (float32_t pass_mm)
 /*!
  * @brief Diagonal bypass that keeps the deviation to the planned offset:
  *        45 deg out until the car is offset_mm to the side, straight past
- *        (front sensor watching), 45 deg back the same length, then
- *        line up on the line (reacquire_line()).  Half the
- *        turning of a box-shaped bypass.
+ *        (front sensor watching), 45 deg back until the line sensors meet
+ *        the line, then line following straight away (diagonal_to_line()).
+ *        Half the turning of a box-shaped bypass.
  *
  * On a 45 deg leg the car's inner side stays on one 45 deg line, so a box
  * corner is cleared by OBST_CORNER_MARGIN_MM (m) when it is m x sqrt2
@@ -1021,14 +1027,57 @@ bypass (avoidance_plan_t const * p_plan)
            && (forward(diagonal, SPEED_BYPASS_MM_S))
            && (turn_side(-side, EIGHTH_TURN)) && (pass_obstacle(straight))
            && (turn_side(-side, EIGHTH_TURN))
-           /* The same length back puts the axle on the original path;
-              facing along it again, the line is under the IR row. */
-           && (forward(diagonal, SPEED_BYPASS_MM_S))
-           && (turn_side(side, EIGHTH_TURN)) && (reacquire_line(side));
+           /* Back along the 45 deg leg until the IR row meets the line,
+              then line following takes over at the settling speed (no
+              turn to line up first).  The line not met: line up and
+              search as before. */
+           && (diagonal_to_line(diagonal + REJOIN_EXTRA_MM)
+               || ((!gb_abort) && (turn_side(side, EIGHTH_TURN))
+                   && (reacquire_line(side))));
     servo_set_angle(SERVO_CENTRE_DEG);
     obstacle_monitor_enable(true);
 
     return (b_ok);
+}
+
+/*!
+ * @brief Return leg of a bypass: drive forward until either line sensor
+ *        sees the line, then hand over to line following (settling).
+ *
+ * @param[in] dist_mm Longest distance to drive.
+ *
+ * @return true if the line was met.
+ */
+static bool
+diagonal_to_line (float32_t dist_mm)
+{
+    ir_sensor_snapshot_t ir_snap;
+    uint32_t             waited = 0u;
+    int32_t              result = MOTION_WAIT_BUSY;
+    bool                 b_seen = false;
+
+    motion_move_forward(dist_mm, SPEED_BYPASS_MM_S);
+
+    while ((MOTION_WAIT_BUSY == result) && (!b_seen) && (!gb_abort)
+           && (waited <= MOVE_TIMEOUT_MS))
+    {
+        result = motion_wait(LOOP_MS);
+        poll_inputs();
+        ir_sensor_read(&ir_snap);
+        b_seen = (ir_snap.norm[IR_LEFT] > REJOIN_SEEN_LEVEL)
+                 || (ir_snap.norm[IR_RIGHT] > REJOIN_SEEN_LEVEL);
+        waited += LOOP_MS;
+    }
+
+    motion_stop();
+
+    if (b_seen && (!gb_abort))
+    {
+        line_follow_init(&g_lf);
+        start_settling();
+    }
+
+    return (b_seen && (!gb_abort));
 }
 
 /*!
