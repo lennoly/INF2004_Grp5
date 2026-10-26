@@ -675,7 +675,7 @@ validate (command_t const * p_cmd)
         break;
 
         case COMMAND_MAP:
-            /* As nav=, then a whole Code 39 index. */
+            /* Cast: as nav=, then a whole Code 39 index. */
             b_ok = (p_cmd->arg[0] > ((float32_t) COMMAND_NAV_MIN - 0.5f))
                    && (p_cmd->arg[0] < ((float32_t) COMMAND_NAV_MAX + 0.5f))
                    && (p_cmd->arg[1] > -0.5f)

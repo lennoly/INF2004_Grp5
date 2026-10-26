@@ -277,13 +277,15 @@ drive_to_wall (crash_result_t * p_result)
            && ((motion.odo_mm - start_mm) < CRASH_RUN_MM)
            && (elapsed_ms < CRASH_MAX_MS))
     {
+        /* Cast: the poll period is a positive constant. */
         (void) tk_dly_tsk(CRASH_POLL_MS);
         elapsed_ms += (uint32_t) CRASH_POLL_MS;
         imu_get_status(&imu_state);
         jerk = imu_take_peak_jerk();
 
         /* Speed before this sample: the hit sample has already slowed. */
-        p_result->speed_mm_s = 0.5f * (motion.speed_l_mm_s + motion.speed_r_mm_s);
+        p_result->speed_mm_s
+            = 0.5f * (motion.speed_l_mm_s + motion.speed_r_mm_s);
         motion_get_status(&motion);
         b_starting = ((motion.odo_mm - start_mm) < CRASH_START_MM);
 
@@ -304,7 +306,8 @@ drive_to_wall (crash_result_t * p_result)
 
         last_impacts = imu_state.impacts;
 
-        /* Count still time only once rolling, so the start is not a stop. */
+        /* Count still time only once rolling, so the start is not a stop.
+           Cast: the poll period is a positive constant. */
         still_ms = ((motion.odo_mm > last_mm)
                     || ((motion.odo_mm - start_mm) < CRASH_MOVED_MM))
                        ? 0u
@@ -344,6 +347,7 @@ back_off (crash_back_t * p_back)
     while (((start_mm - motion.odo_mm) < CRASH_BACK_MM)
            && (elapsed_ms < CRASH_MAX_MS))
     {
+        /* Cast: the poll period is a positive constant. */
         (void) tk_dly_tsk(CRASH_POLL_MS);
         elapsed_ms += (uint32_t) CRASH_POLL_MS;
         motion_get_status(&motion);

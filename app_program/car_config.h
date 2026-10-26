@@ -103,12 +103,13 @@
 #define SPEED_OFFSET_PCT            (2.3f)    /* static friction offset     */
 #define STRAIGHT_KP                 (2.0f)    /* (mm/s) per mm L-R mismatch */
 
-#define SPEED_CRUISE_MM_S           (200.0f)  /* [CALIBRATE] 26 Oct (barcodes were tuned at 100) */
-#define SPEED_HUMP_UP_MM_S          (200.0f)  /* [CALIBRATE] climbing: as cruise */
+/* 200 since 26 Oct; the barcodes were tuned at 100. */
+#define SPEED_CRUISE_MM_S           (200.0f)  /* [CALIBRATE]                */
+#define SPEED_HUMP_UP_MM_S          (200.0f)  /* [CALIBRATE] climbing     */
 #define SPEED_HUMP_DOWN_MM_S        (150.0f)  /* [CALIBRATE] descending    */
 #define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
 #define SPEED_TURN_MM_S             (120.0f)
-#define SPEED_BYPASS_MM_S           (300.0f)  /* [CALIBRATE] obstacle bypass legs (NFR2 max) */
+#define SPEED_BYPASS_MM_S           (300.0f)  /* [CALIBRATE] NFR2 max     */
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
 #define SPEED_CMD_MIN_MM_S          (60)
@@ -129,7 +130,7 @@
 #define LINE_LOST_LEVEL             (0.15f)   /* both below => off line     */
 #define LINE_JUNCTION_LEVEL         (0.75f)   /* both above => junction     */
 #define LINE_JUNCTION_MIN_MM        (10.0f)
-#define LINE_JUNCTION_REARM_MM      (100.0f)  /* [CALIBRATE] off black before the next junction */
+#define LINE_JUNCTION_REARM_MM      (100.0f)  /* [CALIBRATE] off black, rearm */
 #define LINE_LOST_CONFIRM_MS        (150u)
 
 /* 14 cm barcode (S3-U03): narrow bars peak at 190-810 permille driving at
@@ -151,7 +152,7 @@
 /* the sensor is past the line.                                            */
 #define NAV_JUNCTION_BAR_MIN_MM     (12.0f)   /* [CALIBRATE]                */
 #define NAV_JUNCTION_BAR_MAX_MM     (30.0f)   /* [CALIBRATE]                */
-#define NAV_LINE_JUNCTION           (0)       /* 1 = line-sensor junctions too */
+#define NAV_LINE_JUNCTION           (0)       /* 1 = line junctions too   */
 /* After a junction turn or a line search: follow at SPEED_SLOW_MM_S for    */
 /* this distance so the steering lines the car up, then cruise.             */
 #define LINE_SETTLE_MM              (150.0f)
@@ -212,7 +213,9 @@
 #define US_SEM_TIMEOUT_MS           (100u)    /* NFR9: sensor wait limit    */
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
-#define OBST_DETECT_MM              (240)     /* start profiling below this (25 Oct: 200 scanned too close to see box edges) */
+/* Start profiling below this (25 Oct: 200 was too close to see the box
+   edges). */
+#define OBST_DETECT_MM              (240)
 /* The floor echoes at about 300-380 mm (the sensor is low and cannot tilt
    up): the profile treats echoes this far or further as no echo.  The
    front sensor still watches the pass for real objects. */
@@ -228,7 +231,7 @@
 #define OBST_MARGIN_MM              (60.0f)
 #define OBST_MAX_CLEARANCE_MM       (1000)
 #define OBST_FINE_STEP_DEG          (5)
-#define OBST_DEPTH_MAX_MM           (150.0f)  /* [CALIBRATE] deepest box (10-15 cm) */
+#define OBST_DEPTH_MAX_MM           (150.0f)  /* [CALIBRATE] deepest box  */
 #define OBST_MAX_ATTEMPTS           (2u)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
    pass this far to one side, enough for the largest obstacle, a 150 mm
@@ -251,7 +254,7 @@
 /* clearance from the box's near and far corners (deepest box,            */
 /* OBST_DEPTH_MAX_MM); the car backs off first if the box is too close.   */
 #define OBST_CORNER_MARGIN_MM       (30.0f)   /* [CALIBRATE]               */
-#define OBST_SENSOR_AHEAD_MM        (70.0f)   /* sonar face ahead of the wheel axle (measured) */
+#define OBST_SENSOR_AHEAD_MM        (70.0f)   /* sonar face to axle, measured */
 /* TEST_OBSTACLE build: MISSION with line only after the obstacle.  The   */
 /* car drives straight (no steering, line search or barcode turns) until   */
 /* it has bypassed an obstacle, then rejoins the line and follows it.      */

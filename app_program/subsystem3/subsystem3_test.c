@@ -95,7 +95,8 @@ subsystem3_test_barcode (void)
     motion_move_forward(BARCODE_RUN_MM, BARCODE_SPEED_MM_S);
 
     /* motion_wait(), not b_busy: the move starts in the motion task, so
-       b_busy can still be false straight after the command. */
+       b_busy can still be false straight after the command.  Casts:
+       the constants to the API types. */
     while ((MOTION_WAIT_BUSY == motion_wait((int32_t) TRACE_MS))
            && (waited < (uint32_t) SLOW_TIMEOUT_MS))
     {
