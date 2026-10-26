@@ -41,10 +41,11 @@
 #define MONITOR_PERIOD_MS (70u)
 #define FINE_MIN_DEG      (SERVO_MIN_DEG)
 #define FINE_MAX_DEG      (SERVO_MAX_DEG)
-#define FINE_POINTS_ALL   ((uint32_t) (((FINE_MAX_DEG - FINE_MIN_DEG) / OBST_FINE_STEP_DEG) + 1))
-#define FINE_POINTS       ((FINE_POINTS_ALL < SCAN_MAX_POINTS) ? FINE_POINTS_ALL : SCAN_MAX_POINTS)
+#define FINE_POINTS_ALL \
+    ((uint32_t) (((FINE_MAX_DEG - FINE_MIN_DEG) / OBST_FINE_STEP_DEG) + 1))
+#define FINE_POINTS \
+    ((FINE_POINTS_ALL < SCAN_MAX_POINTS) ? FINE_POINTS_ALL : SCAN_MAX_POINTS)
 #define MEDIAN_SAMPLES    (3u)
-#define SWING_MS_PER_DEG  (3u)  /* about 0.18 s per 60 degrees */
 #define SETTLE_STEP_MS    (20u) /* stop checks while the servo settles */
 #define PAUSE_STEP_MS     (10u)
 #define PAUSE_STEPS       (20u) /* wait at most 200 ms for the monitor */
@@ -250,8 +251,8 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
 
         /* Casts: tm_printf() takes the kernel's UB string type (the literal
            is ASCII); the values are small counts and distances in mm, so
-           they fit in INT (the width is rounded to whole mm first). */
-        /* w>= : an edge was not seen, the width is a lower bound. */
+           they fit in INT (the width is rounded to whole mm first).
+           w>= : an edge was not seen, the width is a lower bound. */
         (void) tm_printf(
             (UB const *) "[scan] pts=%d found=%d d=%d w%s%d cl=%d cr=%d\n",
             (INT) count, b_found ? 1 : 0, (INT) p_prof->closest_mm,

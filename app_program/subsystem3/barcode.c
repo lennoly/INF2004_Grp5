@@ -224,7 +224,8 @@ finish_frame (void)
                                           "rejected (%d):",
                              (INT) g_count, (INT) len);
 
-            /* Debug (S3-U03): the widths, to see what went wrong. */
+            /* Debug (S3-U03): the widths, to see what went wrong.
+               Casts as above. */
             for (idx = 0u; idx < g_count; idx++)
             {
                 (void) tm_printf((UB const *) " %d", (INT) g_widths[idx]);
@@ -236,7 +237,7 @@ finish_frame (void)
     else if (g_count >= SHORT_REPORT_MIN)
     {
         /* Debug (S3-U03): what the sensor saw of a barcode it did not
-           finish, widths in ms, bar first. */
+           finish, widths in ms, bar first.  Casts for tm_printf(). */
         (void) tm_printf((UB const *) "[barcode] short frame: %d elements:",
                          (INT) g_count);
 

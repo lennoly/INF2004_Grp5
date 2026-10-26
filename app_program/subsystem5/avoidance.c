@@ -77,7 +77,8 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
         grow_cluster(p_points, count, p_out->closest_mm + OBST_CLUSTER_DEPTH_MM,
                      &low, &high);
         merge_near(p_points, count,
-                   p_out->closest_mm + (NEIGHBOUR_RANGE * OBST_CLUSTER_DEPTH_MM),
+                   p_out->closest_mm
+                       + (NEIGHBOUR_RANGE * OBST_CLUSTER_DEPTH_MM),
                    &low, &high);
         p_out->closest_angle = p_points[best].angle_deg;
         measure_extent(p_points, low, high, p_out);
@@ -297,8 +298,10 @@ merge_near (avoidance_point_t const * p_points, uint32_t count, int32_t near_mm,
 
     for (idx = *p_high + 1u; idx < count; idx++)
     {
-        if ((point_is_valid(&p_points[idx])) && (p_points[idx].dist_mm <= near_mm)
-            && ((point_lateral(&p_points[*p_high]) - point_lateral(&p_points[idx]))
+        if ((point_is_valid(&p_points[idx]))
+            && (p_points[idx].dist_mm <= near_mm)
+            && ((point_lateral(&p_points[*p_high])
+                 - point_lateral(&p_points[idx]))
                 < need))
         {
             *p_high = idx;
@@ -447,8 +450,10 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
                           : (off_left <= off_right);
     off_left   = b_unsure ? OBST_BLIND_OFFSET_MM : off_left;
     off_right  = b_unsure ? OBST_BLIND_OFFSET_MM : off_right;
-    off_left   = (off_left > OBST_MIN_OFFSET_MM) ? off_left : OBST_MIN_OFFSET_MM;
-    off_right  = (off_right > OBST_MIN_OFFSET_MM) ? off_right : OBST_MIN_OFFSET_MM;
+    off_left   = (off_left > OBST_MIN_OFFSET_MM) ? off_left
+                                                 : OBST_MIN_OFFSET_MM;
+    off_right  = (off_right > OBST_MIN_OFFSET_MM) ? off_right
+                                                  : OBST_MIN_OFFSET_MM;
 
     if (b_left_ok && ((!b_right_ok) || b_prefer_l))
     {

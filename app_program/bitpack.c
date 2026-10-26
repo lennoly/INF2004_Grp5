@@ -12,7 +12,6 @@
 #include "bitpack.h"
 
 #define BITS_PER_BYTE (8u)
-#define BYTE_MASK     (0xFFu)
 #define ALL_ONES      (0xFFFFFFFFu)
 
 /*!

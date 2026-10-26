@@ -55,10 +55,7 @@
 #define COS_45             (0.70710678f)
 #define HALF_TURN          (180.0f)
 #define FULL_TURN          (360.0f)
-#define SERVO_FULL_DEG     (180)
 #define REVERSE_MM         (120.0f)
-#define PASS_STEP_MM       (50.0f)
-#define SIDE_SEEN_EXTRA_MM (150.0f)
 #define FRONT_IGNORE_MM    (150.0f)
 #define STRAIGHT_EXTRA_MM  (20.0f)
 #define SPEED_MIN_CMD      (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
@@ -1031,7 +1028,7 @@ bypass (avoidance_plan_t const * p_plan)
               then line following takes over at the settling speed (no
               turn to line up first).  The line not met: line up and
               search as before. */
-           && (diagonal_to_line(diagonal + REJOIN_EXTRA_MM)
+           && ((diagonal_to_line(diagonal + REJOIN_EXTRA_MM))
                || ((!gb_abort) && (turn_side(side, EIGHTH_TURN))
                    && (reacquire_line(side))));
     servo_set_angle(SERVO_CENTRE_DEG);
@@ -1396,7 +1393,7 @@ handle_line_follow (void)
         imu_get_status(&imu);
         speed = (HUMP_CLIMBING == imu.hump.state)     ? SPEED_HUMP_UP_MM_S
                 : (HUMP_DESCENDING == imu.hump.state) ? SPEED_HUMP_DOWN_MM_S
-                                                      : (float32_t) g_st.cruise_mm_s;
+                : (float32_t) g_st.cruise_mm_s;
         gb_settling = gb_settling && (motion.odo_mm < g_settle_end_odo)
                       && ((now_ms() - g_settle_start_ms) < LINE_SETTLE_MAX_MS);
 
@@ -1412,6 +1409,7 @@ handle_line_follow (void)
 
         if (gb_no_line_yet)
         {
+            /* Cast: as above. */
             speed = (float32_t) g_st.cruise_mm_s;
             steer = 0.0f;
         }
