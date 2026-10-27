@@ -659,7 +659,7 @@ emit_help (void)
     (void) tm_printf(
         (UB const *) "# commands: start | stop | calibrate | gains | help "
                      "| timing\n"
-                     "#   speed=<mm/s>        cruise speed (60..300)\n"
+                     "#   speed=<mm/s>        cruise speed (50..300)\n"
                      "#   pid=<kp>,<ki>,<kd>  wheel speed PID\n"
                      "#   ff=<kf>,<offset>    feed-forward + friction "
                      "offset (pct)\n"

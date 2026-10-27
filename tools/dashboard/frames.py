@@ -307,8 +307,8 @@ def parse_text(text):
         raise ValueError("gain out of range 0..1000")
     if name == "ff" and not (0 <= args[0] <= 1000 and 0 <= args[1] <= 100):
         raise ValueError("ff: kf 0..1000, offset 0..100")
-    if name == "speed" and not 60 <= args[0] <= 300:
-        raise ValueError("speed: 60..300 mm/s")
+    if name == "speed" and not 50 <= args[0] <= 300:
+        raise ValueError("speed: 50..300 mm/s")
     if name == "rate" and not (round(args[0]) == 0
                                or 50 <= round(args[0]) <= 5000):
         raise ValueError("rate: 0 (off) or 50..5000 ms")

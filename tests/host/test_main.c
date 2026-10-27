@@ -480,6 +480,22 @@ test_line (void)
     steer = line_follow_steer(&follower, 0.1f, 0.9f, LINE_DT_S);
     check(steer < 0.0f, "line under RIGHT sensor: steer right");
 
+    /* Line slid out past the left sensor on a bend: full left. */
+    line_follow_init(&follower);
+    (void) line_follow_classify(&follower, 0.6f, 0.2f, 5.0f, LINE_DT_MS);
+    steer = line_follow_steer(&follower, 0.05f, 0.02f, LINE_DT_S);
+    check(steer > (0.9f * LINE_KP), "line slid out left: full left");
+
+    line_follow_init(&follower);
+    (void) line_follow_classify(&follower, 0.2f, 0.6f, 5.0f, LINE_DT_MS);
+    steer = line_follow_steer(&follower, 0.02f, 0.05f, LINE_DT_S);
+    check(steer < (-0.9f * LINE_KP), "line slid out right: full right");
+
+    line_follow_init(&follower);
+    (void) line_follow_classify(&follower, 0.5f, 0.5f, 5.0f, LINE_DT_MS);
+    steer = line_follow_steer(&follower, 0.05f, 0.05f, LINE_DT_S);
+    check((steer < 1.0f) && (steer > -1.0f), "line ended dead ahead: no hold");
+
     line_follow_init(&follower);
 
     for (idx = 0u; idx < LOST_SAMPLES; idx++)
@@ -1870,7 +1886,7 @@ test_command (void)
 }
 
 /*!
- * @brief Command limits from the CSC05 review: speed= 60..300 (NFR2),
+ * @brief Command limits from the CSC05 review: speed= 50..300 (NFR2),
  *        range-checked rate=, the timing command, and tuning only
  *        while the car is stationary.
  */
@@ -1880,11 +1896,11 @@ test_command_limits (void)
     command_t cmd;
 
     check((command_parse("speed=300", &cmd))
-              && (command_parse("speed=60", &cmd))
+              && (command_parse("speed=50", &cmd))
               && (!command_parse("speed=301", &cmd))
-              && (!command_parse("speed=59", &cmd))
+              && (!command_parse("speed=49", &cmd))
               && (!command_parse("speed=99999999999", &cmd)),
-          "speed 60..300 only (NFR2)");
+          "speed 50..300 only (NFR2)");
     check((!command_parse("rate=99999999999", &cmd))
               && (!command_parse("rate=-5", &cmd)),
           "rate: huge or negative values rejected");
@@ -2064,7 +2080,7 @@ test_vehicle_buttons (void)
     check(300 == vehicle_status().cruise_mm_s, "vehicle: speed=400 -> 300");
     (void) vehicle_command(VCMD_SET_SPEED, 10);
     vehicle_sim_step();
-    check(60 == vehicle_status().cruise_mm_s, "vehicle: speed=10 -> 60");
+    check(50 == vehicle_status().cruise_mm_s, "vehicle: speed=10 -> 50");
     (void) vehicle_command(VCMD_SET_SPEED, 180);
     vehicle_sim_step();
 }
