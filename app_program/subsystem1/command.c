@@ -661,7 +661,7 @@ validate (command_t const * p_cmd)
                (Rule 5.4.b.iv). */
             b_ok = (p_cmd->arg[0] >= (float32_t) SPEED_CMD_MIN_MM_S)
                    && (p_cmd->arg[0] <= (float32_t) SPEED_CMD_MAX_MM_S);
-            gp_error = b_ok ? gp_error : "speed: 60..300 mm/s";
+            gp_error = b_ok ? gp_error : "speed: 50..300 mm/s";
         break;
 
         case COMMAND_NAV:

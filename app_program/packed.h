@@ -54,7 +54,7 @@
 #define PACKED_COUNT_BITS     (8u)  /* saturating counters, 0..255       */
 #define PACKED_RANGE_BITS     (12u) /* mm, 0..4094; 4095 = no echo       */
 #define PACKED_ERROR_BITS     (11u) /* permille, signed, -1000..+1000    */
-#define PACKED_CRUISE_BITS    (9u)  /* mm/s, 0..511 (commands 60..300)   */
+#define PACKED_CRUISE_BITS    (9u)  /* mm/s, 0..511 (commands 50..300)   */
 #define PACKED_RUN_BITS       (24u) /* ms, saturates after 4.6 h         */
 #define PACKED_LATERAL_BITS   (13u) /* mm, signed, +-4095                */
 #define PACKED_SERVO_BITS     (8u)  /* deg, 0..180                       */

@@ -125,8 +125,8 @@ class Car:
             err = "rate: 0 (off) or 50..5000 ms"
         elif name in ("pid", "line") and any(v < 0 or v > 1000 for v in vals):
             err = "gain out of range 0..1000"
-        elif name == "speed" and not 60 <= vals[0] <= 300:
-            err = "speed: 60..300 mm/s"
+        elif name == "speed" and not 50 <= vals[0] <= 300:
+            err = "speed: 50..300 mm/s"
         elif name in ("speed", "pid", "ff", "line") and \
                 self.state not in ("IDLE", "STOPPED"):
             err = "only while IDLE or STOPPED"   # as the firmware (CSC05)

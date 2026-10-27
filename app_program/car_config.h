@@ -96,23 +96,22 @@
 #define SPEED_WHEEL_MAX_MM_S        (900.0f)
 #define ENCODER_TIMEOUT_US          (200000u) /* no edge => wheel stopped   */
 
-#define SPEED_KP                    (0.08f)   /* [CALIBRATE] %duty/(mm/s)   */
+#define SPEED_KP                    (0.104f)  /* [CALIBRATE] %duty/(mm/s)   */
 #define SPEED_KI                    (0.60f)
 #define SPEED_KD                    (0.0f)
-#define SPEED_KF                    (0.104f)  /* feed-forward %duty/(mm/s)  */
+#define SPEED_KF                    (0.12f)   /* feed-forward %duty/(mm/s)  */
 #define SPEED_OFFSET_PCT            (2.3f)    /* static friction offset     */
 #define STRAIGHT_KP                 (2.0f)    /* (mm/s) per mm L-R mismatch */
 
-/* 200 since 26 Oct; the barcodes were tuned at 100. */
-#define SPEED_CRUISE_MM_S           (200.0f)  /* [CALIBRATE]                */
-#define SPEED_HUMP_UP_MM_S          (200.0f)  /* [CALIBRATE] climbing     */
-#define SPEED_HUMP_DOWN_MM_S        (150.0f)  /* [CALIBRATE] descending    */
+#define SPEED_CRUISE_MM_S           (50.0f)   /* [CALIBRATE] 27 Oct: bends */
+#define SPEED_HUMP_UP_MM_S          (100.0f)  /* [CALIBRATE] climbing     */
+#define SPEED_HUMP_DOWN_MM_S        (75.0f)   /* [CALIBRATE] descending    */
 #define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
 #define SPEED_TURN_MM_S             (120.0f)
 #define SPEED_BYPASS_MM_S           (300.0f)  /* [CALIBRATE] NFR2 max     */
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
-#define SPEED_CMD_MIN_MM_S          (60)
+#define SPEED_CMD_MIN_MM_S          (50)
 #define SPEED_CMD_MAX_MM_S          (300)
 #define MOTION_BRAKE_MARGIN_MM      (4.0f)
 
@@ -124,7 +123,7 @@
 #define IR_DEFAULT_WHITE            (200u)    /* [CALIBRATE] raw ADC counts */
 #define IR_DEFAULT_BLACK            (2400u)   /* [CALIBRATE] TEST_IR 22 Oct */
 
-#define LINE_KP                     (20.0f)   /* (mm/s) per unit error      */
+#define LINE_KP                     (45.0f)   /* (mm/s) per unit error      */
 #define LINE_KI                     (0.0f)
 #define LINE_KD                     (0.0f)
 #define LINE_LOST_LEVEL             (0.15f)   /* both below => off line     */
