@@ -8,7 +8,7 @@
  * "#<id> " (1..999999999), which the reply repeats, e.g. "#17 gains":
  *
  *   start | stop | calibrate | gains | help | timing
- *   speed=<mm/s>                 cruise speed for line following, 60..300
+ *   speed=<mm/s>                 cruise speed for line following, 50..300
  *   pid=<kp>,<ki>,<kd>           wheel speed PID
  *   ff=<kf>,<offset_pct>         speed feed-forward + static-friction offset
  *   line=<kp>,<ki>,<kd>          line-following PID

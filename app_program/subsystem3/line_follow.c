@@ -11,6 +11,7 @@
 
 #define STEER_LIMIT_MM_S   (250.0f)
 #define SPEED_DROP_AT_EDGE (0.5f) /* slow to 50 % at full error */
+#define HOLD_MIN_ERROR     (0.05f) /* last error that names a side  */
 
 /* Active gains: compile-time defaults, changed live by the "line="
    command.  Written by the vehicle task and read by telemetry: volatile. */
@@ -147,7 +148,10 @@ line_follow_classify (line_follow_t * p_follow, float32_t left, float32_t right,
 /*!
  * @brief Differential steering speed: vL = v - s, vR = v + s.
  *
- * A lost line is not steered: the vehicle controller searches for it.
+ * Both sensors white: the line slid out on a bend, so steer fully to the
+ * side it was last seen while the loss is confirmed (27 Oct: anticlockwise
+ * bends drove straight off).  A confirmed loss is not steered: the
+ * vehicle controller searches for it.
  *
  * @param[in,out] p_follow Follower state.
  * @param[in]     left     Left sensor, 0 (white) .. 1 (black).
@@ -160,7 +164,15 @@ float32_t
 line_follow_steer (line_follow_t * p_follow, float32_t left, float32_t right,
                    float32_t dt_s)
 {
+    bool      b_white = (left < LINE_LOST_LEVEL) && (right < LINE_LOST_LEVEL);
+    float32_t last    = p_follow->last_seen_error;
+
     p_follow->error = left - right;
+
+    if (b_white && (car_math_abs(last) > HOLD_MIN_ERROR))
+    {
+        p_follow->error = (last > 0.0f) ? 1.0f : -1.0f;
+    }
 
     /* Set-point 0 and measurement -error, so the output grows with a
        positive error.  pid_update() returns 0 for non-finite input. */
