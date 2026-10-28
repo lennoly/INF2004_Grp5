@@ -1,0 +1,18 @@
+2026-10-28T20:20:46.883  # cmd #0 gains: ok
+2026-10-28T20:20:46.884  @18000003
+2026-10-28T20:20:46.884  # gains pid=0.104,0.600,0.000 ff=0.120,2.300 line=45.000,0.000,0.000 speed=0 rate=0
+2026-10-28T20:20:46.884  @1968008025000000800700fc08905f010000000000000000
+2026-10-28T20:20:59.675  forward 500: odo=496 mm heading=0.100 deg ok=1
+2026-10-28T20:21:00.720  left 90: odo=1 mm heading=87.100 deg ok=1
+2026-10-28T20:21:01.944  right 90: odo=1 mm heading=-87.500 deg ok=1
+2026-10-28T20:21:11.825  backward 500: odo=-495 mm heading=0.300 deg ok=1
+2026-10-28T20:21:13.868  u-turn 180: odo=1 mm heading=177.500 deg ok=1
+2026-10-28T20:21:13.869  # test done
+2026-10-28T20:21:13.869  # press START (GP20)
+2026-10-28T20:21:46.583  forward 500: odo=497 mm heading=0.100 deg ok=1
+2026-10-28T20:21:47.835  left 90: odo=1 mm heading=-273.100 deg ok=1
+2026-10-28T20:21:48.882  right 90: odo=1 mm heading=272.500 deg ok=1
+2026-10-28T20:21:58.654  backward 500: odo=-496 mm heading=0.300 deg ok=1
+2026-10-28T20:22:00.915  u-turn 180: odo=1 mm heading=-182.600 deg ok=1
+2026-10-28T20:22:00.916  # test done
+2026-10-28T20:22:00.916  # press START (GP20)
