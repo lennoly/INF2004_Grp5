@@ -26,6 +26,7 @@ typedef struct
 int32_t   encoder_init(void);
 void      encoder_read(uint32_t wheel, encoder_reading_t * p_out);
 float32_t encoder_mm_per_tick(void);
+void      encoder_check_filter(void);
 
 #endif /* ENCODER_H */
 
