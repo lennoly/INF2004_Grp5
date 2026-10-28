@@ -239,6 +239,10 @@
 #define OBST_MAX_ATTEMPTS           (2u)
 /* Obstacles are 10-20 cm wide, up to 60 mm off the line (28 Oct). */
 #define OBST_WIDTH_MAX_MM           (200.0f)
+/* Seen narrower than this: the scan missed part of the box (a centred
+   150 mm box read 94 mm, one side only, 28 Oct), so its edges are not
+   trusted and the car passes wide by OBST_BLIND_OFFSET_MM. */
+#define OBST_WIDTH_MIN_MM           (100.0f)
 #define OBST_LINE_OFFSET_MAX_MM     (60.0f)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
    pass this far to one side, enough for the widest obstacle off the line
