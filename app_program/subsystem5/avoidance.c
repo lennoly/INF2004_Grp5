@@ -84,13 +84,16 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
         measure_extent(p_points, low, high, p_out);
         measure_clearance(p_points, count, low, high, p_out);
 
-        /* An edge on the first or last point is where the sweep ends,
-           not the obstacle (the mount turns only 25 degrees each way):
-           no known room on that side, so no pass there.  Neither side
-           seen: avoidance_plan() passes wide on OBST_BLIND_LEFT's side. */
-        p_out->clear_left_mm  = (high == (count - 1u)) ? 0
-                                                      : p_out->clear_left_mm;
-        p_out->clear_right_mm = (0u == low) ? 0 : p_out->clear_right_mm;
+        /* An edge needs OBST_EDGE_POINTS points past it.  One nearer the
+           end of the sweep is where the sweep ends, not the obstacle
+           (the mount turns only 25 degrees each way): no known room on
+           that side, so no pass there.  Neither side seen:
+           avoidance_plan() passes wide on OBST_BLIND_LEFT's side. */
+        p_out->clear_left_mm  = ((high + OBST_EDGE_POINTS) >= count)
+                                    ? 0
+                                    : p_out->clear_left_mm;
+        p_out->clear_right_mm =
+            (low < OBST_EDGE_POINTS) ? 0 : p_out->clear_right_mm;
     }
 
     return (p_out->b_found);

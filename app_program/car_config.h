@@ -232,10 +232,18 @@
 #define OBST_FINE_STEP_DEG          (5)
 #define OBST_DEPTH_MAX_MM           (150.0f)  /* [CALIBRATE] deepest box  */
 #define OBST_MAX_ATTEMPTS           (2u)
+/* Obstacles are 10-20 cm wide, up to 60 mm off the line (28 Oct). */
+#define OBST_WIDTH_MAX_MM           (200.0f)
+#define OBST_LINE_OFFSET_MAX_MM     (60.0f)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
-   pass this far to one side, enough for the largest obstacle, a 150 mm
-   box up to 60 mm off the line either way (75 + 60 + corridor 140). */
-#define OBST_BLIND_OFFSET_MM        (280.0f)  /* [CALIBRATE]               */
+   pass this far to one side, enough for the widest obstacle off the line
+   the other way (100 + 60 + corridor 140 = 300). */
+#define OBST_BLIND_OFFSET_MM                                            \
+    ((OBST_WIDTH_MAX_MM / 2.0f) + OBST_LINE_OFFSET_MAX_MM               \
+     + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
+/* An edge counts as seen only with this many scan points past it, so a
+   single dropout does not make one. */
+#define OBST_EDGE_POINTS            (2u)
 /* Sonar cone: each seen edge is pulled in by closest x tan(beam).  0: a
    flat face only echoes near square-on, so the seen box can sit 60-80 mm
    from the real one (25 Oct); 8 deg cut a pass to 53 mm.  Keep the edges
