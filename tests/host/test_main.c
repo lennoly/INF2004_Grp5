@@ -1367,9 +1367,30 @@ test_obstacle (void)
     check((BLIND_ACTION == plan.action)
               && (plan.offset_mm >= OBST_BLIND_OFFSET_MM),
           "wide box past both sweep ends: blind pass on OBST_BLIND_LEFT's side");
-    check((OBST_BLIND_OFFSET_MM - (CAR_WIDTH_MM / 2.0f))
-              >= ((LARGEST_BOX_MM / 2.0f) + WIDE_BOX_OFFSET_MM),
-          "blind pass clears a 150 mm box 60 mm off the line either way");
+    check((OBST_BLIND_OFFSET_MM - (CAR_WIDTH_MM / 2.0f) - OBST_MARGIN_MM)
+              >= ((OBST_WIDTH_MAX_MM / 2.0f) + OBST_LINE_OFFSET_MAX_MM),
+          "blind pass clears a 200 mm box 60 mm off the line either way");
+
+    /* Edge hysteresis: one point past the box is not an edge, two are;
+       a single dropout inside the box is not one either. */
+    for (idx = 0u; idx < 11u; idx++)
+    {
+        /* Cast: 65..115 deg fit int16_t. */
+        points[idx].angle_deg = (int16_t) (SERVO_MIN_DEG + (5 * (int32_t) idx));
+        points[idx].dist_mm   = (idx < 10u) ? 150 : -1;
+    }
+
+    (void) avoidance_profile(points, 11u, &prof);
+    check(0 == prof.clear_left_mm, "edge: one point past the box is not seen");
+    points[9].dist_mm = -1;
+    (void) avoidance_profile(points, 11u, &prof);
+    check(0 != prof.clear_left_mm, "edge: two points past the box are seen");
+    points[9].dist_mm  = 150;
+    points[10].dist_mm = 150;
+    points[5].dist_mm  = -1;
+    (void) avoidance_profile(points, 11u, &prof);
+    check((0 == prof.clear_left_mm) && (0 == prof.clear_right_mm),
+          "edge: a dropout inside the box is not an edge");
     count = scan_box(points, 0.0f, NEAR_BOX_MM, LARGEST_BOX_MM, 0.0f,
                      SCAN_FIRST_DEG, SCAN_LAST_DEG);
     check(avoidance_profile(points, count, &prof)
@@ -2124,15 +2145,15 @@ test_vehicle_obstacle (void)
               && (0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: diagonal bypass, line followed from the return leg");
-    /* Box seen 75..105 deg, centred: side unsure, blind offset 280 mm.
-       45 deg leg 280 x 1.414 = 396.  Box edge 280 - 80 - 60 = 140, near
-       face 150 + sonar 70 = 220, so back off 140 + 0.707 x 160 + 1.414 x
-       30 - 220 = 76; return at 220 + 76 + deepest 150 + 140 - 280 + 156 =
-       461, less the 280 the leg covered.  The return leg may run 60 mm
-       past the original path while it looks for the line (456). */
-    check((1u == vehicle_sim_count("back76;"))
-              && (1u == vehicle_sim_count("fwd396;"))
-              && (1u == vehicle_sim_count("fwd456;"))
+    /* Box seen 75..105 deg, centred: side unsure, blind offset 300 mm.
+       45 deg leg 300 x 1.414 = 424.  Box edge 300 - 80 - 60 = 160, near
+       face 150 + sonar 70 = 220, so back off 160 + 0.707 x 160 + 1.414 x
+       30 - 220 = 96; return at 220 + 96 + deepest 150 + 160 + 156 - 300 =
+       481, less the 300 the leg covered.  The return leg may run 60 mm
+       past the original path while it looks for the line (484). */
+    check((1u == vehicle_sim_count("back96;"))
+              && (1u == vehicle_sim_count("fwd424;"))
+              && (1u == vehicle_sim_count("fwd484;"))
               && (1u == vehicle_sim_count("fwd181;")),
           "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
