@@ -55,7 +55,7 @@ ARG_COUNT = {"start": 0, "stop": 0, "calibrate": 0, "gains": 0, "help": 0,
 ERRORS = ["", "invalid command or value", "not a version-1 command frame",
           "only while IDLE or STOPPED", "not available in this build"]
 TIMING_NAMES = ["motion", "vehicle", "barcode", "imu", "hump", "ir_isr",
-                "net", "rejoin"]
+                "net", "rejoin", "stop"]
 CODE39 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%"
 RANGE_NONE = 4095
 SYMBOL_NONE = 63

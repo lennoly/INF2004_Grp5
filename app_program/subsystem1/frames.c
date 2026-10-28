@@ -337,7 +337,7 @@ frames_gains (uint8_t * p_buf, uint32_t size, frames_gains_t const * p_in)
 }
 
 /*!
- * @brief Timing window summary (25 bytes).
+ * @brief Timing window summary (26 bytes).
  *
  * @param[out] p_buf Frame buffer.
  * @param[in]  size  Buffer size.

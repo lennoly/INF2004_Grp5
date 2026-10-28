@@ -339,7 +339,7 @@ test_frame_lengths (void)
     gp_check(4u == frames_reply(buf, sizeof(buf), 7u, COMMAND_SPEED, FRAMES_OK),
              "frame: reply 4 B");
     gp_check(24u == frames_gains(buf, sizeof(buf), &gains), "frame: gains 24 B");
-    gp_check(24u == frames_timing(buf, sizeof(buf), &timing), "frame: timing 24 B");
+    gp_check(26u == frames_timing(buf, sizeof(buf), &timing), "frame: timing 26 B");
     gp_check((2u == frames_status(buf, sizeof(buf), true)) && (0x1Bu == buf[0])
                  && (0x01u == buf[1]),
              "frame: status 2 B, same bytes as mqtt_lwip.c");

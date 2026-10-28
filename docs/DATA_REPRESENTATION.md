@@ -227,7 +227,7 @@ JSON sizes are the old format with typical values. "After" sizes are exact
 | Impact event | 23 B | 2 B |
 | Command reply | 51 B | 4 B |
 | Gains report | 115 B | 24 B |
-| Timing report | about 270 B (estimated) | 24 B (averages on the console) |
+| Timing report | about 270 B (estimated) | 26 B (averages on the console) |
 | Status (retained, last will) | 6–7 B | 2 B |
 | Command `speed=150` | 9 B | 5 B |
 | Command `#7 pid=0.08,0.6,0` | 17 B | 11 B |
@@ -256,7 +256,7 @@ the same field names as the old JSON.
 | Impact (7) | count 8, strength mg 12 (peak jerk of the last two 100 ms event checks, saturating at 4095) |
 | Reply (8) | request id 16, command 4, error 4 (0 ok, 1 invalid, 2 bad frame, 3 driving, 4 unavailable) |
 | Gains (9) | speed PID 3 × 20, kf 20, offset 17, line PID 3 × 20 (all 0.001 steps), cruise 9, rate ms 13 |
-| Timing (10) | window ms 16, load % 7, jitter µs 16, periods 16, max µs 8 × 16 |
+| Timing (10) | window ms 16, load % 7, jitter µs 16, periods 16, max µs 9 × 16 |
 | Status (11) | online 1 |
 | Command (12, laptop → car) | command 4, request id 16, then: speed 9 / rate 13 / nav 3 / map nav 3 + Code 39 index 6 / ff 20 + 17 / pid or line 3 × 20 |
 
