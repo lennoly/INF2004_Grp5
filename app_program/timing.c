@@ -36,7 +36,8 @@ static uint32_t g_window_start_ms = 0u;
 static uint32_t g_idle_start_ms   = 0u;
 
 static char const * const g_names[TIMING_COUNT] = {
-    "motion", "vehicle", "barcode", "imu", "hump", "ir_isr", "net", "rejoin"};
+    "motion", "vehicle", "barcode", "imu", "hump", "ir_isr", "net", "rejoin",
+    "stop"};
 
 static uint32_t now_ms(void);
 static void     timing_probe_task(INT stacd, void * p_exinf);

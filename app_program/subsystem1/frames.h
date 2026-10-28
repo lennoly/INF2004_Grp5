@@ -30,7 +30,7 @@
 #define FRAMES_VERSION   (1u)
 #define FRAMES_MAX_BYTES (47u) /* largest frame: telemetry, 43 bytes */
 #define FRAMES_IR_COUNT  (3u)
-#define FRAMES_TIMING_SLOTS (8u) /* TIMING_COUNT sections */
+#define FRAMES_TIMING_SLOTS (9u) /* TIMING_COUNT sections */
 
 typedef enum
 {

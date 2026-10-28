@@ -199,8 +199,9 @@ telemetry_task (INT stacd, void * p_exinf)
                                    || (VS_STOPPED == veh.state));
         mqtt_bridge_get_stats(&link_stats);
 
-        if ((LINK_DISABLED != link_stats.link)
-            && ((now - last_hb) >= HEARTBEAT_PERIOD_MS))
+        /* Every link: without WiFi, emit() prints it on the console
+           (uptime, state and IMU health; the link counters stay 0). */
+        if ((now - last_hb) >= HEARTBEAT_PERIOD_MS)
         {
             last_hb = now;
             send_heartbeat();
@@ -494,7 +495,10 @@ send_heartbeat (void)
     vehicle_get_status(&veh);
     imu_get_status(&imu);
     mqtt_bridge_get_stats(&link_stats);
-    (void) tk_get_tim(&now);
+    /* Operating time since boot: the system clock (tk_get_tim) starts at
+       a calendar base, so its seconds always clamped to the 20-bit
+       maximum (up=1048575 in every heartbeat, 29 Oct). */
+    (void) tk_get_otm(&now);
     g_hb_seq++;
 
     /* Casts: enumeration constants are small and non-negative. */
