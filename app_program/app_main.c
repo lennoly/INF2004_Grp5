@@ -65,6 +65,9 @@ usermain (void)
 {
     INT attempt = 0;
 
+    /* First: every microsecond timing depends on this tick. */
+    hal_tick_start();
+
     /* The watchdog runs only while the car can move (vehicle.c); make sure
        it is off during start-up, whatever reset brought us here. */
     hal_watchdog_stop();

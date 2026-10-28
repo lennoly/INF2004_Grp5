@@ -752,6 +752,21 @@ hal_memory_barrier (void)
 }
 
 /*!
+ * @brief Start the 1 us tick that drives the TIMER and the watchdog: one
+ *        tick every XOSC_MHZ (SDK: 12) cycles of clk_ref, as the SDK's
+ *        clocks_init() does.  The template never sets it, so it kept
+ *        whatever ran before: right after a reflash (the boot ROM set
+ *        it), but about 40 times slow after a power-on or a reset
+ *        (28 Oct), which broke every microsecond timing: the sonar
+ *        echo, the WiFi and lwIP timeouts and the driver's busy waits.
+ */
+void
+hal_tick_start (void)
+{
+    watchdog_hw->tick = WATCHDOG_TICK_ENABLE_BITS | XOSC_MHZ;
+}
+
+/*!
  * @brief Start the hardware watchdog, as the SDK's watchdog_enable() does:
  *        unless hal_watchdog_feed() is called within timeout_ms, every block
  *        except the oscillators is reset, which also turns the motor
