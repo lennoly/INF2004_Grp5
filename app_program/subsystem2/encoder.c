@@ -54,7 +54,6 @@ static uint32_t       g_hist_head[ENCODER_COUNT];
 static uint32_t       g_hist_count[ENCODER_COUNT];
 
 static void      encoder_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
-static void      check_glitch_filter(void);
 static float32_t counted_speed(uint32_t wheel, uint32_t ticks, uint32_t now_us,
                                bool * pb_valid);
 
@@ -81,7 +80,7 @@ encoder_init (void)
                                    encoder_edge_isr);
     }
 
-    check_glitch_filter();
+    encoder_check_filter();
 
     return (ercd);
 }
@@ -213,10 +212,11 @@ counted_speed (uint32_t wheel, uint32_t ticks, uint32_t now_us, bool * pb_valid)
  * @brief Print the shortest half-period at the fastest wheel speed and
  *        warn if ENCODER_GLITCH_US would reject real edges (CSC05 review:
  *        the filter must stay below it; see ENCODER_SLOTS, which must
- *        match the real pulses per wheel turn).
+ *        match the real pulses per wheel turn).  Printed at boot and by
+ *        the console `help` (S2-U05: boot lines are easily missed on USB).
  */
-static void
-check_glitch_filter (void)
+void
+encoder_check_filter (void)
 {
     float32_t half_us =
         (MM_PER_SLOT * US_PER_S) / (2.0f * SPEED_WHEEL_MAX_MM_S);

@@ -16,6 +16,7 @@
 #include "car_config.h"
 #include "car_math.h"
 #include "motion.h"
+#include "encoder.h"
 #include "ir_sensor.h"
 #include "barcode.h"
 #include "imu.h"
@@ -679,6 +680,7 @@ emit_help (void)
                      "since the last timing\n"
                      "# MQTT takes the same commands as binary frames "
                      "(tools/dashboard/frames.py)\n");
+    encoder_check_filter();
 }
 
 /*!
