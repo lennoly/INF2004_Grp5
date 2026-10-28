@@ -1,0 +1,38 @@
+S2-U02, 28 Oct 2026, TEST_MOTOR (usbcdc), console output pasted by the tester.
+The dashboard folder next to this file ends at 19:47:07, before the test
+printed, so the CSV rows below are copied from the pasted console text.
+
+# open loop: duty,spdL,spdR (mm/s)
+0,0,0
+10,0,0
+20,108,93
+30,209,174
+40,207,222
+50,387,339
+60,582,574
+70,682,668
+80,763,759
+90,866,850
+100,410,538
+
+# step test with pid=0.104,0.600,0.000 ff=0.120,2.300
+# closed loop steps: t,target,spdL,spdR,pwmL,pwmR (first rows, then range)
+0,160,0,0,0,0
+40,160,24,25,39,39
+80,160,75,75,37,37
+120,160,258,261,18,18
+160,160,212,214,21,21
+200,160,198,197,21,21
+240,160,190,192,21,20
+280,160,188,184,20,20
+400..2960 ms: spdL 171-180, spdR 174-179, pwm 19-20
+0,50,173,174,20,20
+40,50,131,140,2,2
+80,50,56,60,8,7
+120,50,49,51,8,8
+160..2960 ms: 52-55 both wheels, pwm 8 (single reads 41, 43, 44 at 1280, 2000, 2680 ms)
+0,0,52,54,8,8
+40,0,27,38,0,0
+80,0,7,7,0,0
+200,0,0,0,0,0
+# test done
