@@ -113,6 +113,11 @@ static volatile ID               gh_mbuf = 0;
    (Rule 1.8.c). */
 static volatile bool gb_stop_latched = false;
 
+/* Time a STOP command was queued (a command task), cleared by the vehicle
+   task once the motors are told to stop; 0 = none.  One aligned 32-bit
+   word, single core (A13): volatile (Rule 1.8.c). */
+static volatile uint32_t g_stop_cmd_us = 0u;
+
 /* Vehicle-task private state. */
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
@@ -259,6 +264,12 @@ vehicle_command (vehicle_cmd_t cmd, int32_t arg)
     /* Cast: enumeration constants are small and non-negative. */
     msg.cmd = (uint32_t) cmd & bitpack_max_u(3u);
     msg.arg = bitpack_clamp_u(arg, MSG_ARG_BITS);
+
+    /* INT-02 (NFR3): time from here to the motors told to stop. */
+    if (VCMD_STOP == cmd)
+    {
+        g_stop_cmd_us = timing_start();
+    }
 
     /* Cast: the message is 12 bytes, far below INT range. */
     return (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL));
@@ -1509,6 +1520,14 @@ handle_requests (void)
         gb_abort = false;
         gb_start = false;
         motion_stop();
+
+        /* Only a STOP command has a start time (not a button or fault). */
+        if (0u != g_stop_cmd_us)
+        {
+            timing_stop(TIMING_STOP, g_stop_cmd_us);
+            g_stop_cmd_us = 0u;
+        }
+
         servo_set_angle(SERVO_CENTRE_DEG);
         set_state(VS_STOPPED,
                   (NULL != gp_abort_why) ? gp_abort_why : "stop command");
