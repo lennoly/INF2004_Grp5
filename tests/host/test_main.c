@@ -1336,6 +1336,28 @@ test_obstacle (void)
               "box seen far left: pass right, at least the minimum shift");
     }
 
+    /* 28 Oct, 150 mm box centred at 240 mm: only its left half echoed
+       (seen 94 mm wide), which planned a 150 mm shift right into it.
+       Narrower than any real obstacle: wide pass. */
+    {
+        static int16_t const half_seen[11] = {290, 298, 298, 298, 298, 267,
+                                              258, 267, 267, 276, 293};
+
+        for (idx = 0u; idx < 11u; idx++)
+        {
+            /* Cast: 65..115 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (SERVO_MIN_DEG + (5 * (int32_t) idx));
+            points[idx].dist_mm   = half_seen[idx];
+        }
+
+        (void) avoidance_profile(points, 11u, &prof);
+        plan = avoidance_plan(&prof, 0u);
+        check((prof.width_mm < OBST_WIDTH_MIN_MM)
+                  && (AVOID_CONTINUE != plan.action)
+                  && (plan.offset_mm >= (OBST_BLIND_OFFSET_MM - 0.5f)),
+              "centred box seen half (94 mm): wide pass, not 150 mm");
+    }
+
     count = scan_box(points, 400.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
                      SCAN_LAST_DEG);
     (void) avoidance_profile(points, count, &prof);
