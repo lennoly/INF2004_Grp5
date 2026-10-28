@@ -26,4 +26,4 @@ Add a new row for every run. Never edit or delete old rows.
 
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-10-28 | S2-U01 | 740df22 + timer tick fix and obstacle changes (committed 28 Oct), build 17:28 | Levia | PASS | `build_all/host_tests.log` (not kept; rerun `make -C tests/host`) | `make -C tests/host CC=gcc`: 304 passed, 0 failed (PID step and anti-windup cases included) |
