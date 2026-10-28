@@ -442,11 +442,12 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     b_right_ok = (car_math_is_finite(off_right))
                  && ((float32_t) p_prof->clear_right_mm >= need);
 
-    /* Near the centre the seen side cannot be trusted: shift wide, away
-       from the way the box leans (OBST_BLIND_LEFT's side if it is dead
-       centre), so a wrong lean still clears it.  Any side pass shifts at
-       least OBST_MIN_OFFSET_MM. */
-    b_unsure   = car_math_abs(p_prof->centre_mm) < OBST_CENTRE_UNSURE_MM;
+    /* Near the centre, or seen narrower than any real obstacle, the seen
+       side cannot be trusted: shift wide, away from the way the box leans
+       (OBST_BLIND_LEFT's side if it is dead centre), so a wrong lean still
+       clears it.  Any side pass shifts at least OBST_MIN_OFFSET_MM. */
+    b_unsure   = (car_math_abs(p_prof->centre_mm) < OBST_CENTRE_UNSURE_MM)
+               || (p_prof->width_mm < OBST_WIDTH_MIN_MM);
     b_prefer_l = b_unsure ? ((p_prof->centre_mm > 0.0f)
                              || ((!(p_prof->centre_mm < 0.0f))
                                  && (0 != OBST_BLIND_LEFT)))
