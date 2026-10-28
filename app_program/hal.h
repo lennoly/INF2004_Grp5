@@ -83,6 +83,9 @@ char const * hal_wifi_state(void);
 /* Memory barrier for data shared between tasks and cores. */
 void hal_memory_barrier(void);
 
+/* 1 us tick of the TIMER and the watchdog: call first at start-up. */
+void hal_tick_start(void);
+
 /* Hardware watchdog: resets the chip unless fed in time. */
 void hal_watchdog_start(uint32_t timeout_ms);
 void hal_watchdog_stop(void);
