@@ -1,0 +1,39 @@
+2026-10-28T20:29:34.659  # cmd #0 gains: ok
+2026-10-28T20:29:34.659  @18000003
+2026-10-28T20:29:34.659  # gains pid=0.104,0.600,0.000 ff=0.120,2.300 line=45.000,0.000,0.000 speed=0 rate=0
+2026-10-28T20:29:34.660  @1968008025000000800700fc08905f010000000000000000
+2026-10-28T20:29:46.204  forward 500: odo=497 mm heading=0.100 deg ok=1
+2026-10-28T20:29:47.451  left 90: odo=1 mm heading=86.600 deg ok=1
+2026-10-28T20:29:48.494  right 90: odo=1 mm heading=-87.200 deg ok=1
+2026-10-28T20:29:58.299  backward 500: odo=-496 mm heading=0.200 deg ok=1
+2026-10-28T20:30:00.365  u-turn 180: odo=1 mm heading=177.000 deg ok=1
+2026-10-28T20:30:00.365  # test done
+2026-10-28T20:30:00.365  # press START (GP20)
+2026-10-28T20:30:14.249  forward 500: odo=496 mm heading=0.100 deg ok=1
+2026-10-28T20:30:15.282  left 90: odo=1 mm heading=-273.400 deg ok=1
+2026-10-28T20:30:16.537  right 90: odo=1 mm heading=272.900 deg ok=1
+2026-10-28T20:30:26.292  backward 500: odo=-495 mm heading=0.100 deg ok=1
+2026-10-28T20:30:28.160  u-turn 180: odo=1 mm heading=-183.200 deg ok=1
+2026-10-28T20:30:28.160  # test done
+2026-10-28T20:30:28.160  # press START (GP20)
+2026-10-28T20:30:42.659  forward 500: odo=496 mm heading=0.100 deg ok=1
+2026-10-28T20:30:43.692  left 90: odo=1 mm heading=87.300 deg ok=1
+2026-10-28T20:30:44.922  right 90: odo=1 mm heading=-86.900 deg ok=1
+2026-10-28T20:30:54.634  backward 500: odo=-496 mm heading=0.000 deg ok=1
+2026-10-28T20:30:56.694  u-turn 180: odo=1 mm heading=176.900 deg ok=1
+2026-10-28T20:30:56.694  # test done
+2026-10-28T20:30:56.694  # press START (GP20)
+2026-10-28T20:31:13.879  forward 500: odo=497 mm heading=-0.600 deg ok=1
+2026-10-28T20:31:14.913  left 90: odo=0 mm heading=-273.500 deg ok=1
+2026-10-28T20:31:16.156  right 90: odo=1 mm heading=273.100 deg ok=1
+2026-10-28T20:31:25.927  backward 500: odo=-496 mm heading=0.000 deg ok=1
+2026-10-28T20:31:27.792  u-turn 180: odo=1 mm heading=-183.400 deg ok=1
+2026-10-28T20:31:27.792  # test done
+2026-10-28T20:31:27.792  # press START (GP20)
+2026-10-28T20:31:43.770  forward 500: odo=497 mm heading=-0.200 deg ok=1
+2026-10-28T20:31:44.994  left 90: odo=1 mm heading=86.600 deg ok=1
+2026-10-28T20:31:46.031  right 90: odo=1 mm heading=-86.900 deg ok=1
+2026-10-28T20:31:55.798  backward 500: odo=-496 mm heading=0.000 deg ok=1
+2026-10-28T20:31:57.880  u-turn 180: odo=1 mm heading=176.800 deg ok=1
+2026-10-28T20:31:57.880  # test done
+2026-10-28T20:31:57.880  # press START (GP20)

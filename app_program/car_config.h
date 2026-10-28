@@ -72,10 +72,15 @@
 /* ------------------------------------------------------------------------ */
 /* Chassis geometry [CALIBRATE]                                             */
 /* ------------------------------------------------------------------------ */
-#define WHEEL_DIAMETER_MM           (65.0f)
+/* [CALIBRATE] effective, not the 64 mm tyre: 65 x 450 / 497 from the  */
+/* TEST_MOTION runs on 28 Oct (encoders 497 mm, tape 450 mm).         */
+#define WHEEL_DIAMETER_MM           (58.9f)
 #define ENCODER_SLOTS               (559u)    /* slots on the encoder disc   */
 /* [CALIBRATE] effective (tyres scrub in turns): 110 under, 147 over.   */
-#define TRACK_WIDTH_MM              (138.0f) /* wheel centre to wheel centre*/
+/* 28 Oct, after the 58.9 diameter: 138 turned ~93 / ~190 deg for an   */
+/* encoder 87 / 177.5, so the real track is ~129; 132 also covers the */
+/* turn stopping ~3 deg early (expect ~89 and ~182 deg).              */
+#define TRACK_WIDTH_MM              (132.0f) /* wheel centre to wheel centre*/
 #define CAR_WIDTH_MM                (160.0f)
 #define CAR_LENGTH_MM               (200.0f)
 #define LINE_SENSOR_AHEAD_MM        (140.0f) /* IR row ahead of the axle    */

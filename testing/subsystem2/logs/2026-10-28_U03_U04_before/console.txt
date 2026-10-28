@@ -1,0 +1,31 @@
+TEST_MOTION (usbcdc), WHEEL_DIAMETER_MM 65.0, TRACK_WIDTH_MM 138.0, 28 Oct 2026.
+Console output pasted by the tester (no dashboard log for this run).
+Tape: all forward runs about 450 mm; protractor: 90 deg turns 85-87 deg.
+A heading of -273 / 273 is an 87 deg turn: the test prints the change
+without wrapping it into -180..180.
+
+forward 500: odo=496 mm heading=0.100 deg ok=1
+left 90: odo=0 mm heading=87.000 deg ok=1
+right 90: odo=2 mm heading=-86.900 deg ok=1
+backward 500: odo=-496 mm heading=0.600 deg ok=1
+u-turn 180: odo=1 mm heading=176.800 deg ok=1
+forward 500: odo=497 mm heading=-0.100 deg ok=1
+left 90: odo=1 mm heading=-273.000 deg ok=1
+right 90: odo=1 mm heading=272.800 deg ok=1
+backward 500: odo=-496 mm heading=0.000 deg ok=1
+u-turn 180: odo=1 mm heading=-183.300 deg ok=1
+forward 500: odo=497 mm heading=-0.100 deg ok=1
+left 90: odo=1 mm heading=86.700 deg ok=1
+right 90: odo=1 mm heading=-87.000 deg ok=1
+backward 500: odo=-496 mm heading=0.200 deg ok=1
+u-turn 180: odo=1 mm heading=177.200 deg ok=1
+forward 500: odo=497 mm heading=0.000 deg ok=1
+left 90: odo=1 mm heading=-272.900 deg ok=1
+right 90: odo=1 mm heading=273.200 deg ok=1
+backward 500: odo=-496 mm heading=0.000 deg ok=1
+u-turn 180: odo=1 mm heading=-183.000 deg ok=1
+forward 500: odo=497 mm heading=0.200 deg ok=1
+left 90: odo=1 mm heading=87.600 deg ok=1
+right 90: odo=1 mm heading=-87.800 deg ok=1
+backward 500: odo=-496 mm heading=0.300 deg ok=1
+u-turn 180: odo=1 mm heading=176.900 deg ok=1

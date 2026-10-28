@@ -47,8 +47,6 @@
 #define MBF_MSGS           (4u)
 #define LINE_GAINS         (3u)
 #define REACQ_SPEED        (90.0f)
-#define CENTRED_ERROR      (0.2f)  /* line search: |L - R| below this */
-#define CENTRED_SUM        (0.6f)
 #define QUARTER_TURN       (90.0f)
 #define EIGHTH_TURN        (45.0f)
 #define DIAGONAL_PER_SIDE  (1.41421356f) /* 45 deg leg per mm sideways */
@@ -163,7 +161,7 @@ static uint32_t        gain_field(float32_t gain);
 static bool            run_move(bool b_watch_front);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
-static bool            line_centred(ir_sensor_snapshot_t const * p_ir);
+static bool            line_seen(ir_sensor_snapshot_t const * p_ir);
 static search_result_t reacquire_poll(void);
 static bool            reacquire_line(float32_t side);
 static void            start_settling(void);
@@ -772,26 +770,26 @@ forward (float32_t dist_mm, float32_t speed)
 }
 
 /*!
- * @brief Whether the line is centred under the two line sensors.
+ * @brief Whether either line sensor sees the line.  A search that waited
+ *        for both sensors to read alike (centred) often turned past the
+ *        line between two 20 ms reads (28 Oct); the settling follow after
+ *        the search lines the car up instead.
  *
  * @param[in] p_ir IR snapshot.
  *
- * @return true if both sensors see about the same, and enough, black.
+ * @return true if either sensor is black enough.
  */
 static bool
-line_centred (ir_sensor_snapshot_t const * p_ir)
+line_seen (ir_sensor_snapshot_t const * p_ir)
 {
-    float32_t left  = p_ir->norm[IR_LEFT];
-    float32_t right = p_ir->norm[IR_RIGHT];
-
-    return ((car_math_abs(left - right) < CENTRED_ERROR)
-            && ((left + right) > CENTRED_SUM));
+    return ((p_ir->norm[IR_LEFT] > REJOIN_SEEN_LEVEL)
+            || (p_ir->norm[IR_RIGHT] > REJOIN_SEEN_LEVEL));
 }
 
 /*!
  * @brief One 20 ms step of a line search.
  *
- * @return SEARCH_ABORTED on STOP, SEARCH_FOUND once the line is centred,
+ * @return SEARCH_ABORTED on STOP, SEARCH_FOUND once the line is seen,
  *         otherwise SEARCH_RUNNING.
  */
 static search_result_t
@@ -808,7 +806,7 @@ reacquire_poll (void)
     {
         result = SEARCH_ABORTED;
     }
-    else if (line_centred(&ir_snap))
+    else if (line_seen(&ir_snap))
     {
         result = SEARCH_FOUND;
     }
@@ -821,8 +819,8 @@ reacquire_poll (void)
 }
 
 /*!
- * @brief Rotate in growing alternating sweeps until the line is centred
- *        under the sensors.
+ * @brief Rotate in growing alternating sweeps until a line sensor sees the
+ *        line.
  *
  * @param[in] side Direction of the first sweep (SIDE_LEFT or SIDE_RIGHT).
  *
