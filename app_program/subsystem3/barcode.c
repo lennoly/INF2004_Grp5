@@ -214,8 +214,18 @@ finish_frame (void)
             g_stats.last    = message;
             (void) tk_snd_mbf(gh_mbuf, &message, (INT) sizeof(message),
                               TMO_POL);
-            (void) tm_printf((UB const *) "[barcode] '%s' -> %s\n", text,
-                             barcode_decode_command_name(cmd));
+            (void) tm_printf((UB const *) "[barcode] '%s' -> %s, %d elements:",
+                             text, barcode_decode_command_name(cmd),
+                             (INT) g_count);
+
+            /* Debug (S3-U03, wrong letters): the widths of a good read too.
+               Casts as above. */
+            for (idx = 0u; idx < g_count; idx++)
+            {
+                (void) tm_printf((UB const *) " %d", (INT) g_widths[idx]);
+            }
+
+            (void) tm_printf((UB const *) "\n");
         }
         else
         {

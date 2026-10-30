@@ -245,6 +245,7 @@ static uint32_t     make_frame(char data, uint32_t * p_widths, float32_t noise,
                                float32_t ramp);
 static void reverse(uint32_t const * p_src, uint32_t * p_dst, uint32_t count);
 static void test_barcode(void);
+static void test_barcode_stray_tail(void);
 static float32_t simulate_hump(float32_t height, float32_t length,
                                float32_t noise_deg, uint32_t * p_humps);
 static void      test_terrain(void);
@@ -847,6 +848,83 @@ test_barcode_lost_start (void)
                   decoded, total, wrong);
     check(decoded == total, "A-Z decode with the first bars lost");
     check(0u == wrong, "frames cut at the end never give a wrong letter");
+    test_barcode_stray_tail();
+}
+
+/*!
+ * @brief Frames with stray elements after the far '*' (MISSION, 30 Oct,
+ *        "X*" then 5 more elements, rejected -4): the car's frames, then
+ *        A..Z with 1-9 elements added, in both directions.
+ */
+static void
+test_barcode_stray_tail (void)
+{
+    static uint32_t const car_a[] = {143u, 103u, 144u, 103u, 12u,  230u, 19u,
+                                     97u,  26u,  104u, 18u,  229u, 22u,  105u,
+                                     143u, 94u,  149u, 98u,  20u,  100u, 143u,
+                                     101u, 142u, 109u, 8u};
+    static uint32_t const car_b[] = {144u, 101u, 151u, 105u, 18u,  221u, 23u,
+                                     93u,  32u,  96u,  26u,  226u, 24u,  106u,
+                                     148u, 103u, 143u, 98u,  25u,  89u,  144u,
+                                     94u,  143u, 99u,  20u};
+    char     text[TEXT_SIZE];
+    uint32_t widths[FRAME_MAX + BARCODE_ELEMENTS_PER_CHAR + 1u];
+    uint32_t reversed[FRAME_MAX + BARCODE_ELEMENTS_PER_CHAR + 1u];
+    uint32_t count   = 0u;
+    uint32_t extra   = 0u;
+    uint32_t idx     = 0u;
+    uint32_t decoded = 0u;
+    uint32_t total   = 0u;
+    int32_t  result  = 0;
+    char     letter  = 'A';
+
+    result = barcode_decode_frame(car_a, (uint32_t) ARRAY_LEN(car_a), text,
+                                  TEXT_SIZE);
+    check((1 == result) && ('C' == text[0]), "car frame 'C*' + 5 stray is C");
+    result = barcode_decode_frame(car_b, (uint32_t) ARRAY_LEN(car_b), text,
+                                  TEXT_SIZE);
+    check((1 == result) && ('C' == text[0]), "second such car frame is C");
+
+    for (letter = 'A'; letter <= 'Z'; letter++)
+    {
+        for (extra = 1u; extra <= BARCODE_ELEMENTS_PER_CHAR; extra++)
+        {
+            count = make_frame(letter, widths, BIAS_NOISE, 1.0f);
+
+            /* After the far '*': a gap, then the data character again. */
+            widths[count] = widths[BARCODE_ELEMENTS_PER_CHAR];
+
+            for (idx = 1u; idx < extra; idx++)
+            {
+                widths[count + idx] =
+                    widths[BARCODE_ELEMENTS_PER_CHAR + idx];
+            }
+
+            count += extra;
+            result = barcode_decode_frame(
+                &widths[BARCODE_ELEMENTS_PER_CHAR + 1u],
+                count - BARCODE_ELEMENTS_PER_CHAR - 1u, text, TEXT_SIZE);
+            total++;
+            decoded += ((1 == result) && (letter == text[0])) ? 1u : 0u;
+
+            /* Crossed the other way round: frames start on a bar, so only
+               an even number of stray elements can come first. */
+            if (0u == (extra % 2u))
+            {
+                reverse(&widths[BARCODE_ELEMENTS_PER_CHAR + 1u], reversed,
+                        count - BARCODE_ELEMENTS_PER_CHAR - 1u);
+                result = barcode_decode_frame(
+                    reversed, count - BARCODE_ELEMENTS_PER_CHAR - 1u, text,
+                    TEXT_SIZE);
+                total++;
+                decoded += ((1 == result) && (letter == text[0])) ? 1u : 0u;
+            }
+        }
+    }
+
+    (void) printf("barcode: %" PRIu32 "/%" PRIu32 " A-Z frames with stray "
+                  "elements after the '*' decoded\n", decoded, total);
+    check(decoded == total, "A-Z decode with stray elements after the stop");
 }
 
 /*!
@@ -1062,6 +1140,32 @@ lifted_stays_flat (void)
 }
 
 /*!
+ * @brief A start-up jolt (30 Oct): pitch past the trigger for one sample
+ *        while the wheels turn, leaving about 1 mm of height.  Level, the
+ *        tracker must go back to HUMP_FLAT within 50 mm and count nothing.
+ *
+ * @return true if it closed the jolt.
+ */
+static bool
+jolt_closes_when_level (void)
+{
+    terrain_hump_t hump;
+    bool           b_opened = false;
+    uint32_t       idx      = 0u;
+
+    terrain_hump_init(&hump);
+    terrain_hump_update(&hump, 8.0f, 0.0f, 8.0f);
+    b_opened = (HUMP_FLAT != hump.state);
+
+    for (idx = 0u; idx < 50u; idx++)
+    {
+        terrain_hump_update(&hump, 0.0f, 0.0f, 1.0f);
+    }
+
+    return (b_opened && (HUMP_FLAT == hump.state) && (0u == hump.humps));
+}
+
+/*!
  * @brief Hump height estimation and motion-event classification.
  */
 static void
@@ -1074,6 +1178,7 @@ test_terrain (void)
     uint32_t        idx                   = 0u;
     float32_t       estimate              = 0.0f;
 
+    check(jolt_closes_when_level(), "a level jolt does not stay a hump");
     srand(2u);
     (void) printf("terrain: true height -> estimated peak "
                   "(1.0 deg pitch noise)\n");

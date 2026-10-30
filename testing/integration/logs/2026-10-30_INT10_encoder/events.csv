@@ -1,0 +1,9 @@
+pc_time,type,json
+2026-10-30T18:48:47.301,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-30T18:48:47.382,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":200}"
+2026-10-30T18:48:49.003,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-30T18:48:49.121,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-10-30T18:48:50.864,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""fault: encoder""}"
+2026-10-30T18:49:05.307,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-30T18:49:05.446,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-10-30T18:49:08.383,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""fault: encoder""}"

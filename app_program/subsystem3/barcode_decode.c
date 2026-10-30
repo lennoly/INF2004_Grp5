@@ -19,6 +19,7 @@
 #define NARROW_LAST       (2u) /* sorted index: widest narrow  */
 #define WIDE_FIRST        (3u) /* sorted index: narrowest wide */
 #define TAIL_ELEMENTS     ((2u * ELEMENTS_PER_SLOT) - 1u) /* data+gap+stop */
+#define PAIR_ELEMENTS     (2u) /* a bar and a space: bars stay on even indexes */
 #define START_STOP        ('*')
 #define DECODE_OK         (0)
 #define TERMINATOR        ('\0')
@@ -70,9 +71,9 @@ static int32_t decode_tail(uint32_t const * p_widths, char * p_out);
 /*!
  * @brief Decode a Code 39 frame "*DATA*" read in either direction; a
  *        frame missing its first elements falls back to its last 19
- *        (one data character and the far '*', see decode_tail()), and one
- *        missing bars near its end to its first 19 (the near '*' and one
- *        data character).
+ *        (one data character and the far '*', see decode_tail()); failing
+ *        that, any 19 starting on a bar, for a frame broken at both ends
+ *        or with stray elements after the '*'.
  *
  * @param[in]  p_widths Element widths, first element a bar.
  * @param[in]  count    Number of widths; trailing extras are ignored.
@@ -88,6 +89,7 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
     uint32_t reversed[BARCODE_MAX_ELEMENTS];
     uint32_t used      = count;
     uint32_t idx       = 0u;
+    uint32_t pos       = 0u;
     int32_t  result    = BARCODE_ERR_LENGTH;
     bool     b_args_ok = false;
 
@@ -122,16 +124,23 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
     {
         result = decode_tail(&p_widths[count - TAIL_ELEMENTS], p_out);
 
-        if (result < 0)
+        /* decode_tail() needs a whole character next to a '*', so a window
+           cannot invent a letter.  Each is also tried read backwards: "*X"
+           is "X*" crossed the other way round. */
+        for (idx = 0u; (result < 0) && ((idx + TAIL_ELEMENTS) <= count);
+             idx += PAIR_ELEMENTS)
         {
-            /* The head "*X" (or "X*" crossed the other way round) is a
-               tail read backwards. */
-            for (idx = 0u; idx < TAIL_ELEMENTS; idx++)
-            {
-                reversed[idx] = p_widths[TAIL_ELEMENTS - 1u - idx];
-            }
+            result = decode_tail(&p_widths[idx], p_out);
 
-            result = decode_tail(reversed, p_out);
+            if (result < 0)
+            {
+                for (pos = 0u; pos < TAIL_ELEMENTS; pos++)
+                {
+                    reversed[pos] = p_widths[idx + TAIL_ELEMENTS - 1u - pos];
+                }
+
+                result = decode_tail(reversed, p_out);
+            }
         }
     }
 

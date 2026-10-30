@@ -1,0 +1,7 @@
+arm-none-eabi-size, MISSION, CONSOLE=usb_cdc, arm-none-eabi-gcc 15.2
+text data bss dec
+before (d5f5199)            81817 92 21624 103533
+after (e50d700 + uncommitted 30 Oct changes) 95753 96 17880 113729
+app_symbols_*.txt: object, size hex, type, symbol, every .bss/.data symbol of app_program/
+App RAM: 6128 B before, 2359 B after
+Frame lengths: tests/host/test_data.c, 309 passed, 0 failed

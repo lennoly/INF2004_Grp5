@@ -380,8 +380,11 @@ hump_track (terrain_hump_t * p_hump, bool b_level, float32_t delta_h,
     p_hump->level_mm =
         b_level ? (p_hump->level_mm + car_math_abs(ds_mm)) : 0.0f;
 
+    /* A start-up jolt opens a "hump" of a mm or so whose height drift never
+       comes back; level, it would stay open to MAX_HUMP_LENGTH_MM (30 Oct). */
     if ((p_hump->level_mm >= LEVEL_CONFIRM_MM)
-        && (p_hump->height_mm <= (RETURN_FRACTION * p_hump->peak_mm)))
+        && ((p_hump->height_mm <= (RETURN_FRACTION * p_hump->peak_mm))
+            || (p_hump->peak_mm < HUMP_MIN_HEIGHT_MM)))
     {
         /* Level again and back down: the hump is over (and counts if it
            was high enough; a one-wheel hump also if the roll lasted, so a

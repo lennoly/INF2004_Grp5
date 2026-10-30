@@ -205,6 +205,19 @@ USB console:
 (sonar counts 8 → 1, scan count 4 → 1, scan points 164 → 121, servo angle
 4 → 1, echo width 4 → 2).
 
+**Update (30 Oct, INT-09):** both versions rebuilt with `arm-none-eabi-gcc`
+15.2, so text differs from the 13.3.0 figures above. MISSION build, USB
+console. The later features (encoder history, obstacle distances and others)
+took back some of the saving:
+
+| | text | data | bss | data + bss |
+|---|---|---|---|---|
+| Before (`d5f5199`) | 81 817 | 92 | 21 624 | 21 716 |
+| Now | 95 753 | 96 | 17 880 | 17 976 |
+| Change | +13 936 | +4 | −3 744 | **−3 740 B (−17 %)** |
+
+Application RAM (same method): **6 128 B → 2 359 B (−62 %)**.
+
 **Cost:** +8.5 KB of code (pack / unpack and frame functions) out of 2 MB
 flash, and task stacks are unchanged. The barcode task now widens a frame's
 widths into a 316-byte array on its own stack while it decodes.
@@ -224,7 +237,7 @@ JSON sizes are the old format with typical values. "After" sizes are exact
 | Barcode event | 42 B | 3 B |
 | Hump event | 46 B | 5 B |
 | Obstacle event | 114 B | 11 B |
-| Impact event | 23 B | 2 B |
+| Impact event | 23 B | 4 B |
 | Command reply | 51 B | 4 B |
 | Gains report | 115 B | 24 B |
 | Timing report | about 270 B (estimated) | 26 B (averages on the console) |
