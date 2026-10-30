@@ -1,0 +1,13 @@
+pc_time,type,json
+2026-10-30T19:16:55.993,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":1000}"
+2026-10-30T19:16:55.993,state,"{""type"":""state"",""st"":""IDLE"",""why"":""boot""}"
+2026-10-30T19:16:56.206,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-30T19:16:56.206,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":1000}"
+2026-10-30T19:17:11.671,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-30T19:17:11.874,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-10-30T19:17:12.082,state,"{""type"":""state"",""st"":""LINE_SEARCH"",""why"":""line lost""}"
+2026-10-30T19:17:12.085,state,"{""type"":""state"",""st"":""OBSTACLE"",""why"":""obstacle ahead / impact""}"
+2026-10-30T19:17:12.284,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-30T19:17:16.825,obstacle,"{""type"":""obstacle"",""found"":1,""dist"":238,""ang"":65,""width"":165,""centre"":18,""cl"":1000,""cr"":0,""act"":""TURN_LEFT"",""width_known"":false}"
+2026-10-30T19:17:17.029,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""stop"",""ok"":1}"
+2026-10-30T19:17:17.229,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""stop command""}"

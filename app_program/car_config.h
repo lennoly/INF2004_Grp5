@@ -218,8 +218,8 @@
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
 /* Start profiling below this (25 Oct: 200 was too close to see the box
-   edges). */
-#define OBST_DETECT_MM              (240)
+   edges; 30 Oct: 150 asked for, the +/-25 deg scan then covers +/-70 mm). */
+#define OBST_DETECT_MM              (150)
 /* The floor echoes at about 300-380 mm (the sensor is low and cannot tilt
    up): the profile treats echoes this far or further as no echo.  The
    front sensor still watches the pass for real objects. */

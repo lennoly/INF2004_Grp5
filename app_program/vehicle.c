@@ -1268,8 +1268,8 @@ watch_junction_bar (float32_t odo_mm)
  * @brief Whether the pending navigation command should run now: at the
  *        next junction reached after the command (the barcode sensor
  *        past the junction line, or with NAV_LINE_JUNCTION the line
- *        sensors on one; or at once, if so configured), immediately for a
- *        U-turn, or after NAV_PENDING_MAX_MM without a junction.
+ *        sensors on one; or at once, if so configured), or after
+ *        NAV_PENDING_MAX_MM without a junction.
  *
  * @param[in] odo_mm Current odometer reading.
  *
@@ -1281,8 +1281,7 @@ nav_due (float32_t odo_mm)
     barcode_decode_nav_t pending = g_st.pending_nav;
 
     return ((NAV_NONE != pending)
-            && ((0 == NAV_EXECUTE_AT_JUNCTION) || (NAV_UTURN == pending)
-                || gb_bar_junction
+            && ((0 == NAV_EXECUTE_AT_JUNCTION) || gb_bar_junction
                 || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
                     && (LINE_JUNCTION == g_st.line_state))
                 || ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM)));
