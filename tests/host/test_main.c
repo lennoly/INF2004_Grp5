@@ -153,8 +153,8 @@
 #define TAP_AT_MS (20u)
 #define TAP_MS    (40u)
 #define DRIVE_MS  (1500u)
-#define NEAR_MM   (150)
-#define NEARER_MM (140)
+#define NEAR_MM   (140)
+#define NEARER_MM (130)
 #define FAR_MM    (500)
 #define CENTRE_US (1500u) /* servo pulse at 90 degrees */
 
@@ -2372,8 +2372,12 @@ test_vehicle_manoeuvre_stop (void)
               && (0u == vehicle_sim_count("line not found")),
           "vehicle: STOP in a line search reported once");
 
-    vehicle_start(200u);
+    vehicle_start(1000u);
     vehicle_sim_barcode(NAV_UTURN);
+    vehicle_sim_run(100u);
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_JUNCTION_MS);
+    vehicle_sim_bar_black(false);
     vehicle_sim_step();
     check(vehicle_is(VS_NAV_TURN, NULL), "vehicle: U-turn barcode");
     vehicle_sim_clear_log();
@@ -2484,6 +2488,22 @@ test_vehicle_barcode_watchdog (void)
     check((1u == vehicle_sim_count("junction line"))
               && (1u == vehicle_sim_count("NAV_TURN")),
           "vehicle: turn once past the junction line");
+
+    /* A U-turn waits for the junction too. */
+    vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
+    vehicle_sim_run(200u);
+    vehicle_start(1000u);
+    vehicle_sim_barcode(NAV_UTURN);
+    vehicle_sim_run(100u);
+    check((vehicle_is(VS_LINE_FOLLOW, NULL))
+              && (NAV_UTURN == vehicle_status().pending_nav),
+          "vehicle: U-turn waits for the junction");
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_JUNCTION_MS);
+    vehicle_sim_bar_black(false);
+    vehicle_sim_step();
+    check(vehicle_is(VS_NAV_TURN, "UTURN"),
+          "vehicle: U-turn once past the junction line");
 
     gap = vehicle_sim_watchdog_gap_ms();
     check((WATCHDOG_TIMEOUT_MS == vehicle_sim_watchdog_timeout_ms())
