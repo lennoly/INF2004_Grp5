@@ -54,7 +54,9 @@ ultrasonic_init (void)
     int32_t ercd = E_LIMIT;
 
     hal_gpio_init_out(PIN_US_TRIG, false);
-    hal_gpio_init_in(PIN_US_ECHO, false);
+    /* Pulled up: an unplugged ECHO reads stuck high (FAULT ping) instead of
+       floating and picking up motor noise as echoes (S5-U12, 30 Oct). */
+    hal_gpio_init_in(PIN_US_ECHO, true);
 
     cflg.flgatr   = TA_TFIFO | TA_WSGL;
     gh_echo_flag  = tk_cre_flg(&cflg);

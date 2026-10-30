@@ -926,7 +926,7 @@ execute_nav (barcode_decode_nav_t cmd)
             /* Same as the default: cross the junction. */
         default:
             b_ok = forward(LINE_SENSOR_AHEAD_MM + STRAIGHT_EXTRA_MM,
-                           SPEED_SLOW_MM_S);
+                           SPEED_CRUISE_MM_S);
         break;
     }
 
