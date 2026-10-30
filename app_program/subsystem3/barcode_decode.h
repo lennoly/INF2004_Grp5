@@ -15,6 +15,7 @@
 #define BARCODE_DECODE_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define BARCODE_ELEMENTS_PER_CHAR (9u)
 #define BARCODE_MAX_ELEMENTS      (79u) /* up to 8 characters */
@@ -38,6 +39,7 @@ int32_t barcode_decode_frame(uint32_t const * p_widths, uint32_t count,
 barcode_decode_nav_t barcode_decode_to_command(char symbol);
 void barcode_decode_set_symbol(barcode_decode_nav_t command, char symbol);
 char barcode_decode_symbol(barcode_decode_nav_t command);
+bool barcode_decode_map_ready(void);
 char const *         barcode_decode_command_name(barcode_decode_nav_t command);
 
 #endif /* BARCODE_DECODE_H */

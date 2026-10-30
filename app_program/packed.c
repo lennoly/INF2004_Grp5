@@ -28,7 +28,8 @@ static char const g_code39[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
 
 #define CODE39_COUNT (sizeof(g_code39) - 1u)
 
-/* Vehicle state-change reasons, 5-bit codes.  Index 0 is any other text. */
+/* Vehicle state-change reasons, 5-bit codes.  Index 0 is any other text.
+   Full: 32 entries; one more needs PACKED_REASON_BITS of 6. */
 static char const * const g_reasons[] = {
     "other",
     "boot",
@@ -59,7 +60,9 @@ static char const * const g_reasons[] = {
     "watchdog reset",
     "LEFT, no junction",
     "RIGHT, no junction",
-    "STRAIGHT, no junction"};
+    "STRAIGHT, no junction",
+    "UTURN, no junction",
+    "barcode map not set"};
 
 #define REASON_COUNT (sizeof(g_reasons) / sizeof(g_reasons[0]))
 

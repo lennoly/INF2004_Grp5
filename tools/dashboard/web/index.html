@@ -128,11 +128,11 @@ canvas { width: 100%; height: 115px; display: block; }
       <h2>Demo barcode letters (car stopped)</h2>
       <div class="tune letters">
         <label>Left</label><label>Right</label><label>Straight</label><label>U-turn</label><span></span>
-        <input id="map1" maxlength="1" value="A"><input id="map2" maxlength="1" value="B">
-        <input id="map3" maxlength="1" value="C"><input id="map4" maxlength="1" value="D">
+        <input id="map1" maxlength="1"><input id="map2" maxlength="1">
+        <input id="map3" maxlength="1"><input id="map4" maxlength="1">
         <button id="set-map">Set</button>
       </div>
-      <p class="note">Back to A B C D after a car reset: press Set again.</p>
+      <p class="note">No letters after a car reset, and START is refused until all four are set: press Set again.</p>
     </section>
     <section>
       <h2>Tuning (car stopped)</h2>
@@ -206,7 +206,7 @@ canvas { width: 100%; height: 115px; display: block; }
         <dt>Pending turn</dt><dd id="v-pend">–</dd>
         <dt>Last turn</dt><dd id="v-bcturn">–</dd>
         <dt>Barcodes read</dt><dd id="v-nbc">–</dd>
-        <dt>Letters L R S U</dt><dd id="v-map">A B C D (default)</dd></dl></section>
+        <dt>Letters L R S U</dt><dd id="v-map">not set</dd></dl></section>
       <section><h2>IMU and terrain</h2><dl class="kv">
         <dt>Yaw / pitch / roll</dt><dd id="v-ypr">–</dd>
         <dt>Turn rate</dt><dd id="v-rate">–</dd>
@@ -418,8 +418,10 @@ function update(m) {
   }
   if (m.events.length) addRows("events", m.events, /IMPACT|STOPPED|FAILED|OBSTACLE|offline/);
   for (const e of m.events) {
-    const tm = e.match(/state -> NAV_TURN \((\w+)(, no junction)?\)/);
-    if (tm) setText("v-bcturn", tm[1] + (tm[2] ? " after 400 mm (no junction)" : tm[1] === "UTURN" ? " at once" : " at the junction"));
+    const tm = e.match(/state -> NAV_TURN \((\w+)\)/);
+    if (tm) setText("v-bcturn", tm[1] + " at the junction");
+    const td = e.match(/state -> LINE_FOLLOW \((\w+), no junction\)/);
+    if (td) setText("v-bcturn", td[1] + " dropped: no junction in 400 mm");
   }
   const acts = m.events.map(keyAction).filter(Boolean);
   if (o.ls && o.ls !== lastLs) {

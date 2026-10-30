@@ -102,11 +102,12 @@ git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../d
 
 ## Barcode demo configuration
 
-Before starting the updated mission firmware, send the instructor's four
-letters with `map=<forward>,<uturn>,<left>,<right>` through the MQTT command
-topic or dashboard command box. There are no default assignments. Use
-`mapping` to verify them; resend after reboot. All movements wait for a
-junction. See [barcode setup](docs/BARCODE_SETUP.md).
+No barcode letter is built in. Before START, send the instructor's four
+letters with the dashboard's *Demo barcode letters* boxes, or one
+`map=<1 left|2 right|3 straight|4 U-turn>,<Code 39 index, A=10..Z=35>` per
+movement. START is refused until all four are set and different; resend
+them after a reboot. Every movement waits for the junction, and one with no
+junction within 400 mm is dropped. See [barcode setup](docs/BARCODE_SETUP.md).
 
 ## Dashboard and live tuning (no reflashing)
 ```

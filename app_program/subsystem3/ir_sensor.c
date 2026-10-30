@@ -51,6 +51,7 @@ static volatile uint32_t            g_ring_tail   = 0u;
 static volatile bool                gb_bar_black  = false;
 static volatile uint32_t            g_bar_edge_us = 0u;
 
+static void    barcode_white_from(uint32_t cal_min, uint32_t cal_max);
 static int32_t to_permille(uint32_t raw, uint32_t channel);
 static void    barcode_edge_detect(uint32_t raw, uint32_t t_us);
 static void    ir_sample_isr(uint32_t t_us);
@@ -162,10 +163,16 @@ ir_sensor_calib_end (void)
 
         if (IR_BARCODE == idx)
         {
-            /* Kept at the defaults: BARCODE_BLACK/WHITE_LEVEL were tuned
-               on them (TEST_BARCODE never calibrates).  The spin's floor
-               and line extremes moved the levels so narrow bars no longer
-               reached BARCODE_BLACK_LEVEL in MISSION. */
+            /* Only the white level follows the floor (light, surface).
+               The span stays the default one BARCODE_BLACK/WHITE_LEVEL
+               were tuned on: taking the spin's line extreme as black moved
+               the levels so narrow bars no longer reached
+               BARCODE_BLACK_LEVEL in MISSION.  Without line contrast the
+               reading is not trusted and the old levels stay. */
+            if (b_span_ok)
+            {
+                barcode_white_from(g_cal_min[idx], g_cal_max[idx]);
+            }
         }
         else if (b_span_ok)
         {
@@ -231,6 +238,33 @@ uint32_t
 ir_sensor_barcode_idle_us (void)
 {
     return (hal_time_us() - g_bar_edge_us);
+}
+
+/*!
+ * @brief Move the barcode channel's white level to the floor seen in the
+ *        calibration spin, keeping the default black - white span
+ *        (called with interrupts disabled).
+ *
+ * @param[in] cal_min Lowest filtered reading of the spin.
+ * @param[in] cal_max Highest filtered reading of the spin.
+ */
+static void
+barcode_white_from (uint32_t cal_min, uint32_t cal_max)
+{
+    uint32_t const span = IR_DEFAULT_BLACK - IR_DEFAULT_WHITE;
+
+#if IR_BLACK_IS_HIGH
+    /* Casts: 12-bit values, and the black level is limited to ADC_MAX. */
+    g_white[IR_BARCODE] = (uint16_t) cal_min;
+    g_black[IR_BARCODE] =
+        (uint16_t) (((cal_min + span) > ADC_MAX) ? ADC_MAX : (cal_min + span));
+    (void) cal_max;
+#else
+    /* Casts: as above; the black level is limited to 0. */
+    g_white[IR_BARCODE] = (uint16_t) cal_max;
+    g_black[IR_BARCODE] = (uint16_t) ((cal_max > span) ? (cal_max - span) : 0u);
+    (void) cal_min;
+#endif
 }
 
 /*!

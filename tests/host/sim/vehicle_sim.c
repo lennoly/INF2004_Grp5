@@ -596,6 +596,13 @@ void vehicle_sim_barcode(barcode_decode_nav_t cmd)
     }
 }
 
+/* Simulated moves take time but no distance: add the distance a real
+   blocking move (e.g. a barcode turn's forward leg) would drive. */
+void vehicle_sim_drive(float32_t dist_mm)
+{
+    gs_odo += dist_mm;
+}
+
 void vehicle_sim_clear_log(void)
 {
     gs_log[0] = '\0';

@@ -40,8 +40,8 @@ pip install -r requirements.txt
   strength in mg.
 * **Distances** (front and last scan) show the sonar reading and, in
   brackets, the distance from the wheel axle (+70 mm, `OBST_SENSOR_AHEAD_MM`).
-* **Barcode turns** show whether they ran at the junction or after 400 mm
-  without one ("LEFT, no junction" in the events).
+* **Barcode turns** show the turn made at the junction, or the command
+  dropped after 400 mm without one ("LEFT, no junction" in the events).
 * The page fits one screen (about 1366 x 650 or larger); a smaller window
   falls back to one long page.
 * **Events and car console:** newest at the top.
@@ -66,8 +66,8 @@ Other commands: `start`, `stop`, `calibrate`, `gains`, `help`, `timing`
 (task times, control jitter and CPU load), `nav=1..4` (turn as if a barcode
 was read: 1 left, 2 right, 3 straight, 4 U-turn), `map=1..4,index` (the
 barcode letter for that turn as its Code 39 index, A=10 .. Z=35; the
-**Demo barcode letters** boxes send these for you, and the car goes back to
-A B C D when reset).
+**Demo barcode letters** boxes send these for you.  The car has no letters
+after a reset and refuses START until all four are set and different).
 Tuning (`pid=`, `ff=`, `line=`, `speed=`, `map=`) is accepted only while the car is
 IDLE or STOPPED; while it drives, the reply says so.
 The car answers every command with an event (`cmd ... ok` or the reason it
@@ -139,9 +139,9 @@ visible.
 
 ## Configure barcode movements before starting
 
-In the command box, enter `map=<forward>,<uturn>,<left>,<right>` using the
-instructor's four distinct letters, then press Enter. For example,
-`map=W,X,Y,Z` assigns W to forward, X to U-turn, Y to left, and Z to right.
-Send `mapping` to read back the assignments, then press Start. The map must
-be sent again after every reboot. Updates require IDLE or STOPPED.
-See [barcode setup](../../docs/BARCODE_SETUP.md) for MQTT topics and replies.
+Type the instructor's four different letters into the **Demo barcode
+letters** boxes (Left, Right, Straight, U-turn) and press **Set**. The car
+replies `# map L=. R=. S=. U=.`, shown under *Letters L R S U*. Start is
+refused ("barcode map not set") until all four are set and different. Send
+them again after every reboot; updates require IDLE or STOPPED.
+See [barcode setup](../../docs/BARCODE_SETUP.md) for the `map=` command.

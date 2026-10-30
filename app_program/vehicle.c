@@ -69,6 +69,13 @@
 #define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
+/* A junction line kept for a barcode decoded after it: at most the
+   distance driven during BARCODE_QUIET_MS at the top speed, plus one
+   loop and the decode (Casts: small whole numbers, exact in float32_t). */
+#define JUNCTION_KEEP_MM                                                    \
+    ((((float32_t) BARCODE_QUIET_MS + (2.0f * (float32_t) LOOP_MS))         \
+      * (float32_t) SPEED_MAX_CMD)                                          \
+     / MS_PER_S)
 
 /* Cast: the loop period is a small number of milliseconds, which
    float32_t holds exactly. */
@@ -127,6 +134,9 @@ static bool          gb_no_line_yet       = false; /* TEST_OBSTACLE start */
 static bool          gb_bar_black         = false; /* barcode IR on black */
 static float32_t     g_bar_start_odo      = 0.0f;
 static bool          gb_bar_junction      = false; /* junction line passed */
+static float32_t     g_junction_odo       = 0.0f;  /* ... at this reading */
+static float32_t     g_code_bar_odo       = 0.0f;  /* last barcode bar end */
+static float32_t     g_nav_overshoot_mm   = 0.0f;  /* past it at the turn */
 static barcode_decode_nav_t g_nav_request = NAV_NONE; /* nav= command */
 static bool          gb_settling          = false; /* slow after a turn */
 static float32_t     g_settle_end_odo     = 0.0f;
@@ -178,8 +188,8 @@ static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
 static void            take_barcode(float32_t odo_mm);
 static void            watch_junction_bar(float32_t odo_mm);
-static bool            nav_due(float32_t odo_mm);
-static char const *    nav_reason(barcode_decode_nav_t pending);
+static bool            nav_due(void);
+static bool            nav_expired(float32_t odo_mm);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
 static void            handle_line_search(void);
@@ -365,8 +375,23 @@ now_ms (void)
 static void
 set_state (vehicle_state_t state, char const * p_reason)
 {
-    UINT         imask = 0u;
-    imu_status_t imu;
+    UINT            imask = 0u;
+    imu_status_t    imu;
+    motion_status_t motion;
+
+    if ((VS_LINE_FOLLOW == state) && (VS_LINE_FOLLOW != g_st.state))
+    {
+        /* Back on the line after a start, turn, search or bypass: the
+           line and junction-line measurements restart here, so the
+           distance driven meanwhile cannot confirm a junction, and a
+           junction line seen before it is not this stretch's. */
+        motion_get_status(&motion);
+        g_prev_odo      = motion.odo_mm;
+        gb_bar_black    = ir_sensor_barcode_is_black();
+        g_bar_start_odo = motion.odo_mm;
+        g_code_bar_odo  = motion.odo_mm;
+        gb_bar_junction = false;
+    }
 
     if ((VS_OBSTACLE == g_st.state) && (VS_OBSTACLE != state))
     {
@@ -897,7 +922,12 @@ start_settling (void)
 static void
 execute_nav (barcode_decode_nav_t cmd)
 {
-    bool b_ok = true;
+    bool      b_ok  = true;
+    float32_t ahead = LINE_SENSOR_AHEAD_MM - g_nav_overshoot_mm;
+
+    /* A barcode decoded after the junction line was already passed: the
+       car is that much nearer to the junction (never a reverse). */
+    ahead = (ahead > 0.0f) ? ahead : 0.0f;
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
     (void) tm_printf((UB const *) "[vehicle] executing %s\n",
@@ -906,13 +936,13 @@ execute_nav (barcode_decode_nav_t cmd)
     switch (cmd)
     {
         case NAV_LEFT:
-            b_ok = (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
+            b_ok = (forward(ahead, SPEED_SLOW_MM_S))
                    && (turn_side(SIDE_LEFT, QUARTER_TURN))
                    && (reacquire_line(SIDE_LEFT));
         break;
 
         case NAV_RIGHT:
-            b_ok = (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
+            b_ok = (forward(ahead, SPEED_SLOW_MM_S))
                    && (turn_side(SIDE_RIGHT, QUARTER_TURN))
                    && (reacquire_line(SIDE_RIGHT));
         break;
@@ -925,11 +955,11 @@ execute_nav (barcode_decode_nav_t cmd)
         case NAV_STRAIGHT:
             /* Same as the default: cross the junction. */
         default:
-            b_ok = forward(LINE_SENSOR_AHEAD_MM + STRAIGHT_EXTRA_MM,
-                           SPEED_CRUISE_MM_S);
+            b_ok = forward(ahead + STRAIGHT_EXTRA_MM, SPEED_CRUISE_MM_S);
         break;
     }
 
+    g_nav_overshoot_mm = 0.0f;
     g_st.last_nav    = cmd;
     g_st.pending_nav = NAV_NONE;
     line_follow_init(&g_lf);
@@ -1208,7 +1238,14 @@ take_barcode (float32_t odo_mm)
         g_st.barcodes++;
         g_pending_odo    = odo_mm;
         gb_left_junction = false;
-        gb_bar_junction  = false;
+
+        /* The event comes BARCODE_QUIET_MS after the barcode's last bar
+           (about 45 mm at 180 mm/s): a junction line passed after that bar
+           is this barcode's junction, so keep it.  One passed before it is
+           an older junction, or bars of the barcode run together; so is
+           one too far back, in case the barcode's bars were not seen. */
+        gb_bar_junction = gb_bar_junction && (g_junction_odo > g_code_bar_odo)
+                          && ((odo_mm - g_junction_odo) <= JUNCTION_KEEP_MM);
     }
 
     /* A nav= command is handled exactly like a barcode (not counted). */
@@ -1246,10 +1283,17 @@ watch_junction_bar (float32_t odo_mm)
     {
         g_bar_start_odo = odo_mm;
     }
+    else if ((!b_black) && gb_bar_black && (width < NAV_JUNCTION_BAR_MIN_MM))
+    {
+        /* A barcode-sized bar: take_barcode() keeps only junction lines
+           passed after the last of these. */
+        g_code_bar_odo = odo_mm;
+    }
     else if ((!b_black) && gb_bar_black && (width >= NAV_JUNCTION_BAR_MIN_MM)
              && (width <= NAV_JUNCTION_BAR_MAX_MM))
     {
         gb_bar_junction = true;
+        g_junction_odo  = odo_mm;
 
         /* Casts: tm_printf() takes the kernel's UB string type (ASCII);
            the width is a few tens of mm, so it fits INT. */
@@ -1268,48 +1312,50 @@ watch_junction_bar (float32_t odo_mm)
  * @brief Whether the pending navigation command should run now: at the
  *        next junction reached after the command (the barcode sensor
  *        past the junction line, or with NAV_LINE_JUNCTION the line
- *        sensors on one; or at once, if so configured), or after
- *        NAV_PENDING_MAX_MM without a junction.
- *
- * @param[in] odo_mm Current odometer reading.
+ *        sensors on one; or at once, if so configured).
  *
  * @return true to execute the pending command.
  */
 static bool
-nav_due (float32_t odo_mm)
+nav_due (void)
 {
     barcode_decode_nav_t pending = g_st.pending_nav;
 
     return ((NAV_NONE != pending)
             && ((0 == NAV_EXECUTE_AT_JUNCTION) || gb_bar_junction
                 || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
-                    && (LINE_JUNCTION == g_st.line_state))
-                || ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM)));
+                    && (LINE_JUNCTION == g_st.line_state))));
 }
 
 /*!
- * @brief NAV_TURN reason: the command's name, with ", no junction" when it
- *        ran because NAV_PENDING_MAX_MM passed without a junction (the
- *        dashboard shows where a barcode turn happened).
+ * @brief Drop a pending command that met no junction within
+ *        NAV_PENDING_MAX_MM (Week 6 FR3: discard and report).  Turning
+ *        there instead would leave the line where no junction is.
  *
- * @param[in] pending Command about to run (nav_due() was true).
+ * @param[in] odo_mm Current odometer reading.
  *
- * @return Reason string (a literal in packed.c's table).
+ * @return true if the command was dropped.
  */
-static char const *
-nav_reason (barcode_decode_nav_t pending)
+static bool
+nav_expired (float32_t odo_mm)
 {
-    static char const * const p_no_junction[] = {
+    /* Reasons (literals in packed.c's table), indexed by the command. */
+    static char const * const p_dropped[] = {
         "", "LEFT, no junction", "RIGHT, no junction",
-        "STRAIGHT, no junction"};
-    bool b_junction = gb_bar_junction
-                      || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
-                          && (LINE_JUNCTION == g_st.line_state));
-    bool b_no_junction = (0 != NAV_EXECUTE_AT_JUNCTION) && (!b_junction)
-                         && (pending > NAV_NONE) && (pending < NAV_UTURN);
+        "STRAIGHT, no junction", "UTURN, no junction"};
+    barcode_decode_nav_t pending = g_st.pending_nav;
+    bool b_expired = (NAV_NONE != pending) && (pending <= NAV_UTURN)
+                     && ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM);
 
-    return (b_no_junction ? p_no_junction[pending]
-                          : barcode_decode_command_name(pending));
+    if (b_expired)
+    {
+        g_st.pending_nav = NAV_NONE;
+
+        /* Same state: only the reason is new, for the dashboard. */
+        set_state(VS_LINE_FOLLOW, p_dropped[pending]);
+    }
+
+    return (b_expired);
 }
 
 /*!
@@ -1377,10 +1423,20 @@ handle_line_follow (void)
         g_st.pending_nav = NAV_NONE;
     }
 
-    if (nav_due(motion.odo_mm))
+    if (nav_due())
     {
+        /* Normally 0: the turn starts in the loop that passed the line. */
+        g_nav_overshoot_mm = gb_bar_junction
+                                 ? car_math_abs(motion.odo_mm - g_junction_odo)
+                                 : 0.0f;
+        gb_bar_junction    = false;
         motion_stop();
-        set_state(VS_NAV_TURN, nav_reason(g_st.pending_nav));
+        set_state(VS_NAV_TURN,
+                  barcode_decode_command_name(g_st.pending_nav));
+    }
+    else if (nav_expired(motion.odo_mm))
+    {
+        /* Dropped and reported: keep following the line. */
     }
     else if (LINE_LOST == g_st.line_state)
     {
@@ -1539,6 +1595,13 @@ handle_requests (void)
         {
             gb_calib = false;
             calibrate();
+        }
+        else if (gb_start && (!barcode_decode_map_ready()))
+        {
+            /* The demo letters come from the PC (map=), none are built
+               in: a run without them would ignore every barcode. */
+            gb_start = false;
+            set_state(g_st.state, "barcode map not set");
         }
         else if (gb_start)
         {

@@ -69,6 +69,7 @@
 #define JUNCTION_EXTRA (3u)  /* 4 samples x 4 mm >= 10 mm      */
 #define BAR_NARROW_MS  (40u)  /* about 7 mm at the sim speed    */
 #define BAR_JUNCTION_MS (100u) /* about 18 mm                     */
+#define NAV_MAX_STEPS   (500u) /* loops allowed for a barcode turn */
 #define FLICKER_SAMPLES (10u) /* 10 x 4 mm, below the re-arm     */
 #define REARM_SAMPLES  (25u)  /* 25 x 4 mm = 100 mm              */
 
@@ -696,20 +697,43 @@ test_barcode (void)
                   "(20%% noise, speed drift, both directions)\n",
                   decoded, total);
     check(decoded == total, "all synthetic frames decode");
-    check(NAV_LEFT == barcode_decode_to_command(BARCODE_LEFT_SYMBOL), "left");
-    check(NAV_RIGHT == barcode_decode_to_command(BARCODE_RIGHT_SYMBOL),
-          "right");
-    check(NAV_STRAIGHT == barcode_decode_to_command(BARCODE_STRAIGHT_SYMBOL),
-          "straight");
-    check(NAV_UTURN == barcode_decode_to_command(BARCODE_UTURN_SYMBOL),
-          "u-turn");
+    check((NAV_NONE == barcode_decode_to_command('A'))
+              && (NAV_NONE == barcode_decode_to_command('-'))
+              && ('-' == barcode_decode_symbol(NAV_LEFT))
+              && (!barcode_decode_map_ready()),
+          "map: no letter is built in, not ready at boot");
+    barcode_decode_set_symbol(NAV_LEFT, 'W');
+    barcode_decode_set_symbol(NAV_RIGHT, 'X');
+    barcode_decode_set_symbol(NAV_STRAIGHT, '-');
+    check((NAV_LEFT == barcode_decode_to_command('W'))
+              && (NAV_STRAIGHT == barcode_decode_to_command('-'))
+              && (!barcode_decode_map_ready()),
+          "map: three letters set, not ready yet ('-' is a letter too)");
+    barcode_decode_set_symbol(NAV_UTURN, 'W');
+    check((NAV_LEFT == barcode_decode_to_command('W'))
+              && (!barcode_decode_map_ready()),
+          "map: a letter used twice is not ready");
+    barcode_decode_set_symbol(NAV_UTURN, 'Z');
+    check((NAV_LEFT == barcode_decode_to_command('W'))
+              && (NAV_RIGHT == barcode_decode_to_command('X'))
+              && (NAV_STRAIGHT == barcode_decode_to_command('-'))
+              && (NAV_UTURN == barcode_decode_to_command('Z'))
+              && ('Z' == barcode_decode_symbol(NAV_UTURN))
+              && (barcode_decode_map_ready()),
+          "map: four different letters, ready");
     check(NAV_NONE == barcode_decode_to_command('*'), "* is no command");
     barcode_decode_set_symbol(NAV_LEFT, 'K');
     check((NAV_LEFT == barcode_decode_to_command('K'))
-              && (NAV_NONE == barcode_decode_to_command(BARCODE_LEFT_SYMBOL))
+              && (NAV_NONE == barcode_decode_to_command('W'))
               && ('K' == barcode_decode_symbol(NAV_LEFT)),
           "map: demo letter K now turns left, the old one does nothing");
-    barcode_decode_set_symbol(NAV_LEFT, BARCODE_LEFT_SYMBOL);
+    barcode_decode_set_symbol(NAV_LEFT, '\0');
+    barcode_decode_set_symbol(NAV_RIGHT, '\0');
+    barcode_decode_set_symbol(NAV_STRAIGHT, '\0');
+    barcode_decode_set_symbol(NAV_UTURN, '\0');
+    check((!barcode_decode_map_ready())
+              && (NAV_NONE == barcode_decode_to_command('K')),
+          "map: cleared again");
 
     for (count = 0u; count < PHOTO_ELEMENTS; count++)
     {
@@ -2192,6 +2216,16 @@ test_vehicle_buttons (void)
     check((vehicle_is(VS_IDLE, NULL)) && (0u == vehicle_sim_count("L360")),
           "vehicle: STOP while idle never moves the car");
 
+    /* No demo letters yet (none are built in): START is refused. */
+    vehicle_sim_press(PIN_BTN_START, 50u, 100u);
+    vehicle_sim_run(300u);
+    check(vehicle_is(VS_IDLE, "barcode map not set"),
+          "vehicle: START refused until map= sets all four letters");
+    barcode_decode_set_symbol(NAV_LEFT, 'A');
+    barcode_decode_set_symbol(NAV_RIGHT, 'B');
+    barcode_decode_set_symbol(NAV_STRAIGHT, 'C');
+    barcode_decode_set_symbol(NAV_UTURN, 'D');
+
     vehicle_sim_press(PIN_BTN_START, 50u, 300u);
     vehicle_sim_run(300u);
     check(vehicle_is(VS_IDLE, NULL), "vehicle: START held: no run yet");
@@ -2448,7 +2482,8 @@ test_vehicle_sonar_health (void)
 static void
 test_vehicle_barcode_watchdog (void)
 {
-    uint32_t gap = 0u;
+    uint32_t gap   = 0u;
+    uint32_t steps = 0u;
 
     vehicle_sim_barcode(NAV_LEFT);
     vehicle_sim_barcode(NAV_RIGHT);
@@ -2504,6 +2539,70 @@ test_vehicle_barcode_watchdog (void)
     vehicle_sim_step();
     check(vehicle_is(VS_NAV_TURN, "UTURN"),
           "vehicle: U-turn once past the junction line");
+
+    /* The barcode is decoded BARCODE_QUIET_MS after its last bar: a
+       junction line passed in that time is still its junction. */
+    vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
+    vehicle_sim_run(200u);
+    vehicle_start(1000u);
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_NARROW_MS); /* the barcode's last bar */
+    vehicle_sim_bar_black(false);
+    vehicle_sim_run(60u);
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_JUNCTION_MS); /* then the junction line */
+    vehicle_sim_bar_black(false);
+    vehicle_sim_run(60u);
+    vehicle_sim_clear_log();
+    vehicle_sim_barcode(NAV_LEFT); /* decoded only now */
+    vehicle_sim_step();
+    check(vehicle_is(VS_NAV_TURN, "LEFT"),
+          "vehicle: junction passed before the late barcode still counts");
+
+    /* Back on the line on black after the turn: the turn's distance must
+       not confirm a junction (the odometer restarts at LINE_FOLLOW). */
+    vehicle_sim_junction();
+    vehicle_sim_drive(LINE_SENSOR_AHEAD_MM);
+
+    for (steps = 0u; (steps < NAV_MAX_STEPS) && (!vehicle_is(VS_LINE_FOLLOW, NULL));
+         steps++)
+    {
+        vehicle_sim_step();
+    }
+
+    vehicle_sim_step();
+    vehicle_sim_step();
+    check((vehicle_is(VS_LINE_FOLLOW, NULL))
+              && (LINE_ON == vehicle_status().line_state),
+          "vehicle: distance driven in a turn does not confirm a junction");
+    vehicle_sim_line(true);
+
+    /* A junction line before the barcode's bars is an older junction. */
+    vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
+    vehicle_sim_run(200u);
+    vehicle_start(1000u);
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_JUNCTION_MS);
+    vehicle_sim_bar_black(false);
+    vehicle_sim_run(60u);
+    vehicle_sim_bar_black(true);
+    vehicle_sim_run(BAR_NARROW_MS);
+    vehicle_sim_bar_black(false);
+    vehicle_sim_run(60u);
+    vehicle_sim_barcode(NAV_RIGHT);
+    vehicle_sim_run(100u);
+    check((vehicle_is(VS_LINE_FOLLOW, NULL))
+              && (NAV_RIGHT == vehicle_status().pending_nav),
+          "vehicle: a junction before the barcode is not its junction");
+
+    /* No junction within NAV_PENDING_MAX_MM: dropped and reported, never a
+       turn where there is no junction (Week 6 FR3). */
+    vehicle_sim_clear_log();
+    vehicle_sim_run(3000u);
+    check((vehicle_is(VS_LINE_FOLLOW, "RIGHT, no junction"))
+              && (NAV_NONE == vehicle_status().pending_nav)
+              && (0u == vehicle_sim_count("NAV_TURN")),
+          "vehicle: a command with no junction in 400 mm is dropped");
 
     gap = vehicle_sim_watchdog_gap_ms();
     check((WATCHDOG_TIMEOUT_MS == vehicle_sim_watchdog_timeout_ms())

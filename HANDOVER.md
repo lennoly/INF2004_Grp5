@@ -154,6 +154,10 @@ run on the car.
 (`car_config.h`: "no junction => act anyway"). The Week 6 design (FR3) says
 **discard and report** it. The team must pick one, make code and REPORT
 agree, and test at 399, 400 and 401 mm.
+**Done on `max` (31 Oct): discard and report.** `nav_expired()` drops the
+command with reason `LEFT/RIGHT/STRAIGHT/UTURN, no junction`; REPORT §4.3
+updated; host test "a command with no junction in 400 mm is dropped". The
+399 / 401 mm car test is still to do.
 
 ### 4.3 Old barcode commands survive into a new run. Owner: integration + Buddy 3
 `start_run()` clears `pending_nav` but not the barcode queue or the partial
