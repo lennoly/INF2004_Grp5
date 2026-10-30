@@ -1,79 +1,64 @@
 # Barcode demo setup
 
-The decoder recognises all uppercase Code 39 letters A-Z in either scan
-direction. Movement assignments are supplied by the PC at runtime. There
-are no default letters assigned to movements in the firmware.
+The decoder reads every Code 39 letter A-Z in either scan direction. No
+letter is built into the firmware: the PC sends the instructor's four
+letters before the run, and the car refuses START (reason
+`barcode map not set`) until all four are set and are different.
 
-## Send the instructor's assignments
+## Send the instructor's letters
 
-Build and flash the updated `MISSION` firmware with `WIFI_MQTT=1`, using your
-WiFi/broker settings as described in the root README. Alternatively use the
-moving Buddy 3 MQTT build described in `firmware/README.md`. The rebuilt
-`picocar_TEST_BUDDY3_uart.uf2` supports runtime assignments over UART only;
-older bench UF2 files do not contain these changes. Connect the dashboard
-to the broker for an MQTT build.
+With the car IDLE or STOPPED (updates while driving are refused):
 
-With the car IDLE or STOPPED, use the dashboard command box or publish a
-plain text MQTT message to `picocar/<car-id>/cmd`:
+- **Dashboard:** type the four letters into the *Demo barcode letters*
+  boxes (Left, Right, Straight, U-turn) and press **Set**.
+- **Command box, MQTT or USB console:** send one `map=` per movement,
+  `map=<movement>,<Code 39 index>`:
+
+| Movement | `<movement>` |
+|---|---|
+| Left | 1 |
+| Right | 2 |
+| Straight | 3 |
+| U-turn | 4 |
+
+The index is the letter's position in `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ`
+(A = 10, B = 11, ... Z = 35). Example only, W left, X right, Y straight,
+Z U-turn:
 
 ```text
-map=<forward>,<uturn>,<left>,<right>
+map=1,32
+map=2,33
+map=3,34
+map=4,35
 ```
 
-Replace the placeholders with four distinct letters from A-Z. Example only:
-
-```text
-map=W,X,Y,Z
-```
-
-This means W = forward, X = U-turn, Y = left, Z = right. Letters can be
-lowercase in the message; the car normalises them to uppercase. Spaces
-around `=` and `,` are accepted. All four assignments are replaced together.
-Duplicate, incomplete or invalid assignments are rejected without changing
-the previous mapping. Updates while driving are rejected.
-
-For a broker on the PC and car ID `car1`, an example terminal command is:
+For a broker on the PC and car ID `car1`:
 
 ```sh
-mosquitto_pub -h <broker-ip> -t picocar/car1/cmd -m "map=W,X,Y,Z"
+mosquitto_pub -h <broker-ip> -t picocar/car1/cmd -m "map=1,32"
 ```
 
-Subscribe to `picocar/car1/event` to see the mapping report and the command
-acknowledgement (`"ok":1` on success). Send `mapping` on the command topic to
-request the current configuration:
-
-```json
-{"type":"mapping","configured":1,"forward":"W","uturn":"X","left":"Y","right":"Z"}
-```
-
-Before configuration, `mapping` reports `"configured":0`. Mission start,
-including the physical START button, requires a configured mapping.
-Assignments live in RAM; resend them after every reboot. The same commands
-are available on the USB/UART console for bench testing.
+After each `map=` the car prints `# map L=W R=X S=Y U=Z` (`-` for a
+movement with no letter yet); the dashboard shows it under *Letters L R S U*.
+The letters live in RAM: send them again after every reboot.
 
 ## Robot behaviour
 
-1. Scan one complete `*<letter>*` Code 39 barcode in either direction.
-2. Decode and record the letter, and keep its assigned movement pending.
-3. Continue following the line until a junction is detected.
-4. Execute forward, U-turn, left or right at that junction.
-5. Clear the pending movement and continue to the next barcode.
+1. Scan one `*<letter>*` barcode in either direction.
+2. Decode the letter and keep its movement pending.
+3. Keep following the line until the barcode sensor passes the junction
+   line (a 12-30 mm black stretch). A junction line passed in the 250 ms
+   it takes to finish decoding the barcode also counts.
+4. Make the movement at that junction (U-turns too).
+5. If no junction comes within 400 mm, the movement is dropped and reported
+   (`LEFT, no junction` etc.), and the car keeps following the line.
 
-U-turns also wait for the junction. No distance timeout triggers an early
-movement. A valid unassigned letter is still decoded/reported with movement
-`NONE`; it does not create a new navigation command. If another assigned
-barcode arrives before the junction, the latest assigned barcode wins.
-New mission starts discard queued scans from before start.
+A letter with no movement is decoded and reported as `NONE`. Barcodes
+decoded while the car stood still are discarded at START.
 
-## Verification completed on the PC
+## Verification on the PC
 
-Run `python testing/subsystem3/run_host_tests.py` for the actual C decoder,
-simulated sensor stream, both IR polarities and both bench modes. Tests cover
-all A-Z letters forwards and backwards, noisy widths, mapping replacement
-and validation, plus the actual vehicle junction decision. The runner also
-checks the mission vehicle and telemetry source with warnings as errors.
-The general `tests/host` suite covers command parsing and the MQTT transport.
-
-Physical IR calibration, printed barcode sizes, cross-junction detection and
-motor movement accuracy still need robot testing. No robot results are
-claimed by the host tests.
+`make -C tests/host` covers the decoder (A-Z, both directions, noise, broken
+frames), the letter map (none at boot, START refused, duplicates) and the
+vehicle's junction decisions in the simulation. IR levels, printed barcode
+sizes, junction-line detection and turn accuracy still need the car.

@@ -287,7 +287,7 @@ Record on the real car:
 
 ## 4.3 Buddy 3 — Barcode Decoding and IR Line Following
 
-**Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command, or START held for 2 s while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts.
+**Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command, or START held for 2 s while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts. The barcode sensor takes only its white level from the spin (the floor under the current light) and keeps the black-white span its thresholds were tuned on, because the spin's line extreme raised the levels above what narrow bars reach.
 
 **Line position and following** (`line_follow.c`). The error is L − R, in the range [−1, 1]. A PID controller turns it into a differential wheel speed, and the base speed drops by up to 50 % on large errors for stability at varying speeds.
 
@@ -306,15 +306,15 @@ Record on the real car:
 
 Decoding classifies the **3 widest of each 9 elements as wide**. Code 39 guarantees exactly three wide elements per character, so this works regardless of speed and only assumes the speed is steady over one ≈40 mm character. A frame that fails forwards is reversed and decoded again, because the car may read the code from either end. Frames must start and end with `*`, which rejects line crossings and noise.
 
-**Navigation command interface.** Decoded characters map A→LEFT, B→RIGHT, C→STRAIGHT and D→U-TURN. Commands reach the vehicle task through a message buffer.
+**Navigation command interface.** No letter is built in: the instructor's four letters arrive from the PC over MQTT (`map=<movement>,<Code 39 index>`, or the dashboard's letter boxes) and are held in one 32-bit word, four 6-bit fields written with one store. START is refused (`barcode map not set`) until all four are set and different. Commands reach the vehicle task through a message buffer.
 
-The vehicle executes a command at the next junction:
+The vehicle executes a command at the next junction, when the barcode sensor has passed the 18 mm junction line. A junction line passed after the barcode's last bar but before the decode finished (250 ms of white) still counts, and the turn is shortened by the distance already driven past it:
 
 1. Advance by the sensor-to-axle offset.
 2. Make an encoder turn.
 3. Sweep to re-centre on the line.
 
-A U-turn is executed immediately. If no junction appears within 400 mm, the command is executed anyway.
+A U-turn also waits for the junction. If no junction appears within 400 mm, the command is dropped and reported (`LEFT, no junction` etc.); the car keeps following the line instead of turning where there is no junction (Week 6 FR3).
 
 **Verification.**
 

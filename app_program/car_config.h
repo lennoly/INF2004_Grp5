@@ -143,14 +143,10 @@
 #define BARCODE_WHITE_LEVEL         (0.08f)
 #define BARCODE_QUIET_MS            (250u)    /* white gap ending a frame   */
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
-/* Letter for each command; set on the day.  Must differ (a repeat is a
-   duplicate case and will not compile).  Other letters do nothing. */
-#define BARCODE_LEFT_SYMBOL         ('A')     /* [CALIBRATE]                */
-#define BARCODE_RIGHT_SYMBOL        ('B')     /* [CALIBRATE]                */
-#define BARCODE_STRAIGHT_SYMBOL     ('C')     /* [CALIBRATE]                */
-#define BARCODE_UTURN_SYMBOL        ('D')     /* [CALIBRATE]                */
+/* No letter is built in: the PC sends the four with map= before START,
+   and START is refused until all four are set and differ. */
 #define NAV_EXECUTE_AT_JUNCTION     (1)       /* 0 = act immediately        */
-#define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => act anyway  */
+#define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => drop it     */
 /* Junctions seen by the barcode sensor: the junction line (18 mm) crosses */
 /* under it; barcode bars are at most about 8 mm.  The turn starts once    */
 /* the sensor is past the line.                                            */

@@ -9,6 +9,7 @@
 #include "car_types.h"
 #include "car_config.h"
 #include "barcode_decode.h"
+#include "packed.h"
 
 #define ELEMENTS_PER_SLOT (10u) /* 9 elements + 1 gap        */
 #define MIN_CHARS         (3u)  /* start + data + stop        */
@@ -48,16 +49,23 @@ static code39_entry_t const g_table[] = {
 static char const * const g_nav_names[] = {"NONE", "LEFT", "RIGHT", "STRAIGHT",
                                            "UTURN"};
 
-/* Letter per command, indexed by barcode_decode_nav_t (NAV_NONE unused).
-   Starts from car_config.h; the map= command changes it for the demo
-   (written by the telemetry task, read by the barcode task: one-byte
-   stores, atomic on this CPU). */
-static volatile char g_symbols[] = {'\0', BARCODE_LEFT_SYMBOL,
-                                    BARCODE_RIGHT_SYMBOL,
-                                    BARCODE_STRAIGHT_SYMBOL,
-                                    BARCODE_UTURN_SYMBOL};
+/* Letter per command.  None at boot: the instructor gives the four
+   letters just before the demo and the PC sends them with map=, so no
+   letter is built in.  Change Requirement 1: one 6-bit field per command
+   (Code 39 index + 1, 0 = not set), NAV_LEFT in the lowest bits.  Only the
+   telemetry task writes it (map=), with one store; the barcode task reads
+   the whole word once per lookup, so it never sees half a change. */
+static volatile uint32_t g_map = 0u;
 
-#define SYMBOL_SLOTS (sizeof(g_symbols) / sizeof(g_symbols[0]))
+#define MAP_FIELD_BITS (6u)
+#define MAP_FIELD_MASK ((1u << MAP_FIELD_BITS) - 1u)
+#define MAP_NOT_SET    (0u)
+#define MAP_COMMANDS   ((uint32_t) NAV_UTURN) /* NAV_LEFT..NAV_UTURN */
+#define MAP_UNSET_CHAR ('-')
+
+static uint32_t map_shift(barcode_decode_nav_t command);
+static uint32_t map_field(uint32_t map, barcode_decode_nav_t command);
+static char     map_char(uint32_t map, barcode_decode_nav_t command);
 
 static char    lookup(uint32_t pattern);
 static void    sort_widths(uint32_t const * p_widths, uint32_t first,
@@ -148,9 +156,8 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
 }
 
 /*!
- * @brief Letter to command: car_config.h's BARCODE_*_SYMBOL (the brief:
- *        A = left, B = right, C = straight, D = U-turn) until map= sets
- *        another letter.
+ * @brief Letter to command, as set by map= (no letter gives a command
+ *        until then).
  *
  * @param[in] symbol First decoded data character.
  *
@@ -160,14 +167,18 @@ barcode_decode_nav_t
 barcode_decode_to_command (char symbol)
 {
     barcode_decode_nav_t command = NAV_NONE;
+    uint32_t             map     = g_map; /* one read: a consistent map */
+    uint32_t             index   = packed_symbol_index(symbol);
     uint32_t             idx     = 0u;
 
-    /* Lowest command wins if two share a letter. */
-    for (idx = SYMBOL_SLOTS - 1u; idx > 0u; idx--)
+    /* Lowest command wins if two share a letter (then the car will not
+       start: barcode_decode_map_ready()). */
+    for (idx = MAP_COMMANDS; (idx > 0u) && (index < PACKED_SYMBOL_NONE);
+         idx--)
     {
-        if (symbol == g_symbols[idx])
+        /* Cast: idx is NAV_LEFT..NAV_UTURN. */
+        if ((index + 1u) == map_field(map, (barcode_decode_nav_t) idx))
         {
-            /* Cast: idx is NAV_LEFT..NAV_UTURN. */
             command = (barcode_decode_nav_t) idx;
         }
     }
@@ -176,18 +187,27 @@ barcode_decode_to_command (char symbol)
 }
 
 /*!
- * @brief Set the letter that gives a command (demo letters, map=).
+ * @brief Set the letter that gives a command (demo letters, map=).  Call
+ *        from one task only (telemetry).
  *
  * @param[in] command NAV_LEFT..NAV_UTURN; anything else is ignored.
- * @param[in] symbol  Code 39 data character.
+ * @param[in] symbol  Code 39 data character; any other value (e.g. NUL)
+ *                    clears the command's letter.
  */
 void
 barcode_decode_set_symbol (barcode_decode_nav_t command, char symbol)
 {
-    /* Cast: the command is a table index. */
-    if ((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
+    uint32_t shift = 0u;
+    uint32_t index = packed_symbol_index(symbol);
+    uint32_t field = (index < PACKED_SYMBOL_NONE) ? (index + 1u) : MAP_NOT_SET;
+
+    if ((command > NAV_NONE) && (command <= NAV_UTURN))
     {
-        g_symbols[command] = symbol;
+        shift = map_shift(command);
+
+        /* Single writer: this read-modify-write cannot lose an update, and
+           the result is published with one store. */
+        g_map = (g_map & ~(MAP_FIELD_MASK << shift)) | (field << shift);
     }
 }
 
@@ -196,15 +216,48 @@ barcode_decode_set_symbol (barcode_decode_nav_t command, char symbol)
  *
  * @param[in] command NAV_LEFT..NAV_UTURN.
  *
- * @return The letter, or '?' for another value.
+ * @return The letter, '-' if none is set, or '?' for another value.
  */
 char
 barcode_decode_symbol (barcode_decode_nav_t command)
 {
-    /* Cast: the command is a table index. */
-    return (((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
-                ? g_symbols[command]
+    return (((command > NAV_NONE) && (command <= NAV_UTURN))
+                ? map_char(g_map, command)
                 : '?');
+}
+
+/*!
+ * @brief Whether all four commands have a letter, each a different one:
+ *        a run must not start before the PC has sent the demo letters.
+ *
+ * @return true if the map is complete.
+ */
+bool
+barcode_decode_map_ready (void)
+{
+    uint32_t map     = g_map;
+    uint32_t idx     = 0u;
+    uint32_t other   = 0u;
+    uint32_t field   = MAP_NOT_SET;
+    bool     b_ready = true;
+
+    /* Cast: NAV_LEFT is a small non-negative enumeration constant. */
+    for (idx = (uint32_t) NAV_LEFT; idx <= MAP_COMMANDS; idx++)
+    {
+        /* Cast: idx is NAV_LEFT..NAV_UTURN. */
+        field   = map_field(map, (barcode_decode_nav_t) idx);
+        b_ready = b_ready && (MAP_NOT_SET != field);
+
+        for (other = idx + 1u; other <= MAP_COMMANDS; other++)
+        {
+            /* Cast: as above. */
+            b_ready =
+                b_ready
+                && (field != map_field(map, (barcode_decode_nav_t) other));
+        }
+    }
+
+    return (b_ready);
 }
 
 /*!
@@ -228,6 +281,51 @@ barcode_decode_command_name (barcode_decode_nav_t command)
     }
 
     return (p_name);
+}
+
+/*!
+ * @brief Bit position of a command's field in g_map.
+ *
+ * @param[in] command NAV_LEFT..NAV_UTURN.
+ *
+ * @return The shift.
+ */
+static uint32_t
+map_shift (barcode_decode_nav_t command)
+{
+    /* Cast: the command is NAV_LEFT..NAV_UTURN, so this is 0..18. */
+    return (((uint32_t) command - 1u) * MAP_FIELD_BITS);
+}
+
+/*!
+ * @brief One command's field in a copy of the map.
+ *
+ * @param[in] map     Copy of g_map.
+ * @param[in] command NAV_LEFT..NAV_UTURN.
+ *
+ * @return Code 39 index + 1, or MAP_NOT_SET.
+ */
+static uint32_t
+map_field (uint32_t map, barcode_decode_nav_t command)
+{
+    return ((map >> map_shift(command)) & MAP_FIELD_MASK);
+}
+
+/*!
+ * @brief Letter of one command in a copy of the map.
+ *
+ * @param[in] map     Copy of g_map.
+ * @param[in] command NAV_LEFT..NAV_UTURN.
+ *
+ * @return The letter, or '-' if none is set.
+ */
+static char
+map_char (uint32_t map, barcode_decode_nav_t command)
+{
+    uint32_t field = map_field(map, command);
+
+    return ((MAP_NOT_SET == field) ? MAP_UNSET_CHAR
+                                   : packed_symbol_char(field - 1u));
 }
 
 /*!

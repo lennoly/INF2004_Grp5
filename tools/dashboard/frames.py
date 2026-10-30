@@ -45,7 +45,8 @@ REASONS = ["other", "boot", "start", "stop command", "spin 360", "calibrated",
            "STRAIGHT", "UTURN", "fault: motor stall", "fault: encoder",
            "fault: IMU", "fault: sonar no echo", "sonar stale",
            "watchdog reset", "LEFT, no junction", "RIGHT, no junction",
-           "STRAIGHT, no junction"]
+           "STRAIGHT, no junction", "UTURN, no junction",
+           "barcode map not set"]
 FAULTS = ["motor_stall", "encoder", "imu", "no_echo", "wifi_loss"]
 COMMANDS = ["start", "stop", "calibrate", "gains", "help", "speed", "pid",
             "ff", "line", "rate", "timing", "nav", "map"]
