@@ -13,8 +13,8 @@ heartbeat every second, so you can see the link state even while MQTT is
 down.
 
 While the test runs it
-  * sends "#<id> gains" every --ping-s seconds and times the reply
-    (command round trip, design assumption A1);
+  * sends "#<id> gains" (as a binary command frame, frames.py) every
+    --ping-s seconds and times the reply (command round trip, A1);
   * counts telemetry (5 Hz, FR9) and heartbeats (1 Hz, FR9);
   * reads the heartbeat: dropped messages, broker reconnects and WiFi
     re-joins;
@@ -31,13 +31,14 @@ logs/<date_time>/wifi_pings.csv, wifi_outages.csv and wifi_summary.txt.
 
 import argparse
 import csv
-import json
 import os
 import random
 import statistics
 import sys
 import threading
 import time
+
+import frames
 from datetime import datetime
 
 GAP_S = 2.0              # car silent this long = an outage
@@ -110,10 +111,11 @@ class WifiAnalyzer:
                 self.reboots += 1               # counters start again
                 self.first_hb = dict(obj)
             elif not self.outage_since_hb:
-                self.hb_missed += max(0, obj.get("seq", 0)
-                                      - prev.get("seq", 0) - 1)
-                self.drops_connected += max(0, obj.get("drop", 0)
-                                            - prev.get("drop", 0))
+                # 16-bit counters in the binary heartbeat: wrap-safe
+                self.hb_missed += max(0, (obj.get("seq", 0)
+                                          - prev.get("seq", 0)) % 65536 - 1)
+                self.drops_connected += (obj.get("drop", 0)
+                                         - prev.get("drop", 0)) % 65536
         self.outage_since_hb = False
         self.prev_hb = dict(obj)
 
@@ -240,20 +242,19 @@ def run_live(args):
     def on_message(c, userdata, msg):
         t = time.monotonic()
         topic = msg.topic[len(root):]
-        text = msg.payload.decode("utf-8", errors="replace").strip()
-        if topic == "status":
-            with lock:
-                an.car_status(t, text)
-            print("[car] status %s" % text)
-            return
         if topic == "cmd":
             return
         try:
-            obj = json.loads(text)
+            kind, obj = frames.decode(msg.payload)
         except ValueError:
             return
+        if kind == "status":
+            with lock:
+                an.car_status(t, obj)
+            print("[car] status %s" % obj)
+            return
         with lock:
-            an.message(t, classify(topic, obj), obj)
+            an.message(t, kind, obj)
 
     cli.on_connect = on_connect
     cli.on_disconnect = on_disconnect
@@ -270,7 +271,7 @@ def run_live(args):
     start = time.monotonic()
     next_ping = start + 1.0
     next_report = start + REPORT_EVERY_S
-    req_id = random.randint(100000, 900000)
+    req_id = random.randint(1, 30000)   # ids travel as 16 bits
     try:
         while time.monotonic() - start < args.minutes * 60.0:
             now = time.monotonic()
@@ -282,7 +283,8 @@ def run_live(args):
                     req_id += 1
                     with lock:
                         an.sent(now, req_id)
-                    cli.publish(root + "cmd", "#%d gains" % req_id)
+                    cli.publish(root + "cmd",
+                                frames.command_from_text("#%d gains" % req_id))
             if now >= next_report:
                 next_report += REPORT_EVERY_S
                 with lock:

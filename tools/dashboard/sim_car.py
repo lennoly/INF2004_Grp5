@@ -2,6 +2,7 @@
 """
 PicoCar simulator - publishes the same MQTT messages as the real firmware so
 the dashboard, broker and tuning workflow can be tested without the car.
+Since Change Requirement 1 these are the same binary frames (frames.py).
 
     python sim_car.py --mqtt localhost [--car car1]
 
@@ -13,11 +14,12 @@ start, stop, calibrate, gains, help, speed=, pid=, ff=, line=, rate=.
 """
 
 import argparse
-import json
 import math
 import random
 import sys
 import time
+
+import frames
 
 DT = 0.02                                   # 50 Hz simulation step
 MOTOR_GAIN = (5.0, 4.7)                     # mm/s per %duty, L / R
@@ -70,7 +72,9 @@ class Car:
 
     # ---- helpers ---------------------------------------------------------
     def event(self, obj):
-        self.pub("event", json.dumps(obj, separators=(",", ":")))
+        if obj.get("type") == "help":
+            return                       # help is console text only
+        self.pub("event", frames.encode_event(obj))
 
     def set_state(self, st, why):
         self.state, self.state_t = st, time.time()
@@ -85,6 +89,18 @@ class Car:
                     "speed": self.cruise, "rate": self.rate_ms})
 
     # ---- commands (same grammar and limits as command.c) -----------------
+    def command_frame(self, payload):
+        """Binary command frame from the cmd topic -> the text grammar."""
+        try:
+            kind, obj = frames.decode(payload)
+        except ValueError:
+            return
+        if kind != "command":
+            return
+        args = ",".join("%g" % v for v in obj["args"])
+        text = obj["cmd"] + ("=" + args if args else "")
+        self.command(("#%d " % obj["id"] if obj["id"] else "") + text)
+
     def command(self, text):
         text = text.strip()
         req_id = 0                       # optional "#<id> " prefix
@@ -109,14 +125,16 @@ class Car:
             err = "rate: 0 (off) or 50..5000 ms"
         elif name in ("pid", "line") and any(v < 0 or v > 1000 for v in vals):
             err = "gain out of range 0..1000"
-        elif name == "speed" and not 60 <= vals[0] <= 300:
-            err = "speed: 60..300 mm/s"
+        elif name == "speed" and not 50 <= vals[0] <= 300:
+            err = "speed: 50..300 mm/s"
         elif name in ("speed", "pid", "ff", "line") and \
                 self.state not in ("IDLE", "STOPPED"):
             err = "only while IDLE or STOPPED"   # as the firmware (CSC05)
         if err:
-            self.event({"type": "cmd", "id": req_id, "cmd": text, "ok": 0,
-                        "err": err})
+            code = "only while IDLE or STOPPED" if "IDLE" in err \
+                else "invalid command or value"
+            self.event({"type": "cmd", "id": req_id, "cmd": name, "ok": 0,
+                        "err": code})
             return
         if name == "start":
             self.run_t0 = time.time()
@@ -135,7 +153,7 @@ class Car:
             self.line = vals
         elif name == "rate":
             self.rate_ms = int(vals[0])
-        self.event({"type": "cmd", "id": req_id, "cmd": text, "ok": 1})
+        self.event({"type": "cmd", "id": req_id, "cmd": name, "ok": 1})
         if name == "help":
             self.event({"type": "help", "cmds": "start|stop|calibrate|gains|"
                         "help|speed=|pid=|ff=|line=|rate="})
@@ -237,7 +255,7 @@ class Car:
              "ev": "CLIMBING" if self.pitch > 3 else (
                  "DESCENDING" if self.pitch < -3 else "CRUISING"),
              "front": self.front, "act": self.act, "nobs": self.nobs}
-        self.pub("telemetry", json.dumps(o, separators=(",", ":")))
+        self.pub("telemetry", frames.encode_telemetry(o))
 
 
 
@@ -261,16 +279,16 @@ def main():
                           client_id="picocar-sim")
     else:
         cli = mqtt.Client(client_id="picocar-sim")
-    cli.will_set(root + "status", "offline", retain=True)
+    cli.will_set(root + "status", frames.encode_status(False), retain=True)
     car = Car(lambda topic, text: cli.publish(root + topic, text))
 
     def on_connect(c, *_):
         c.subscribe(root + "cmd")
-        c.publish(root + "status", "online", retain=True)
+        c.publish(root + "status", frames.encode_status(True), retain=True)
         car.gains_event()
 
     cli.on_connect = on_connect
-    cli.on_message = lambda c, u, m: car.command(m.payload.decode())
+    cli.on_message = lambda c, u, m: car.command_frame(m.payload)
     cli.connect(args.mqtt, args.port, 30)
     cli.loop_start()
     if args.autostart:
@@ -288,15 +306,15 @@ def main():
             if now - last_hb >= 1.0:
                 last_hb = now
                 car.seq += 1
-                cli.publish(root + "heartbeat", json.dumps(
+                cli.publish(root + "heartbeat", frames.encode_heartbeat(
                     {"up": int(now - t_start), "seq": car.seq,
                      "st": car.state, "link": "CONNECTED", "pub": 0,
                      "drop": 0, "rx": 0, "recon": 0, "imu": 1,
-                     "i2cerr": 0}, separators=(",", ":")))
+                     "i2cerr": 0}))
             time.sleep(DT)
     except KeyboardInterrupt:
         pass
-    cli.publish(root + "status", "offline", retain=True)
+    cli.publish(root + "status", frames.encode_status(False), retain=True)
     time.sleep(0.2)
     cli.loop_stop()
 

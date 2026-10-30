@@ -11,6 +11,7 @@
 
 #define STEER_LIMIT_MM_S   (250.0f)
 #define SPEED_DROP_AT_EDGE (0.5f) /* slow to 50 % at full error */
+#define HOLD_MIN_ERROR     (0.05f) /* last error that names a side  */
 
 /* Active gains: compile-time defaults, changed live by the "line="
    command.  Written by the vehicle task and read by telemetry: volatile. */
@@ -31,6 +32,8 @@ line_follow_init (line_follow_t * p_follow)
     p_follow->error           = 0.0f;
     p_follow->last_seen_error = 0.0f;
     p_follow->junction_mm     = 0.0f;
+    p_follow->clear_mm        = 0.0f;
+    p_follow->b_junction_seen = false;
     p_follow->lost_ms         = 0u;
     p_follow->state           = LINE_ON;
 }
@@ -52,24 +55,15 @@ void
 line_follow_set_gains (line_follow_t * p_follow, float32_t gain_p,
                        float32_t gain_i, float32_t gain_d)
 {
-    if ((!car_math_is_finite(gain_p)) || (!car_math_is_finite(gain_i))
-        || (!car_math_is_finite(gain_d)) || (gain_p < 0.0f) || (gain_i < 0.0f)
-        || (gain_d < 0.0f))
-    {
-        /* Invalid tuning leaves the active controller unchanged. */
-    }
-    else
-    {
-        g_gain_p = gain_p;
-        g_gain_i = gain_i;
-        g_gain_d = gain_d;
+    g_gain_p = gain_p;
+    g_gain_i = gain_i;
+    g_gain_d = gain_d;
 
-        if (NULL != p_follow)
-        {
-            p_follow->pid.gain_p = gain_p;
-            p_follow->pid.gain_i = gain_i;
-            p_follow->pid.gain_d = gain_d;
-        }
+    if (NULL != p_follow)
+    {
+        p_follow->pid.gain_p = gain_p;
+        p_follow->pid.gain_i = gain_i;
+        p_follow->pid.gain_d = gain_d;
     }
 }
 
@@ -94,7 +88,9 @@ line_follow_get_gains (float32_t * p_gain_p, float32_t * p_gain_i,
  *
  * LOST needs LINE_LOST_CONFIRM_MS of both sensors on white; JUNCTION needs
  * LINE_JUNCTION_MIN_MM of travel with both on black, so a single noisy
- * sample cannot trigger a turn.
+ * sample cannot trigger a turn.  A junction is reported once: after it,
+ * both sensors must leave black for LINE_JUNCTION_REARM_MM before the
+ * next one counts, so a flickering line does not keep re-triggering.
  *
  * @param[in,out] p_follow    Follower state.
  * @param[in]     left        Left sensor, 0 (white) .. 1 (black).
@@ -112,53 +108,38 @@ line_follow_classify (line_follow_t * p_follow, float32_t left, float32_t right,
     bool b_both_black =
         (left > LINE_JUNCTION_LEVEL) && (right > LINE_JUNCTION_LEVEL);
 
-    if ((!car_math_is_finite(left)) || (!car_math_is_finite(right))
-        || (!car_math_is_finite(distance_mm)) || (left < 0.0f) || (left > 1.0f)
-        || (right < 0.0f) || (right > 1.0f))
+    p_follow->lost_ms = b_both_white ? (p_follow->lost_ms + elapsed_ms) : 0u;
+    p_follow->junction_mm =
+        b_both_black ? (p_follow->junction_mm + car_math_abs(distance_mm))
+                     : 0.0f;
+    p_follow->clear_mm =
+        b_both_black ? 0.0f : (p_follow->clear_mm + car_math_abs(distance_mm));
+
+    if (p_follow->clear_mm >= LINE_JUNCTION_REARM_MM)
     {
-        p_follow->state       = LINE_LOST;
-        p_follow->lost_ms     = LINE_LOST_CONFIRM_MS;
-        p_follow->junction_mm = 0.0f;
-        pid_reset(&p_follow->pid);
+        p_follow->b_junction_seen = false;
+    }
+
+    if (p_follow->lost_ms >= LINE_LOST_CONFIRM_MS)
+    {
+        p_follow->state = LINE_LOST;
+    }
+    else if ((p_follow->junction_mm >= LINE_JUNCTION_MIN_MM)
+             && ((!p_follow->b_junction_seen)
+                 || (LINE_JUNCTION == p_follow->state)))
+    {
+        /* New junction, or still on the one already reported. */
+        p_follow->state           = LINE_JUNCTION;
+        p_follow->b_junction_seen = true;
     }
     else
     {
-        if (!b_both_white)
-        {
-            p_follow->lost_ms = 0u;
-        }
-        else if (elapsed_ms >= (LINE_LOST_CONFIRM_MS - p_follow->lost_ms))
-        {
-            p_follow->lost_ms = LINE_LOST_CONFIRM_MS;
-        }
-        else
-        {
-            p_follow->lost_ms += elapsed_ms;
-        }
+        p_follow->state = LINE_ON;
+    }
 
-        p_follow->junction_mm =
-            b_both_black ? car_math_clamp(p_follow->junction_mm
-                                              + car_math_abs(distance_mm),
-                                          0.0f, LINE_JUNCTION_MIN_MM)
-                         : 0.0f;
-
-        if (p_follow->lost_ms >= LINE_LOST_CONFIRM_MS)
-        {
-            p_follow->state = LINE_LOST;
-        }
-        else if (p_follow->junction_mm >= LINE_JUNCTION_MIN_MM)
-        {
-            p_follow->state = LINE_JUNCTION;
-        }
-        else
-        {
-            p_follow->state = LINE_ON;
-        }
-
-        if (!b_both_white)
-        {
-            p_follow->last_seen_error = left - right;
-        }
+    if (!b_both_white)
+    {
+        p_follow->last_seen_error = left - right;
     }
 
     return (p_follow->state);
@@ -167,7 +148,10 @@ line_follow_classify (line_follow_t * p_follow, float32_t left, float32_t right,
 /*!
  * @brief Differential steering speed: vL = v - s, vR = v + s.
  *
- * A lost line is not steered: the vehicle controller searches for it.
+ * Both sensors white: the line slid out on a bend, so steer fully to the
+ * side it was last seen while the loss is confirmed (27 Oct: anticlockwise
+ * bends drove straight off).  A confirmed loss is not steered: the
+ * vehicle controller searches for it.
  *
  * @param[in,out] p_follow Follower state.
  * @param[in]     left     Left sensor, 0 (white) .. 1 (black).
@@ -180,26 +164,19 @@ float32_t
 line_follow_steer (line_follow_t * p_follow, float32_t left, float32_t right,
                    float32_t dt_s)
 {
-    float32_t result = 0.0f;
+    bool      b_white = (left < LINE_LOST_LEVEL) && (right < LINE_LOST_LEVEL);
+    float32_t last    = p_follow->last_seen_error;
 
-    if ((LINE_LOST == p_follow->state) || (!car_math_is_finite(left))
-        || (!car_math_is_finite(right)) || (!car_math_is_finite(dt_s))
-        || (dt_s <= 0.0f) || (left < 0.0f) || (left > 1.0f) || (right < 0.0f)
-        || (right > 1.0f))
+    p_follow->error = left - right;
+
+    if (b_white && (car_math_abs(last) > HOLD_MIN_ERROR))
     {
-        pid_reset(&p_follow->pid);
-        p_follow->error = 0.0f;
+        p_follow->error = (last > 0.0f) ? 1.0f : -1.0f;
     }
-    else
-    {
-        p_follow->error = left - right;
 
-        /* Set-point 0 and measurement -error, so the output grows with a
+    /* Set-point 0 and measurement -error, so the output grows with a
        positive error.  pid_update() returns 0 for non-finite input. */
-        result = pid_update(&p_follow->pid, 0.0f, -p_follow->error, dt_s);
-    }
-
-    return (result);
+    return (pid_update(&p_follow->pid, 0.0f, -p_follow->error, dt_s));
 }
 
 /*!
@@ -217,8 +194,7 @@ line_follow_speed (float32_t cruise_mm_s, float32_t error)
         SPEED_DROP_AT_EDGE * car_math_clamp(car_math_abs(error), 0.0f, 1.0f);
     float32_t speed = cruise_mm_s * (1.0f - drop);
 
-    if ((!car_math_is_finite(speed)) || (!car_math_is_finite(error))
-        || (cruise_mm_s < 0.0f))
+    if (!car_math_is_finite(speed))
     {
         speed = 0.0f;
     }

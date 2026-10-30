@@ -12,7 +12,8 @@
  *  10  telemetry 5 Hz JSON, heartbeat and commands              Buddy 1
  *  10  blink     template liveness LED (GP16)
  *  11  test      standalone test programs (APP_MODE=TEST_xxx)
- * ISRs: IO_BANK0 (encoders, echo) and TIMER alarm 3 (1 kHz IR sampler).
+ * ISRs: IO_BANK0 (encoders, echo, STOP button) and TIMER alarm 3 (1 kHz IR
+ * sampler).
  */
 
 #include <stdint.h>
@@ -22,6 +23,7 @@
 #include "usb_console_compat.h"
 #include "demo_tasks.h"
 #include "car_config.h"
+#include "hal.h"
 #include "encoder.h"
 #include "motion.h"
 #include "ir_sensor.h"
@@ -32,8 +34,15 @@
 #include "vehicle.h"
 #include "app_tests.h"
 #include "timing.h"
-#include "hal.h"
+#include "fault.h"
 #include "app_main.h"
+
+/* Status snapshots shared between tasks are copied with interrupts disabled
+   (DI/EI), which is atomic only on the single-core kernel profile (design
+   assumption A13).  The template defines CNF_SMP=1 for an SMP=1 build. */
+#if defined(CNF_SMP) && (CNF_SMP != 0)
+#error "PicoCar needs the single-core kernel profile: build with SMP=0."
+#endif
 
 #define USB_WAIT_POLLS (50)
 #define USB_WAIT_MS    (100u)
@@ -55,16 +64,18 @@ INT
 usermain (void)
 {
     INT attempt = 0;
-#if APP_MODE == APP_MODE_TEST_BUDDY3
-    int32_t ercd = E_OK;
-#endif
 
+    /* First: every microsecond timing depends on this tick. */
+    hal_tick_start();
+
+    /* The watchdog runs only while the car can move (vehicle.c); make sure
+       it is off during start-up, whatever reset brought us here. */
+    hal_watchdog_stop();
     start_blink();
 
     /* Let USB-CDC enumerate so that the boot messages are not lost. */
     for (attempt = 0;
-         (APP_MODE != APP_MODE_TEST_BUDDY3)
-         && (attempt < USB_WAIT_POLLS) && (tm_usb_state() < USB_ENUMERATED);
+         (attempt < USB_WAIT_POLLS) && (tm_usb_state() < USB_ENUMERATED);
          attempt++)
     {
         (void) tk_dly_tsk(USB_WAIT_MS);
@@ -79,6 +90,9 @@ usermain (void)
     /* Task times, control jitter and CPU load: "timing" command. */
     report_init("timing", timing_init());
 
+    /* Shared fault bitmask (Change Requirement 1): before any owner task. */
+    report_init("fault", fault_init());
+
 #if APP_MODE == APP_MODE_TEST_TELEMETRY
     /* Buddy 1 WiFi / MQTT test: telemetry only, no robot hardware, so it
        runs on a bare Pico W.  The heartbeat is also printed here. */
@@ -89,48 +103,7 @@ usermain (void)
                                   "WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 "
                                   "WIFI_DNS=1 WIFI_MQTT=1\n");
 #endif
-#elif APP_MODE == APP_MODE_TEST_BUDDY3
-    /* Only Buddy 3 and its motor/encoder dependencies. No USB host needed. */
-    hal_gpio_init_out(PIN_SERVO, false);
-    ercd = encoder_init();
-
-    if (E_OK == ercd)
-    {
-        ercd = motion_init();
-    }
-
-    if (E_OK == ercd)
-    {
-        ercd = ir_sensor_init();
-    }
-
-    if (E_OK == ercd)
-    {
-        ercd = barcode_init();
-    }
-
-    if (E_OK == ercd)
-    {
-        barcode_set_enabled(false);
-        ercd = vehicle_init();
-    }
-
-    report_init("Buddy 3 driving", ercd);
-
-    if (E_OK == ercd)
-    {
-        /* Receive runtime barcode assignments over UART or MQTT. */
-#if defined(TM_WIFI_MQTT) && TM_WIFI_MQTT
-        report_init("commands", telemetry_init(true));
-#else
-        report_init("commands", telemetry_init(false));
-#endif
-    }
-
-    /* Cast: tm_printf takes the kernel UB string type; ASCII. */
-    (void) tm_printf((UB const *) "Buddy 3: GP20=start, GP21=stop. "
-                                  "Configure map=forward,uturn,left,right\n");
-#elif APP_MODE == APP_MODE_MISSION
+#elif (APP_MODE == APP_MODE_MISSION) || (APP_MODE == APP_MODE_TEST_OBSTACLE)
     /* Keep the car still: the IMU calibrates for 2 s after imu_init(). */
     report_init("encoder", encoder_init());
     report_init("motion", motion_init());
@@ -142,8 +115,8 @@ usermain (void)
     report_init("telemetry", telemetry_init(true));
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
-    (void) tm_printf((UB const *) "START=GP20  STOP=GP21 (STOP while idle "
-                                  "= calibrate)\nType help on this console "
+    (void) tm_printf((UB const *) "START=GP20 (hold 2 s = calibrate)  "
+                                  "STOP=GP21\nType help on this console "
                                   "for tuning commands.\n");
 #else
     report_init("test", app_tests_start());

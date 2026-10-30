@@ -1,0 +1,10 @@
+pc_time,type,json
+2026-10-30T18:58:55.504,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-30T18:58:55.505,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":0,""rate"":0}"
+2026-10-30T18:59:01.064,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""rate"",""ok"":1}"
+2026-10-30T18:59:01.271,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":0,""rate"":200}"
+2026-10-30T18:59:03.736,timing,"{""type"":""timing"",""win_ms"":12790,""load_pct"":2,""jit_max_us"":3941,""periods"":638,""motion"":[622],""vehicle"":[0],""barcode"":[0],""imu"":[0],""hump"":[0],""ir_isr"":[0],""net"":[0],""rejoin"":[0],""stop"":[0]}"
+2026-10-30T18:59:03.739,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""timing"",""ok"":1}"
+2026-10-30T18:59:04.767,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":0,""err"":""not available in this build""}"
+2026-10-30T18:59:32.719,timing,"{""type"":""timing"",""win_ms"":28980,""load_pct"":5,""jit_max_us"":1231,""periods"":1449,""motion"":[558],""vehicle"":[0],""barcode"":[0],""imu"":[0],""hump"":[0],""ir_isr"":[0],""net"":[0],""rejoin"":[0],""stop"":[0]}"
+2026-10-30T18:59:32.719,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""timing"",""ok"":1}"

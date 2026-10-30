@@ -49,7 +49,7 @@ static void report_move(char const * p_what, float32_t before_odo,
 #define PCT_FULL_POWER (100.0f)
 
 static void wheel_step(char const * p_what);
-static void pins_put(bool l_a, bool l_b, bool r_a, bool r_b);
+static void pins_put(bool b_l_a, bool b_l_b, bool b_r_a, bool b_r_b);
 static void pins_report(void);
 #endif
 
@@ -135,6 +135,64 @@ subsystem2_test_motion (void)
 }
 #endif
 
+#if APP_MODE == APP_MODE_TEST_WHEELS
+/*!
+ * @brief Buddy 2 wheel check: each motor pin driven on its own, first as
+ *        a plain GPIO level, then through the PWM driver, with no speed
+ *        loop and no encoder feedback in the way.  Watch the GP8..GP11
+ *        LEDs and the wheels; the encoder edges are printed per step.
+ */
+void
+subsystem2_test_wheels (void)
+{
+    /* Casts in the messages: tm_printf() takes the kernel's UB string
+       type; the literals are ASCII. */
+    (void) tm_printf((UB const *) "# part 1: plain GPIO, full power, "
+                                  "2 s each (no PWM)\n");
+    hal_gpio_init_out(PIN_MOTOR_L_A, false);
+    hal_gpio_init_out(PIN_MOTOR_L_B, false);
+    hal_gpio_init_out(PIN_MOTOR_R_A, false);
+    hal_gpio_init_out(PIN_MOTOR_R_B, false);
+
+    pins_put(true, false, false, false);
+    wheel_step("GP8  high: LEFT  forward ");
+    pins_put(false, true, false, false);
+    wheel_step("GP9  high: LEFT  backward");
+    pins_put(false, false, true, false);
+    wheel_step("GP10 high: RIGHT forward ");
+    pins_put(false, false, false, true);
+    wheel_step("GP11 high: RIGHT backward");
+    pins_put(true, false, true, false);
+    wheel_step("GP8+GP10 : BOTH  forward ");
+    pins_put(false, false, false, false);
+    (void) tk_dly_tsk(WHEEL_STEP_MS);
+
+    (void) tm_printf((UB const *) "# part 2: PWM driver (motor_set), "
+                                  "2 s each\n");
+    motor_init();
+    motor_set(WHEEL_PWM_PCT, 0.0f);
+    pins_report();
+    wheel_step("LEFT  forward  60%       ");
+    motor_set(0.0f, WHEEL_PWM_PCT);
+    pins_report();
+    wheel_step("RIGHT forward  60%       ");
+    motor_set(PCT_FULL_POWER, 0.0f);
+    pins_report();
+    wheel_step("LEFT  forward 100%       ");
+    motor_set(0.0f, PCT_FULL_POWER);
+    pins_report();
+    wheel_step("RIGHT forward 100%       ");
+    motor_set(WHEEL_PWM_PCT, WHEEL_PWM_PCT);
+    pins_report();
+    wheel_step("BOTH  forward  60%       ");
+    motor_set(PCT_FULL_POWER, PCT_FULL_POWER);
+    pins_report();
+    wheel_step("BOTH  forward 100%       ");
+    motor_brake();
+}
+
+#endif
+
 #if APP_MODE == APP_MODE_TEST_MOTOR
 /*!
  * @brief Command one wheel speed step and log the response.
@@ -162,6 +220,7 @@ log_step (float32_t target)
                          app_tests_print_int(motion.speed_r_mm_s),
                          app_tests_print_int(motion.pwm_l_pct),
                          app_tests_print_int(motion.pwm_r_pct));
+        motion_keep_alive(); /* LOG_MS < MOTION_VELOCITY_TIMEOUT_MS */
         (void) tk_dly_tsk(LOG_MS);
     }
 }
@@ -258,73 +317,18 @@ wheel_step (char const * p_what)
 /*!
  * @brief Drive the four motor pins as plain GPIO levels (no PWM).
  *
- * @param[in] l_a GP8 (M1A) level.
- * @param[in] l_b GP9 (M1B) level.
- * @param[in] r_a GP10 (M2A) level.
- * @param[in] r_b GP11 (M2B) level.
+ * @param[in] b_l_a GP8 (M1A) level.
+ * @param[in] b_l_b GP9 (M1B) level.
+ * @param[in] b_r_a GP10 (M2A) level.
+ * @param[in] b_r_b GP11 (M2B) level.
  */
 static void
-pins_put (bool l_a, bool l_b, bool r_a, bool r_b)
+pins_put (bool b_l_a, bool b_l_b, bool b_r_a, bool b_r_b)
 {
-    hal_gpio_put(PIN_MOTOR_L_A, l_a);
-    hal_gpio_put(PIN_MOTOR_L_B, l_b);
-    hal_gpio_put(PIN_MOTOR_R_A, r_a);
-    hal_gpio_put(PIN_MOTOR_R_B, r_b);
-}
-
-/*!
- * @brief Buddy 2 wheel check: each motor pin driven on its own, first as
- *        a plain GPIO level, then through the PWM driver, with no speed
- *        loop and no encoder feedback in the way.  Watch the GP8..GP11
- *        LEDs and the wheels; the encoder edges are printed per step.
- */
-void
-subsystem2_test_wheels (void)
-{
-    /* Casts in the messages: tm_printf() takes the kernel's UB string
-       type; the literals are ASCII. */
-    (void) tm_printf((UB const *) "# part 1: plain GPIO, full power, "
-                                  "2 s each (no PWM)\n");
-    hal_gpio_init_out(PIN_MOTOR_L_A, false);
-    hal_gpio_init_out(PIN_MOTOR_L_B, false);
-    hal_gpio_init_out(PIN_MOTOR_R_A, false);
-    hal_gpio_init_out(PIN_MOTOR_R_B, false);
-
-    pins_put(true, false, false, false);
-    wheel_step("GP8  high: LEFT  forward ");
-    pins_put(false, true, false, false);
-    wheel_step("GP9  high: LEFT  backward");
-    pins_put(false, false, true, false);
-    wheel_step("GP10 high: RIGHT forward ");
-    pins_put(false, false, false, true);
-    wheel_step("GP11 high: RIGHT backward");
-    pins_put(true, false, true, false);
-    wheel_step("GP8+GP10 : BOTH  forward ");
-    pins_put(false, false, false, false);
-    (void) tk_dly_tsk(WHEEL_STEP_MS);
-
-    (void) tm_printf((UB const *) "# part 2: PWM driver (motor_set), "
-                                  "2 s each\n");
-    motor_init();
-    motor_set(WHEEL_PWM_PCT, 0.0f);
-    pins_report();
-    wheel_step("LEFT  forward  60%       ");
-    motor_set(0.0f, WHEEL_PWM_PCT);
-    pins_report();
-    wheel_step("RIGHT forward  60%       ");
-    motor_set(PCT_FULL_POWER, 0.0f);
-    pins_report();
-    wheel_step("LEFT  forward 100%       ");
-    motor_set(0.0f, PCT_FULL_POWER);
-    pins_report();
-    wheel_step("RIGHT forward 100%       ");
-    motor_set(WHEEL_PWM_PCT, WHEEL_PWM_PCT);
-    pins_report();
-    wheel_step("BOTH  forward  60%       ");
-    motor_set(PCT_FULL_POWER, PCT_FULL_POWER);
-    pins_report();
-    wheel_step("BOTH  forward 100%       ");
-    motor_brake();
+    hal_gpio_put(PIN_MOTOR_L_A, b_l_a);
+    hal_gpio_put(PIN_MOTOR_L_B, b_l_b);
+    hal_gpio_put(PIN_MOTOR_R_A, b_r_a);
+    hal_gpio_put(PIN_MOTOR_R_B, b_r_b);
 }
 
 /*!

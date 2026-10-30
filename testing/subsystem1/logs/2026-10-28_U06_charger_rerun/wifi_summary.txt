@@ -1,0 +1,10 @@
+PicoCar WiFi test  2026-10-28 16:02
+duration 122 s, connected 122 s
+
+
+PASS  telemetry rate (FR9, 5 Hz)             4.76 Hz while connected
+PASS  heartbeat (FR9, 1 Hz)                  0.98 Hz, 0 missed while connected
+PASS  command round trip (A1, < 100 ms)      median 57 ms, 95% 132 ms, max 166 ms; 60 replies, 0 lost
+PASS  no messages dropped while connected    0 dropped
+PASS  every outage recovered (FR11)          0 outage(s); broker reconnects 0, WiFi re-joins 0
+INFO  car reboots during the test            0

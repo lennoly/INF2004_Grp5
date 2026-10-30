@@ -30,7 +30,8 @@ convention: one folder per student under `app_program/`, `TEAM.md`,
 | `testing/` | test cases and results per subsystem, integration and system (`testing/README.md`) |
 | `videos/` | index of unlisted YouTube videos of tests and demos |
 | `tools/dashboard` | **laptop dashboard** (plots, tuning, CSV logs) + car simulator |
-| `tests/host` | PC unit tests (`make -C tests/host`) — 112/112 pass |
+| `tools/scan_plot.py` | plots `TEST_ULTRASONIC` scans against the real box and prints the error table (Buddy 5 evidence) |
+| `tests/host` | PC unit tests (`make -C tests/host`) — 231/231 pass |
 | `firmware/` | prebuilt `.uf2` (USB console) for every mode |
 | `setup.sh` | fetches `template/` (course template + our patch, with `app_program/` linked in) and `sdk/pico-sdk` |
 | `docs/template_changes.patch` | the 6 edits made to template files (applied by `setup.sh`) |
@@ -91,11 +92,13 @@ git -C template apply --include=build_make/mtkernel_3/app_program/subdir.mk ../d
 ## Build and flash
 1. `gmake -C template/build_make -j8 APP_MODE=TEST_MOTOR CONSOLE=usb_cdc`
    (modes: MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE,
-   TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY).
+   TEST_IMU, TEST_CRASH, TEST_ULTRASONIC, TEST_TELEMETRY).
 2. Hold BOOTSEL, plug USB, copy `template/build_make/*.uf2` (or one from
    `firmware/`). Open the USB serial port.
 3. Press **GP20 (START)** to run a test / the mission. **GP21 (STOP)**
-   stops; STOP while idle = 360° calibration spin (IR + magnetometer).
+   stops and never moves the car. In the mission build START acts on
+   release: a short press starts a run; held for 2 s while idle, it runs
+   the 360° calibration spin (IR + magnetometer), as `calibrate` does.
 
 ## Barcode demo configuration
 
@@ -160,7 +163,8 @@ New-NetFirewallRule -DisplayName "MQTT 1883" -Direction Inbound -Protocol TCP -L
 gmake -C template/build_make -j8 APP_MODE=TEST_TELEMETRY CONSOLE=uart WIFI=cyw43 WIFI_JOIN=1 WIFI_NETIF=1 WIFI_DHCP=1 WIFI_DNS=1 WIFI_MQTT=1
 # flash template/build_make/mtk3pico_smp0_uart_wifi_dns.uf2
 python tools/dashboard/picocar_dashboard.py --mqtt <broker IP>
-# or: mosquitto_pub -h <broker IP> -t picocar/car1/cmd -m gains
+# commands on MQTT are binary frames (docs/DATA_REPRESENTATION.md); "gains" is:
+# printf '\x1c\x03\x00\x00' | mosquitto_pub -h <broker IP> -t picocar/car1/cmd -s
 ```
 `TEST_TELEMETRY` runs only WiFi, MQTT and telemetry (no robot hardware), so
 **a bare Pico W is enough**. Sensor values in the telemetry read 0 in this
@@ -178,17 +182,21 @@ Use `APP_MODE=MISSION` for the full mission with WiFi on the car.
 |---|---|
 | `link` | `WAIT_NET` (no WiFi yet), `CONNECTING`, `CONNECTED`, `BACKOFF` (refused, retrying) |
 | `wifi` | WiFi state in words: `joined`, `joining`, `hotspot not found ...`, `wrong WiFi password`, `joined, waiting for an IP address` |
-| `ip`, `broker` | the board's own address, and the broker address it was built with |
+| `ip` | the board's own address |
 | `tries`, `recon`, `rejoin` | broker attempts, reconnects after a loss, WiFi re-joins |
 | `wreset` | WiFi chip restarts (no link for 10 s while the car is not driving) |
 | `pub`, `drop` | messages sent, and dropped while offline |
 | `why` | how the last broker attempt ended, in words (below) |
+| `faults`, `fcount` | active fault bits (motor stall, encoder, IMU, no echo, Wi-Fi loss) and how often each was raised |
+
+The heartbeat is a 26-byte binary frame (Change Requirement 1);
+`tools/dashboard/frames.py` decodes it into these names.
 
 If `link` never reaches `CONNECTED`, `why` says where to look:
 
 | `why` | Fix |
 |---|---|
-| `no answer from broker (firewall? address?)` | firewall rule above; `broker` must be the laptop's current IP |
+| `no answer from broker (firewall? address?)` | firewall rule above; `MQTT_BROKER_IP` must be the laptop's current IP |
 | `closed by broker or network (TCP reset)` | nothing accepted the connection: antivirus/VPN firewall, or wrong port |
 | `refused: not authorised ...` | mosquitto started without `allow_anonymous true` (use `-c`) |
 | `link` `WAIT_NET` | not on the WiFi yet: `wifi` says why. The board re-joins every 5 s and restarts the WiFi chip every 10 s until it is back |

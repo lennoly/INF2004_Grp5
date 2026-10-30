@@ -26,6 +26,8 @@ typedef enum
     TIMING_IR_ISR,     /* the 1 kHz IR sampler interrupt          */
     TIMING_NET,        /* the MQTT poll hook in the cyw43 task    */
     TIMING_REJOIN,     /* one Wi-Fi re-join request               */
+    TIMING_STOP,       /* STOP command queued to the motors told  */
+                       /* to stop (PWM 0 at the next 20 ms step)  */
     TIMING_COUNT
 } timing_id_t;
 

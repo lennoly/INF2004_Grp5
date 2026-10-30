@@ -90,7 +90,12 @@ extern err_t    g_fake_publish_err;          /* what mqtt_publish() returns */
 extern char     g_fake_topic[FAKE_TOPIC_MAX]; /* last accepted publish      */
 extern u8_t     g_fake_retain;
 extern char     g_fake_subscribed[FAKE_TOPIC_MAX];
+#define FAKE_PAYLOAD_MAX (64u)
+extern u8_t     g_fake_payload[FAKE_PAYLOAD_MAX]; /* last accepted payload */
+extern u16_t    g_fake_payload_len;
 void fake_mqtt_connection(mqtt_connection_status_t status);
 void fake_mqtt_incoming(char const * topic, char const * text);
+void fake_mqtt_incoming_bytes(char const * topic, u8_t const * p_data,
+                              u16_t len);
 
 #endif /* FAKE_LWIP_MQTT_H */

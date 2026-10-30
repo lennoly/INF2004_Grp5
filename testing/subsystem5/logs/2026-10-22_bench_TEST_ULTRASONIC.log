@@ -1,0 +1,137 @@
+
+# [logger] connected /dev/cu.usbmodemMTK3PICO1 at 14:04:29
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,1200,205
+a9,VALID,1198,205
+a9,VALID,1199,205
+a9,VALID,1199,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1199,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+a9,VALID,1199,205
+a9,VALID,1200,205
+a9,VALID,1200,205
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT: check the sensor wires and power, then try 5 V + divider)
+# front=-1 mm
+# commands: start | stop | calibrate | gains | help | timing
+#   speed=<mm/s>        cruise speed (60..300)
+#   pid=<kp>,<ki>,<kd>  wheel speed PID
+#   ff=<kf>,<offset>    feed-forward + friction offset (pct)
+#   line=<kp>,<ki>,<kd> line-following PID
+#   rate=<ms>           telemetry period, 0 = off
+#   speed=, pid=, ff=, line= only while IDLE or STOPPED
+#   timing: task times, control jitter and CPU load since the last timing
+# MQTT takes the same commands as binary frames (tools/dashboard/frames.py)
+# cmd #0 help: ok
+@18000004
+[scan] pts=33 found=1 d=196 w=401 cl=1000 cr=1000
+# found=1 closest=196@60 edges L=-199 R=202 width=401 clear L=1000 R=1000 -> TURN_LEFT offset=339
+# points=33 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,10,196
+pt,15,209
+pt,20,196
+pt,25,208
+pt,30,208
+pt,35,209
+pt,40,208
+pt,45,208
+pt,50,208
+pt,55,209
+pt,60,196
+pt,65,205
+pt,70,196
+pt,75,196
+pt,80,196
+pt,85,196
+pt,90,196
+pt,95,208
+pt,100,208
+pt,105,199
+pt,110,212
+pt,115,224
+pt,120,202
+pt,125,202
+pt,130,202
+pt,135,202
+pt,140,202
+pt,145,202
+pt,150,202
+pt,155,202
+pt,160,202
+pt,165,202
+pt,170,202
+# closest echo on the RIGHT (box offset right must say RIGHT, else set SERVO_INVERT 1)
+# test done
+# press START (GP20)
+# A9 no-target check (aim at open space > 4 m): a9,class,width_us,mm
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1180,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1181,202
+a9,VALID,1180,202
+a9,VALID,1181,202
+# A9: VALID 20, OUT_OF_RANGE 0, FAULT 0, BUSY 0 (FAULT: check the sensor wires and power, then try 5 V + divider)
+# front=-1 mm
+[scan] pts=33 found=1 d=192 w=420 cl=1000 cr=1000
+# found=1 closest=192@75 edges L=-218 R=202 width=420 clear L=1000 R=1000 -> TURN_RIGHT offset=342
+# points=33 (pt,angle_deg,dist_mm; -1 = no echo)
+pt,10,205
+pt,15,205
+pt,20,205
+pt,25,205
+pt,30,205
+pt,35,205
+pt,40,205
+pt,45,205
+pt,50,205
+pt,55,205
+pt,60,205
+pt,65,202
+pt,70,215
+pt,75,192
+pt,80,192
+pt,85,192
+pt,90,205
+pt,95,205
+pt,100,205
+pt,105,218
+pt,110,208
+pt,115,208
+pt,120,221
+pt,125,221
+pt,130,221
+pt,135,221
+pt,140,221
+pt,145,221
+pt,150,221
+pt,155,221
+pt,160,221
+pt,165,221
+pt,170,221
+# closest echo on the RIGHT (box offset right must say RIGHT, else set SERVO_INVERT 1)
+# test done
+# press START (GP20)

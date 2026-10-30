@@ -15,9 +15,7 @@
 #define BARCODE_DECODE_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
-#define BARCODE_MAPPING_SIZE      (4u)
 #define BARCODE_ELEMENTS_PER_CHAR (9u)
 #define BARCODE_MAX_ELEMENTS      (79u) /* up to 8 characters */
 
@@ -37,10 +35,9 @@ typedef enum
 
 int32_t barcode_decode_frame(uint32_t const * p_widths, uint32_t count,
                              char * p_out, uint32_t out_size);
-/* Order: forward, U-turn, left, right. Unconfigured at boot. */
-bool barcode_decode_set_mapping(char const letters[BARCODE_MAPPING_SIZE]);
-bool barcode_decode_get_mapping(char letters[BARCODE_MAPPING_SIZE]);
 barcode_decode_nav_t barcode_decode_to_command(char symbol);
+void barcode_decode_set_symbol(barcode_decode_nav_t command, char symbol);
+char barcode_decode_symbol(barcode_decode_nav_t command);
 char const *         barcode_decode_command_name(barcode_decode_nav_t command);
 
 #endif /* BARCODE_DECODE_H */

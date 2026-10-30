@@ -5,9 +5,16 @@
  *
  * Two lock-free single-producer / single-consumer rings decouple the two
  * worlds (which may not share headers, see hal.h):
- *   TX: telemetry task -> MQTT client     (publish requests)
- *   RX: MQTT client    -> telemetry task  (commands from the "cmd" topic)
+ *   TX: telemetry task -> MQTT client     (binary frames to publish)
+ *   RX: MQTT client    -> telemetry task  (binary command frames)
  * Plain C only: included from both kernel-side and lwIP-side files.
+ *
+ * Change Requirement 1: payloads are compact binary frames (frames.h), so
+ * a TX slot holds 47 bytes instead of 512 and an RX slot 15 instead of 64.
+ * The link statistics are packed too: the counters written by the CYW43
+ * task share words, while the drop counter, written by the telemetry
+ * task, keeps a word of its own so that no two tasks read-modify-write the
+ * same word.  Status texts are stored as small codes.
  */
 
 #ifndef MQTT_BRIDGE_H
@@ -16,8 +23,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define MQTT_BRIDGE_PAYLOAD_MAX (512u)
-#define MQTT_BRIDGE_CMD_MAX     (64u)
+#define MQTT_BRIDGE_PAYLOAD_MAX (47u) /* longest frame (FRAMES_MAX_BYTES) */
+#define MQTT_BRIDGE_CMD_MAX     (15u) /* longest command frame            */
 
 typedef enum
 {
@@ -37,28 +44,29 @@ typedef enum
     LINK_BACKOFF
 } mqtt_bridge_link_t;
 
+/* Unpacked copy for readers (mqtt_bridge_get_stats). */
 typedef struct
 {
     mqtt_bridge_link_t link;
-    uint32_t           published;
-    uint32_t           dropped; /* TX ring full or link down */
-    uint32_t           commands;
-    uint32_t           reconnects;
-    uint32_t           rejoins;       /* WiFi access-point re-join attempts */
-    uint32_t           wifi_restarts; /* WiFi chip power-cycles       */
-    uint32_t           attempts;      /* broker connection attempts        */
-    uint32_t           address;       /* own IPv4 address, network order  */
-    char const *       p_why;         /* how the last attempt ended       */
-    char const *       p_wifi;        /* WiFi connection state            */
+    uint32_t           published; /* 16-bit, wraps: use differences      */
+    uint32_t           dropped;   /* 16-bit, wraps: TX ring full or down */
+    uint32_t           commands;  /* 16-bit, wraps                       */
+    uint32_t           reconnects; /* 8-bit, saturating                  */
+    uint32_t           rejoins;    /* WiFi access-point re-join attempts */
+    uint32_t           wifi_restarts; /* WiFi chip power-cycles          */
+    uint32_t           attempts;      /* broker connection attempts      */
+    uint32_t           address;       /* own IPv4 address, network order */
+    uint32_t           why_code;      /* 4-bit code of p_why             */
+    uint32_t           wifi_code;     /* 3-bit code of p_wifi            */
+    char const *       p_why;         /* how the last attempt ended      */
+    char const *       p_wifi;        /* WiFi connection state           */
 } mqtt_bridge_stats_t;
 
-/* Application side. */
-bool mqtt_bridge_publish(mqtt_bridge_topic_t topic, char const * p_json);
-bool mqtt_bridge_get_command(char * p_out, uint32_t size);
+bool mqtt_bridge_publish(mqtt_bridge_topic_t topic, uint8_t const * p_data,
+                         uint32_t len);
+bool mqtt_bridge_get_command(uint8_t * p_out, uint32_t size, uint32_t * p_len);
 void mqtt_bridge_get_stats(mqtt_bridge_stats_t * p_out);
 void mqtt_bridge_set_restart_ok(bool b_ok);
-
-/* Network side. */
 bool mqtt_bridge_peek_tx(mqtt_bridge_topic_t * p_topic, char * p_data,
                          uint32_t size, uint32_t * p_len);
 void mqtt_bridge_drop_tx(void);

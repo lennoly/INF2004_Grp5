@@ -1,0 +1,21 @@
+TEST_MOTION usbcdc, USB console pasted by Kent, 30 Oct. A wheel was held by hand.
+Excerpt: the move lines and the heartbeat frames around them.
+
+=== PicoCar on uT-Kernel 3.0 (APP_MODE 2) ===
+forward 500: odo=496 mm heading=0.200 deg ok=1
+left 90: odo=1 mm heading=86.700 deg ok=1
+right 90: odo=1 mm heading=-87.000 deg ok=1
+backward 500: odo=-186 mm heading=-4.700 deg ok=1
+u-turn 180: odo=11 mm heading=178.100 deg ok=1
+# test done
+@1248008004000000000000000000000000000000000008380000   (uptime 72 s, faults: encoder)
+forward 500: odo=26 mm heading=-11.000 deg ok=1
+left 90: odo=-28 mm heading=-335.600 deg ok=0
+@124c00c004000000000000000000000000000000000080380000   (uptime 76 s, faults: none)
+@124d00d004000000000000000000000000000000000088400000   (uptime 77 s, faults: encoder)
+right 90: odo=23 mm heading=308.300 deg ok=0
+@1251000005000000000000000000000000000000000000490000   (uptime 81 s, faults: none)
+backward 500: odo=-33 mm heading=11.100 deg ok=1
+u-turn 180: odo=-30 mm heading=-303.000 deg ok=0
+# test done
+@1261000006000000000000000000000000000000000084690000   (uptime 97 s, faults: motor_stall)
