@@ -139,8 +139,8 @@
 
 /* 14 cm barcode (S3-U03): narrow bars peak at 190-810 permille driving at
    100 mm/s, white paper reads 0-21. */
-#define BARCODE_BLACK_LEVEL         (0.20f)   /* [CALIBRATE] hysteresis     */
-#define BARCODE_WHITE_LEVEL         (0.10f)
+#define BARCODE_BLACK_LEVEL         (0.15f)   /* [CALIBRATE] hysteresis     */
+#define BARCODE_WHITE_LEVEL         (0.08f)
 #define BARCODE_QUIET_MS            (250u)    /* white gap ending a frame   */
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
 /* Letter for each command; set on the day.  Must differ (a repeat is a
