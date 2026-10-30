@@ -19,6 +19,8 @@
 #include "hal.h"
 #include "motion.h"
 #include "timing.h"
+#include "fault.h"
+#include "packed.h"
 #include "imu.h"
 
 #define TASK_PRIORITY  (8)
@@ -63,6 +65,8 @@
    holds exactly. */
 #define DT_S ((float32_t) IMU_PERIOD_MS / MS_PER_S)
 
+#define FAIL_LIMIT (3u) /* failed reads in a row: IMU fault (Week 6) */
+
 /* Values from the previous 50 Hz step, kept by the IMU task. */
 typedef struct
 {
@@ -70,10 +74,15 @@ typedef struct
     float32_t odo;             /* odometer, mm               */
     float32_t accel[IMU_AXES]; /* raw acceleration, mg       */
     uint32_t  holdoff_ms;      /* impact detector hold-off   */
+    float32_t travel_sign;     /* +1 forward, -1 back, 0 parked */
+    float32_t duty_pct;        /* mean motor duty            */
+    uint32_t  blank_ms;        /* impacts ignored: duty jumped */
 } imu_history_t;
 
-/* Published snapshot: written by the IMU task, read by other tasks. */
-static volatile imu_status_t g_st;
+/* Published snapshot: written by the IMU task, read by other tasks.
+   Stored packed (Change Requirement 1): 28 bytes instead of 84.  The hump
+   tracker and the filters keep full width in g_work and g_hump below. */
+static volatile packed_imu_t g_st;
 
 /* Shared with the vehicle task (calibration and run reset): volatile. */
 static volatile float32_t g_mag_min[IMU_AXES];
@@ -82,10 +91,16 @@ static volatile float32_t g_mag_off[IMU_AXES] = {0.0f, 0.0f, 0.0f};
 static volatile bool      gb_mag_cal          = false;
 static volatile bool      gb_reset_run        = false;
 
+/* Largest jerk since the last imu_take_peak_jerk() (impact tuning):
+   written by the IMU task, read and cleared under DI. */
+static volatile float32_t g_peak_jerk_mg = 0.0f;
+
 /* IMU-task private working state (never touched by other tasks). */
 static imu_status_t   g_work;
 static terrain_hump_t g_hump;
 static float32_t      g_bias[IMU_AXES] = {0.0f, 0.0f, 0.0f};
+static uint32_t       g_seq            = 0u; /* good samples (freshness) */
+static uint32_t       g_fail_run       = 0u; /* failed reads in a row    */
 
 static bool      transfer_ok(int32_t result, uint32_t expected);
 static bool      reg_write(uint8_t addr, uint8_t reg, uint8_t value);
@@ -93,6 +108,8 @@ static bool      reg_read(uint8_t addr, uint8_t reg, uint8_t * p_dst,
                           uint32_t count);
 static int32_t   to_signed16(uint32_t raw16);
 static int32_t   pair_le(uint8_t const * p_bytes);
+static bool      configure(void);
+static void      recover(void);
 static bool      read_sensors(float32_t * p_acc, float32_t * p_mag);
 static void      calibrate_accel(void);
 static void      mag_track(float32_t const * p_mag);
@@ -116,19 +133,19 @@ static void imu_task(INT stacd, void * p_exinf);
 int32_t
 imu_init (void)
 {
-    T_CTSK  ctsk   = {0};
-    ID      h_task = 0;
-    bool    b_ok   = false;
-    int32_t ercd   = E_OK;
+    T_CTSK       ctsk   = {0};
+    ID           h_task = 0;
+    bool         b_ok   = false;
+    int32_t      ercd   = E_OK;
+    imu_status_t first  = {0};
+    packed_imu_t packed;
 
-    g_st.az_mg = ONE_G_MG;
+    first.az_mg = ONE_G_MG;
     (void) hal_i2c_init(PIN_IMU_SDA, PIN_IMU_SCL, IMU_I2C_HZ);
-    b_ok = (reg_write(ADDR_IMU, REG_CTRL1, VAL_CTRL1))
-           && (reg_write(ADDR_IMU, REG_CTRL2, VAL_CTRL2))
-           && (reg_write(ADDR_IMU, REG_CTRL5, VAL_CTRL5))
-           && (reg_write(ADDR_IMU, REG_CTRL6, VAL_CTRL6))
-           && (reg_write(ADDR_IMU, REG_CTRL7, VAL_CTRL7));
-    g_st.b_ok = b_ok;
+    b_ok       = configure();
+    first.b_ok = b_ok;
+    packed_imu_pack(&first, 0u, &packed);
+    g_st = packed;
 
     ctsk.tskatr = TA_HLNG | TA_RNG3;
 
@@ -161,11 +178,14 @@ imu_init (void)
 void
 imu_get_status (imu_status_t * p_out)
 {
-    UINT imask = 0u;
+    packed_imu_t copy;
+    UINT         imask = 0u;
 
     DI(imask);
-    *p_out = g_st;
+    copy = g_st;
     EI(imask);
+
+    packed_imu_unpack(&copy, p_out);
 }
 
 /*!
@@ -212,6 +232,26 @@ void
 imu_reset_run (void)
 {
     gb_reset_run = true;
+}
+
+/*!
+ * @brief Largest impact jerk (terrain_impact_jerk()) since the last
+ *        call, then start again (to set IMPACT_JERK_MG from data).
+ *
+ * @return Peak jerk in mg.
+ */
+float32_t
+imu_take_peak_jerk (void)
+{
+    float32_t peak  = 0.0f;
+    UINT      imask = 0u;
+
+    DI(imask);
+    peak           = g_peak_jerk_mg;
+    g_peak_jerk_mg = 0.0f;
+    EI(imask);
+
+    return (peak);
 }
 
 /*!
@@ -310,6 +350,42 @@ pair_le (uint8_t const * p_bytes)
        promoted signed int out of the bitwise operations. */
     return (to_signed16(((uint32_t) p_bytes[1] << BYTE_SHIFT)
                         | (uint32_t) p_bytes[0]));
+}
+
+/*!
+ * @brief Write the five configuration registers (see the file header).
+ *
+ * @return true if every write was acknowledged.
+ */
+static bool
+configure (void)
+{
+    return ((reg_write(ADDR_IMU, REG_CTRL1, VAL_CTRL1))
+            && (reg_write(ADDR_IMU, REG_CTRL2, VAL_CTRL2))
+            && (reg_write(ADDR_IMU, REG_CTRL5, VAL_CTRL5))
+            && (reg_write(ADDR_IMU, REG_CTRL6, VAL_CTRL6))
+            && (reg_write(ADDR_IMU, REG_CTRL7, VAL_CTRL7)));
+}
+
+/*!
+ * @brief IMU fault recovery, one attempt per step.  A sensor that failed
+ *        at boot was never configured, and one that was unplugged powers
+ *        up in power-down mode, where reads are acknowledged but return
+ *        zero.  So configure it again, and read only from the next step,
+ *        after its first conversion (100 Hz).  The fault stays set until
+ *        that read succeeds; one more failed read raises it again.
+ */
+static void
+recover (void)
+{
+    if (configure())
+    {
+        g_fail_run = FAIL_LIMIT - 1u;
+    }
+    else
+    {
+        g_work.i2c_errors++;
+    }
 }
 
 /*!
@@ -469,10 +545,13 @@ finite_or (float32_t value, float32_t fallback)
 static void
 publish (void)
 {
-    UINT imask = 0u;
+    packed_imu_t packed;
+    UINT         imask = 0u;
+
+    packed_imu_pack(&g_work, g_seq, &packed);
 
     DI(imask);
-    g_st = g_work;
+    g_st = packed;
     EI(imask);
 }
 
@@ -548,11 +627,14 @@ update_heading (float32_t const * p_mag, float32_t turn_rate_dps)
 }
 
 /*!
- * @brief Impact = sudden change of the acceleration vector (jerk), with a
- *        hold-off so one bump counts once.
+ * @brief Impact = sudden change of the acceleration (jerk) that can be a
+ *        collision (terrain_impact_jerk(): driving, only against the
+ *        direction of travel), with a hold-off so one bump counts once,
+ *        ignored just after the car's own duty jumps (blank_ms).
  *
  * @param[in]     p_acc  Acceleration X, Y, Z in mg.
- * @param[in,out] p_hist Previous step (hold-off timer updated).
+ * @param[in,out] p_hist Previous step (hold-off timer updated;
+ *                       travel_sign set by the caller).
  *
  * @return true if an impact was detected.
  */
@@ -565,12 +647,15 @@ detect_impact (float32_t const * p_acc, imu_history_t * p_hist)
     float32_t jerk     = 0.0f;
     bool      b_impact = false;
 
-    jerk               = car_math_sqrt((delta_x * delta_x) + (delta_y * delta_y)
-                                       + (delta_z * delta_z));
+    jerk               = terrain_impact_jerk(IMU_FORWARD_SIGN * delta_x,
+                                             delta_y, delta_z,
+                                             p_hist->travel_sign);
     p_hist->holdoff_ms = (p_hist->holdoff_ms > IMU_PERIOD_MS)
                              ? (p_hist->holdoff_ms - IMU_PERIOD_MS)
                              : 0u;
-    b_impact           = (jerk > IMPACT_JERK_MG) && (0u == p_hist->holdoff_ms);
+    b_impact           = (jerk > IMPACT_JERK_MG) && (0u == p_hist->holdoff_ms)
+               && (0u == p_hist->blank_ms);
+    g_peak_jerk_mg     = (jerk > g_peak_jerk_mg) ? jerk : g_peak_jerk_mg;
 
     if (b_impact)
     {
@@ -593,16 +678,36 @@ imu_step (imu_history_t * p_hist)
     float32_t       acc[IMU_AXES];
     float32_t       mag[IMU_AXES];
     float32_t       speed    = 0.0f;
+    float32_t       turn_dps = 0.0f;
+    float32_t       duty     = 0.0f;
     bool            b_impact = false;
     uint32_t        axis     = 0u;
     uint32_t        start_us = 0u;
 
-    if (!read_sensors(acc, mag))
+    if (g_fail_run >= FAIL_LIMIT)
+    {
+        recover();
+    }
+    else if (!read_sensors(acc, mag))
     {
         g_work.i2c_errors++;
+        g_fail_run = (g_fail_run < FAIL_LIMIT) ? (g_fail_run + 1u) : g_fail_run;
+
+        /* Risk R1: the snapshot shows the sensor as failed, and the shared
+           fault mask gets the IMU bit, instead of old values looking
+           fresh. */
+        if (g_fail_run >= FAIL_LIMIT)
+        {
+            g_work.b_ok = false;
+            fault_raise(FAULT_IMU);
+        }
     }
     else
     {
+        g_fail_run  = 0u;
+        g_work.b_ok = true;
+        g_seq++;
+        fault_clear(FAULT_IMU);
         motion_get_status(&motion);
         speed = 0.5f * (motion.speed_l_mm_s + motion.speed_r_mm_s);
 
@@ -615,16 +720,27 @@ imu_step (imu_history_t * p_hist)
 
         update_tilt(acc, speed, p_hist);
         update_heading(mag, motion.turn_rate_dps);
+        duty                = 0.5f * (motion.pwm_l_pct + motion.pwm_r_pct);
+        p_hist->travel_sign = terrain_travel_sign(duty, speed,
+                                                  p_hist->travel_sign);
+        p_hist->blank_ms    = terrain_impact_blank(p_hist->blank_ms,
+                                                   duty - p_hist->duty_pct);
+        p_hist->duty_pct    = duty;
         b_impact = detect_impact(acc, p_hist);
 
         start_us = timing_start();
-        terrain_hump_update(&g_hump, g_work.pitch_deg,
+        terrain_hump_update(&g_hump, g_work.pitch_deg, g_work.roll_deg,
                             motion.odo_mm - p_hist->odo);
         timing_stop(TIMING_HUMP, start_us);
         g_work.hump = g_hump;
-        g_work.event =
-            terrain_classify(speed, g_work.accel_mm_s2, motion.turn_rate_dps,
-                             g_hump.state, b_impact);
+        /* The smaller rate: a compass tilted by hand, or one wheel
+           starting first, alone is not a turn. */
+        turn_dps = (car_math_abs(motion.turn_rate_dps)
+                    < car_math_abs(g_work.mag_rate_dps))
+                       ? car_math_abs(motion.turn_rate_dps)
+                       : car_math_abs(g_work.mag_rate_dps);
+        g_work.event = terrain_classify(speed, g_work.accel_mm_s2, turn_dps,
+                                        g_hump.state, b_impact);
 
         p_hist->speed = speed;
         p_hist->odo   = motion.odo_mm;
@@ -647,17 +763,20 @@ imu_step (imu_history_t * p_hist)
 static void
 imu_task (INT stacd, void * p_exinf)
 {
-    imu_history_t history  = {0.0f, 0.0f, {0.0f, 0.0f, ONE_G_MG}, 0u};
+    imu_history_t history  = {0.0f, 0.0f, {0.0f, 0.0f, ONE_G_MG}, 0u, 0.0f, 0.0f, 0u};
     UINT          imask    = 0u;
     uint32_t      start_us = 0u;
+    packed_imu_t  first;
 
     (void) stacd;
     (void) p_exinf;
 
     /* Take over the fields imu_init() set, then own the working copy. */
     DI(imask);
-    g_work = g_st;
+    first = g_st;
     EI(imask);
+
+    packed_imu_unpack(&first, &g_work);
 
     terrain_hump_init(&g_hump);
     calibrate_accel();

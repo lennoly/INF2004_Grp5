@@ -1,0 +1,13 @@
+pc_time,type,json
+2026-10-28T19:40:06.181,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-28T19:40:06.304,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":200}"
+2026-10-28T19:40:10.660,timing,"{""type"":""timing"",""win_ms"":17040,""load_pct"":9,""jit_max_us"":65535,""periods"":851,""motion"":[510],""vehicle"":[273],""barcode"":[38],""imu"":[1355],""hump"":[232],""ir_isr"":[58],""net"":[886],""rejoin"":[0]}"
+2026-10-28T19:40:10.661,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""timing"",""ok"":1}"
+2026-10-28T19:40:12.492,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-28T19:40:12.582,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-10-28T19:41:12.639,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-28T19:41:12.701,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":200}"
+2026-10-28T19:41:17.757,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""stop"",""ok"":1}"
+2026-10-28T19:41:17.923,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""stop command""}"
+2026-10-28T19:41:19.689,timing,"{""type"":""timing"",""win_ms"":65535,""load_pct"":12,""jit_max_us"":1745,""periods"":3452,""motion"":[676],""vehicle"":[725],""barcode"":[40],""imu"":[1362],""hump"":[250],""ir_isr"":[57],""net"":[65535],""rejoin"":[65535]}"
+2026-10-28T19:41:19.759,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""timing"",""ok"":1}"

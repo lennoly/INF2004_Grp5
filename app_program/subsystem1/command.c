@@ -51,8 +51,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"line", COMMAND_LINE, 3u},
                                          {"rate", COMMAND_RATE, 1u},
                                          {"timing", COMMAND_TIMING, 0u},
-                                         {"map", COMMAND_MAP, 0u},
-                                         {"mapping", COMMAND_MAPPING, 0u}};
+                                         {"nav", COMMAND_NAV, 1u},
+                                         {"map", COMMAND_MAP, 2u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -69,8 +69,6 @@ static char const * find_keyword(char const * p_text, uint32_t * p_index);
 static char const * parse_values(char const * p_text, float32_t * p_args,
                                  uint32_t * p_count);
 static bool         validate(command_t const * p_cmd);
-static char const * parse_mapping(char const * p_text,
-                                  char letters[BARCODE_MAPPING_SIZE]);
 
 /*!
  * @brief Parse one command line.
@@ -107,16 +105,7 @@ command_parse (char const * p_text, command_t * p_cmd)
     /* Step 2: the optional "=value,value,..." list. */
     if (b_ok)
     {
-        if (COMMAND_MAP == g_specs[spec_idx].kind)
-        {
-            p_cursor = parse_mapping(skip_space(p_cursor), p_cmd->nav_letters);
-        }
-        else
-        {
-            p_cursor =
-                parse_values(skip_space(p_cursor), p_cmd->arg, &n_values);
-        }
-
+        p_cursor = parse_values(skip_space(p_cursor), p_cmd->arg, &n_values);
         b_ok     = (NULL != p_cursor);
     }
 
@@ -178,11 +167,60 @@ command_error (void)
 bool
 command_allowed (command_id_t kind, bool b_stationary)
 {
-    bool b_tuning = (COMMAND_MAP == kind) || (COMMAND_SPEED == kind)
-                    || (COMMAND_PID == kind)
-                    || (COMMAND_FF == kind) || (COMMAND_LINE == kind);
+    bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
+                    || (COMMAND_FF == kind) || (COMMAND_LINE == kind)
+                    || (COMMAND_MAP == kind);
 
     return ((!b_tuning) || b_stationary);
+}
+
+/*!
+ * @brief Range-check a command that arrived as a binary frame (the same
+ *        checks as the text parser).
+ *
+ * @param[in,out] p_cmd Command; kind becomes COMMAND_INVALID if it fails.
+ *
+ * @return true if the command is valid.
+ */
+bool
+command_check (command_t * p_cmd)
+{
+    bool b_ok = (p_cmd->kind < COMMAND_INVALID)
+                && (p_cmd->n_args == command_arg_count(p_cmd->kind));
+
+    gp_error = b_ok ? "" : "unknown command (try help)";
+    b_ok     = b_ok && (validate(p_cmd));
+
+    if (!b_ok)
+    {
+        p_cmd->kind = COMMAND_INVALID;
+    }
+
+    return (b_ok);
+}
+
+/*!
+ * @brief Number of values a command takes.
+ *
+ * @param[in] kind Command.
+ *
+ * @return 0..3 (0 for an unknown command).
+ */
+uint32_t
+command_arg_count (command_id_t kind)
+{
+    uint32_t idx   = 0u;
+    uint32_t count = 0u;
+
+    for (idx = 0u; idx < SPEC_COUNT; idx++)
+    {
+        if (g_specs[idx].kind == kind)
+        {
+            count = g_specs[idx].n_args;
+        }
+    }
+
+    return (count);
 }
 
 /*!
@@ -623,7 +661,26 @@ validate (command_t const * p_cmd)
                (Rule 5.4.b.iv). */
             b_ok = (p_cmd->arg[0] >= (float32_t) SPEED_CMD_MIN_MM_S)
                    && (p_cmd->arg[0] <= (float32_t) SPEED_CMD_MAX_MM_S);
-            gp_error = b_ok ? gp_error : "speed: 60..300 mm/s";
+            gp_error = b_ok ? gp_error : "speed: 50..300 mm/s";
+        break;
+
+        case COMMAND_NAV:
+            /* Casts: the limits are small integers, exact in float32_t;
+               only < and > on floats (Rule 5.4.b.iv), then the rounded
+               value must be a whole command number. */
+            b_ok = (p_cmd->arg[0] > ((float32_t) COMMAND_NAV_MIN - 0.5f))
+                   && (p_cmd->arg[0] < ((float32_t) COMMAND_NAV_MAX + 0.5f));
+            gp_error = b_ok ? gp_error
+                            : "nav: 1 left, 2 right, 3 straight, 4 U-turn";
+        break;
+
+        case COMMAND_MAP:
+            /* Cast: as nav=, then a whole Code 39 index. */
+            b_ok = (p_cmd->arg[0] > ((float32_t) COMMAND_NAV_MIN - 0.5f))
+                   && (p_cmd->arg[0] < ((float32_t) COMMAND_NAV_MAX + 0.5f))
+                   && (p_cmd->arg[1] > -0.5f)
+                   && (p_cmd->arg[1] < ((float32_t) COMMAND_SYMBOL_MAX + 0.5f));
+            gp_error = b_ok ? gp_error : "map: 1..4, then a letter index 0..42";
         break;
 
         default:
@@ -632,49 +689,6 @@ validate (command_t const * p_cmd)
     }
 
     return (b_ok);
-}
-
-/*!
- * @brief Parse all assignments before any active map is changed.
- */
-static char const *
-parse_mapping (char const * p_text, char letters[BARCODE_MAPPING_SIZE])
-{
-    char const * p_cursor = p_text;
-    uint32_t idx = 0u;
-    uint32_t other = 0u;
-    bool b_ok = true;
-
-    for (idx = 0u; b_ok && (idx < BARCODE_MAPPING_SIZE); idx++)
-    {
-        b_ok = (*p_cursor == ((0u == idx) ? '=' : ','));
-
-        if (b_ok)
-        {
-            p_cursor = skip_space(p_cursor + 1);
-            /* Cast: toupper returns the ASCII letter as an int. */
-            letters[idx] = (char) toupper((unsigned char) *p_cursor);
-            b_ok = (letters[idx] >= 'A') && (letters[idx] <= 'Z');
-
-            if (b_ok)
-            {
-                p_cursor = skip_space(p_cursor + 1);
-
-                for (other = 0u; other < idx; other++)
-                {
-                    b_ok = b_ok && (letters[idx] != letters[other]);
-                }
-            }
-        }
-    }
-
-    if (!b_ok)
-    {
-        gp_error = "map: four distinct A-Z letters (forward,uturn,left,right)";
-        p_cursor = NULL;
-    }
-
-    return (p_cursor);
 }
 
 /*** end of file ***/

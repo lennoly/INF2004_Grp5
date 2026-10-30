@@ -49,6 +49,7 @@ typedef struct
 {
     avoidance_action_t action;
     float32_t          offset_mm; /* sideways shift needed for the bypass */
+    float32_t          pass_mm;   /* bypass: distance to drive beside it  */
 } avoidance_plan_t;
 
 bool avoidance_profile(avoidance_point_t const * p_points, uint32_t count,
@@ -56,6 +57,7 @@ bool avoidance_profile(avoidance_point_t const * p_points, uint32_t count,
 avoidance_plan_t avoidance_plan(avoidance_profile_t const * p_prof,
                                 uint32_t                    attempts);
 char const *     avoidance_action_name(avoidance_action_t action);
+bool             avoidance_width_known(avoidance_profile_t const * p_prof);
 
 #endif /* AVOIDANCE_H */
 

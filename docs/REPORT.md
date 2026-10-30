@@ -44,7 +44,7 @@ The software follows the suggested three-layer architecture (sensor, control, co
 | 7 | `barcode` | 100 Hz | frames + decodes barcode edge stream |
 | 8 | `imu` | 50 Hz | tilt, hump, impact, turn-rate, motion events |
 | 9 | `sonar` | ~14 Hz | front-distance monitor |
-| 10 | `telemetry` | 20 ms loop | commands (USB, UART, MQTT), JSON telemetry (off–20 Hz), 1 Hz heartbeat, events |
+| 10 | `telemetry` | 20 ms loop | commands (USB, UART, MQTT), binary telemetry frames (off–20 Hz), 1 Hz heartbeat, events |
 | 10 | `blink` (template) | 2 Hz | liveness LED on GP16 |
 
 The motion loop is woken by a **µT-Kernel cyclic handler** (`tk_cre_cyc`) calling `tk_wup_tsk`, so its period is drift-free. Timing-critical capture (encoders, echo width, barcode bars) happens in interrupt handlers registered with `tk_def_int`; heavier processing is deferred to tasks.
@@ -79,11 +79,16 @@ Studying the template revealed constraints that drove several design decisions:
 
 | Build | Flash (text) | RAM (data+bss) |
 |---|---|---|
-| Mission, UART console | ≈ 67 KB | ≈ 15 KB |
-| Mission, USB console + WiFi + MQTT | 358 KB | 58 KB |
-| Application code only (linked, WiFi build) | 23.8 KB | 7.8 KB (+ 17.4 KB task stacks) |
+| Mission, UART console | ≈ 70 KB | ≈ 16 KB |
+| Mission, USB console + WiFi + MQTT | 363 KB | 58 KB |
+| Application code only (linked, WiFi build) | 27.4 KB | 8.2 KB (+ 17.4 KB task stacks) |
 
 The RP2040 has 264 KB of SRAM and 2 MB of flash, so all builds fit comfortably.
+
+Change Requirement 1 (minimum-bit data representation) cut the mission
+build's static RAM by 4.1 KB and the application's own RAM from 6.1 KB to
+2.0 KB; the measurements, the field table and the message sizes are in
+`docs/DATA_REPRESENTATION.md`.
 
 Efficiency choices:
 
@@ -130,7 +135,7 @@ Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic ana
 
 ## 4.1 Buddy 1 — WiFi Communication, Command and Telemetry
 
-**Communication API** (`mqtt_bridge.h`): `mqtt_bridge_publish(topic, json)`, `mqtt_bridge_get_command(buf, size)`, `mqtt_bridge_get_stats(&stats)`. Application tasks never touch lwIP. Two single-producer/single-consumer rings carry messages into and out of the lwIP context, using memory barriers so they are also correct under the template's dual-core SMP profile.
+**Communication API** (`mqtt_bridge.h`): `mqtt_bridge_publish(topic, frame, len)`, `mqtt_bridge_get_command(buf, size, &len)`, `mqtt_bridge_get_stats(&stats)`. Application tasks never touch lwIP. Two single-producer/single-consumer rings carry messages into and out of the lwIP context, using memory barriers so they are also correct under the template's dual-core SMP profile.
 
 **MQTT client** (`mqtt_lwip.c` on lwIP's `apps/mqtt`). lwIP's own MQTT 3.1.1 client does the protocol work: CONNECT with last will, PUBLISH, SUBSCRIBE, keep-alive pings and the broker watchdog. `mqtt_lwip.c` manages the connection and moves messages between that client and the bridge. It runs inside the template's CYW43 task through the new hook, so all lwIP calls stay in one context as `NO_SYS` requires. An earlier version carried its own MQTT encoder and decoder; a simplification review replaced them with the client lwIP already ships.
 
@@ -144,73 +149,46 @@ Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic ana
 ### MQTT documentation
 
 All topics start with `picocar/<id>/`, where `<id>` is `MQTT_CAR_ID` in
-`mqtt_config.h` (default `car1`). Payloads are one-line JSON with integers
-only, except `status` (plain text) and `cmd` (a text command).
+`mqtt_config.h` (default `car1`). Since Change Requirement 1 every payload
+is a compact binary frame: byte 0 holds the frame type and the format
+version, then the fields follow with explicit masks and shifts, least
+significant bit first (`frames.c`). The field list of every frame, with
+ranges, units and bit widths, is in `docs/DATA_REPRESENTATION.md`;
+`tools/dashboard/frames.py` decodes them into the field names below.
 
-| Topic | Dir | QoS / retain | Rate | Payload |
+| Topic | Dir | QoS / retain | Rate | Frame |
 |---|---|---|---|---|
-| `picocar/<id>/telemetry` | car → laptop | 0 / no | 5 Hz (`rate=`: off, or 50–5000 ms) | telemetry object |
-| `picocar/<id>/heartbeat` | car → laptop | 0 / no | 1 Hz | heartbeat object |
-| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | one event object (`type` below) |
-| `picocar/<id>/status` | car → laptop | 0 / **retained** | on connect; last will | `online` / `offline` |
-| `picocar/<id>/cmd` | laptop → car | 0 / no | on demand | `[#<id> ]<command>`, see *Commands* |
+| `picocar/<id>/telemetry` | car → laptop | 0 / no | 5 Hz (`rate=`: off, or 50–5000 ms) | telemetry, 43 B |
+| `picocar/<id>/heartbeat` | car → laptop | 0 / no | 1 Hz | heartbeat, 26 B |
+| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | state, barcode, hump, obstacle, impact, reply, gains, timing (2–24 B) |
+| `picocar/<id>/status` | car → laptop | 0 / **retained** | on connect; last will | status, 2 B: online / offline |
+| `picocar/<id>/cmd` | laptop → car | 0 / no | on demand | command, 4–11 B |
 
-**Telemetry**:
-`{"t","st","spd":[l,r],"tgt":[l,r],"pwm":[l,r],"enc":[l,r],"odo","hdg","ir":[l,r,bc],"le","ls","bc","nav","nbc","pitch","roll","yaw","rate","hump":{"h","pk","max","n"},"ev","front","act","nobs"}`
+**Telemetry** (decoded names): `t` run time ms, `st` vehicle state, `ls` line
+state, `nav` / `pend` last and pending barcode command, `spd` / `tgt` wheel
+speed and target mm/s, `pwm` duty %, `enc` encoder ticks (low 16 bits), `odo`
+mm, `hdg` heading 0.1°, `ir` normalised IR ‰ (left, right, barcode), `le`
+line error ‰, `nbc` barcodes and `bc` the last symbol, `pitch` / `roll` /
+`yaw` 0.1°, `rate` turn rate 0.1°/s, `hump` {`h`, `pk`, `max` mm, `n`}, `ev`
+motion event, `front` mm (−1 = no echo), `act` / `nobs` avoidance action and
+obstacles passed, `faults` the active fault bits.
 
-| Field | Type, unit | Meaning |
-|---|---|---|
-| `t` | int, ms | run time |
-| `st` | string | vehicle state: `IDLE`, `CALIBRATE`, `LINE_FOLLOW`, `NAV_TURN`, `LINE_SEARCH`, `OBSTACLE`, `STOPPED` |
-| `spd`, `tgt` | [int, int], mm/s | wheel speed and its target, left / right |
-| `pwm` | [int, int], % | motor duty, left / right |
-| `enc` | [uint, uint] | encoder ticks (both edges), left / right |
-| `odo` | int, mm | distance travelled |
-| `hdg`, `pitch`, `roll`, `yaw` | int, 0.1° | heading, tilt and IMU heading |
-| `rate` | int, 0.1°/s | turn rate |
-| `ir` | [int ×3], ‰ | normalised IR: left, right, barcode (0 white … 1000 black) |
-| `le` | int, ‰ | line error (left − right) |
-| `ls` | string | line state: `ON`, `LOST`, `JUNC` |
-| `bc`, `nav` | string | last barcode text and its command |
-| `nbc` | uint | barcodes read |
-| `hump` | object | `h` height now, `pk` last peak, `max` run maximum (mm); `n` humps |
-| `ev` | string | motion event (`STATIONARY`, `CRUISING`, `CLIMBING`, … `IMPACT`) |
-| `front` | int, mm | front sonar distance |
-| `act`, `nobs` | string, uint | last avoidance action; obstacles passed |
+**Heartbeat**: `up` s, `seq`, `st`, `link`, `pub` / `drop` / `rx` (16-bit,
+wrapping), `recon`, `rejoin`, `wreset`, `tries` (8-bit, saturating), `wifi`
+and `why` (sent as 3- and 4-bit codes of the texts listed in the README),
+`ip`, `imu`, `i2cerr`, `faults` and `fcount` (how often each fault was
+raised).
 
-**Heartbeat**:
-`{"up","seq","st","link","pub","drop","rx","recon","rejoin","wreset","wifi","ip","broker","tries","why","imu","i2cerr"}`
-
-| Field | Type | Meaning |
-|---|---|---|
-| `up` | uint, s | time since boot |
-| `seq` | uint | heartbeat number (a gap = a lost heartbeat) |
-| `st` | string | vehicle state, as in telemetry |
-| `link` | string | `WAIT_NET`, `CONNECTING`, `CONNECTED`, `BACKOFF` |
-| `pub`, `drop`, `rx` | uint | messages published, dropped while offline, commands received |
-| `recon`, `rejoin`, `wreset`, `tries` | uint | broker reconnects, Wi-Fi re-joins, Wi-Fi chip restarts, broker attempts |
-| `wifi` | string | Wi-Fi state in words (`joined`, `hotspot not found …`, `waiting for an IP address`, …) |
-| `ip`, `broker` | string | the car's address; the broker address it was built with |
-| `why` | string | how the last broker attempt ended, in words |
-| `imu`, `i2cerr` | int, uint | IMU healthy (1/0); I2C errors |
-
-**Events** (`event` topic, one object each, told apart by `type`):
-
-| `type` | Fields | Sent when |
-|---|---|---|
-| `cmd` | `id` (request id, 0 if none), `cmd` (the text), `ok` (1/0), `err` (reason, only when `ok` is 0) | every command |
-| `gains` | `pid` [kp,ki,kd], `ff` [kf,offset], `line` [kp,ki,kd], `speed` mm/s, `rate` ms | 60 ms after a tuning command, and on `gains` |
-| `state` | `st`, `why` (reason) | every state change |
-| `barcode` | `code`, `cmd` | a barcode is decoded |
-| `hump` | `n`, `peak_mm`, `max_mm` | a hump is counted |
-| `impact` | `n` | an IMU impact |
-| `obstacle` | `found`, `dist` mm, `ang` °, `width` mm, `centre`, `cl`, `cr` (clearances, mm), `act` | after each obstacle scan |
-| `timing` | `win_ms`, `load_pct`, `jit_max_us`, `periods`, then per section [max_us, avg_us, count]: `motion`, `vehicle`, `barcode`, `imu`, `hump`, `ir_isr`, `net`, `rejoin` | on `timing` |
-| `help` | `cmds` | on `help` |
+**Events**: `state` (`st`, `why`: a 5-bit code of the reason), `barcode`
+(`code`, `cmd`), `hump` (`n`, `peak_mm`, `max_mm`), `obstacle` (`found`,
+`dist`, `ang`, `width`, `centre`, `cl`, `cr`, `act`), `impact` (`n`), `cmd`
+(the reply: `id`, `cmd`, `ok`, `err`), `gains` (`pid`, `ff`, `line`, `speed`,
+`rate`) and `timing` (window, load, jitter, periods and each section's
+maximum; the averages are printed on the console).
 
 ### Commands and live tuning
 
-The same text commands are accepted on the MQTT `cmd` topic **and** typed on the USB or UART serial console. So gains can be tuned without reflashing in every build, including the test builds that have no WiFi. `command.c` parses them (pure C, 28 unit tests) and the telemetry task executes them within 20 ms.
+The same commands are accepted on the MQTT `cmd` topic, as binary command frames, **and** typed as text on the USB or UART serial console. So gains can be tuned without reflashing in every build, including the test builds that have no WiFi. `command.c` parses them (pure C, 28 unit tests) and the telemetry task executes them within 20 ms.
 
 | Command | Effect | Applied by |
 |---|---|---|
@@ -225,29 +203,30 @@ The same text commands are accepted on the MQTT `cmd` topic **and** typed on the
 
 The tuning commands (`speed=`, `pid=`, `ff=`, `line=`) are accepted only while
 the car is IDLE or STOPPED, so the controllers never change mid-run; while
-driving they are answered `"ok":0,"err":"only while IDLE or STOPPED"`.
+driving they are answered with a reply frame whose error is "only while
+IDLE or STOPPED".
 `start`, `stop`, `rate=`, `gains`, `help` and `timing` work in every state.
 
 - Keywords are case-insensitive and spaces are ignored.
-- Every command is answered with `{"type":"cmd","cmd":"…","ok":1}`, or `"ok":0` with the reason (for example `wrong number of values`, `gain out of range 0..1000`, or `not available in this build`).
-- Every change is followed by `{"type":"gains","pid":[…],"ff":[…],"line":[…],"speed":…,"rate":…}` with the values now in use. It is sent 60 ms later so the vehicle task has applied line gains first; review caught that an immediate reply would have reported the old values.
+- Every command is answered with a reply frame (request id, command, error code), and on the console with a readable `# cmd` line giving the reason (for example `wrong number of values`, `gain out of range 0..1000`, or `not available in this build`).
+- Every change is followed by a gains frame (and a `# gains` console line) with the values now in use; gains travel in 0.001 steps, the same precision as the text commands. It is sent 60 ms later so the vehicle task has applied line gains first; review caught that an immediate reply would have reported the old values.
 - Gains live in RAM and reset on reboot. The final values are copied into `car_config.h`, because the template forbids flash writes without parking the second core.
 - Serial input is limited to 64-character lines. On the UART, commands are paced in 16-byte chunks so the 32-byte receive FIFO (polled every 20 ms) never overflows; the dashboard does this automatically.
 
 ### Laptop dashboard and telemetry demonstration
 
-`tools/dashboard/picocar_dashboard.py` (Python: matplotlib, paho-mqtt, pyserial) connects over MQTT (`--mqtt <broker>`) or over the USB cable (`--serial auto` finds the Pico by its USB vendor ID 0x2E8A).
+`tools/dashboard/picocar_dashboard.py` (Python: paho-mqtt, pyserial; the web server is the standard library) connects over MQTT (`--mqtt <broker>`) or over the USB cable (`--serial auto` finds the Pico by its USB vendor ID 0x2E8A) and serves one web page at `http://127.0.0.1:8050`. The page gets at most five updates a second (Server-Sent Events) and redraws a chart only when new data arrived, so it stays smooth at 20 Hz telemetry.
 
 ![Dashboard with the car simulator](img/dashboard.png){width=100%}
 
-- **Live plots of the last 30 s:** wheel speed against target, line error and IR, pitch and hump height, and front distance against the 300 mm threshold.
+- **Live charts of the last 30 s:** wheel speed against target, and line error with the left and right IR sensors; live values for pitch, hump height and peak, and front distance.
 - **Status panel:** state, barcode, run-maximum hump peak, obstacles, and link health (heartbeat, reconnects, dropped messages).
-- **Controls:** Start, Stop, Calibrate, a 20 Hz telemetry button, and tuning boxes pre-filled from the car's `gains` event, each with an Apply button.
+- **Controls:** Start, Stop, Calibrate, 20 Hz / 5 Hz telemetry buttons, turn buttons (`nav=1..4`, as if a barcode was read), and tuning boxes pre-filled from the car's `gains` event, each with an Apply button.
 - **Logging:** every session is saved to `logs/<date_time>/`: `telemetry.csv` (33 columns in engineering units), `events.csv`, `heartbeat.csv`, `commands.log` and `console.log`. These files are the raw evidence for the tables in this report, and **Save PNG** stores the plots alongside them.
 
 `tools/dashboard/sim_car.py` publishes the firmware's exact message formats and obeys the same commands. Its wheel model uses the firmware's PID law, so a `pid=` change visibly alters the response. It was used to verify the dashboard end to end against a Mosquitto broker: commands, acks, rejected commands, rate changes and logging. The serial path was verified against an emulated console on a pseudo-terminal.
 
-**Recovery demonstration.** Stop and restart the broker: the heartbeat's reconnect counter increments and publishing resumes. Without `WIFI_MQTT`, the same JSON is printed on the USB console at 1 Hz, so the dashboard's serial mode demonstrates the telemetry framework without a network.
+**Recovery demonstration.** Stop and restart the broker: the heartbeat's reconnect counter increments and publishing resumes. Without `WIFI_MQTT`, the same frames are printed on the USB console (as `@` + hex) at 1 Hz, so the dashboard's serial mode demonstrates the telemetry framework without a network.
 
 ## 4.2 Buddy 2 — Motion Control System
 
@@ -308,7 +287,7 @@ Record on the real car:
 
 ## 4.3 Buddy 3 — Barcode Decoding and IR Line Following
 
-**Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command or the STOP button while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts.
+**Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command, or START held for 2 s while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts.
 
 **Line position and following** (`line_follow.c`). The error is L − R, in the range [−1, 1]. A PID controller turns it into a differential wheel speed, and the base speed drops by up to 50 % on large errors for stability at varying speeds.
 
@@ -327,7 +306,7 @@ Record on the real car:
 
 Decoding classifies the **3 widest of each 9 elements as wide**. Code 39 guarantees exactly three wide elements per character, so this works regardless of speed and only assumes the speed is steady over one ≈40 mm character. A frame that fails forwards is reversed and decoded again, because the car may read the code from either end. Frames must start and end with `*`, which rejects line crossings and noise.
 
-**Navigation command interface.** All A-Z letters can be decoded. Before starting, send `map=<forward>,<uturn>,<left>,<right>` on the MQTT command topic (or serial console), using four distinct instructor-selected letters. There are no default assignments. `mapping` reports the active map. Updates require IDLE or STOPPED; invalid messages leave the map intact. See `docs/BARCODE_SETUP.md`.
+**Navigation command interface.** Decoded characters map A→LEFT, B→RIGHT, C→STRAIGHT and D→U-TURN. Commands reach the vehicle task through a message buffer.
 
 The vehicle executes a command at the next junction:
 
@@ -335,7 +314,7 @@ The vehicle executes a command at the next junction:
 2. Make an encoder turn.
 3. Sweep to re-centre on the line.
 
-Every movement, including a U-turn, waits for a detected junction. There is no distance-based execution fallback. Starting requires a configured mapping, and a new run discards scans collected before start. Assignments live in RAM and must be resent after reboot.
+A U-turn is executed immediately. If no junction appears within 400 mm, the command is executed anyway.
 
 **Verification.**
 
@@ -395,9 +374,12 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 
 - The HC-SR04 echo width is timestamped by GPIO interrupts (no busy-waiting), with distance = µs × 0.1715 mm.
 - The datasheet's 60 ms minimum cycle is enforced, and each scan point takes the median of 3 readings.
-- A background task monitors the front distance at ≈14 Hz.
-- **Stage 1 (coarse):** readings at 30°, 60°, 90°, 120° and 150°.
-- **Stage 2 (fine):** if anything is under 300 mm, the sensor rescans ±20° around the detected region in 5° steps.
+- A background task monitors the front distance at ≈14 Hz. Two readings in a row under 300 mm are needed to stop the car, so one spurious echo is ignored. Front and impact triggers are ignored while the IMU reports the car on a hump: the sonar sees the floor when the nose dips, and the landing jolt can look like an impact.
+- **Sensor health (Week 6 obstacle statechart, NFR9).** Each ping is VALID, OUT_OF_RANGE, FAULT or BUSY. ECHO must be low before a trigger, so a line stuck high is a FAULT rather than free space. A task waits at most 100 ms for the sensor (`US_SEM_TIMEOUT_MS`; BUSY, no ping sent). Two FAULT pings in a row, or no front reading for 300 ms, stop the car (STOPPED, `fault: sonar no echo` from the shared fault mask / `sonar stale` from the age of the front reading), because obstacles could no longer be seen. The monitor and the scans hand the sensor over through a busy flag, so a front reading is never taken while the servo is moving. The A9 no-target check in `TEST_ULTRASONIC` takes 20 pings, as the Week 6 method asks.
+- **Servo range.** The sensor mount (fixed by the build) lets the sensor turn only about ±25°: on the bench (22 Oct) it stopped between 60° and 65° and between 115° and 120°. `servo.c` never commands past `SERVO_MIN_DEG`/`SERVO_MAX_DEG` (65°/115°, [CALIBRATE]), so the servo cannot push the sensor against the car.
+- **Stage 1 (coarse):** readings at 65°, 90° and 115°. The write-up's 30°–150° are given as an example of "a small number of scan angles"; they cannot be reached on this car.
+- **Stage 2 (fine):** if anything is under 300 mm, the sensor rescans ±20° around the detected region in 5° steps, inside the same limits.
+- **Coverage.** From where the car stops (about 280 mm) the scan sees about ±130 mm sideways: enough to find an obstacle on the line and its edges, but the free space beyond that is assumed (A10), not measured.
 
 **Obstacle profile generator** (`avoidance.c`). Each reading is placed sideways at lateral = d·cos(a), positive to the right of the car.
 
@@ -414,12 +396,31 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 **Bypass and recovery algorithm** (`vehicle.c`):
 
 1. Turn 90° towards the chosen side and sidestep by the planned offset.
-2. Turn back to parallel. Point the sonar sideways at the obstacle and advance in 50 mm steps until the obstacle's far end is passed, then add one car length.
+2. Turn back to parallel and drive past the obstacle. The sensor cannot turn far enough to watch it go by, so `avoidance_plan()` sets the pass distance: closest echo + deepest expected obstacle (`OBST_DEPTH_MAX_MM`, 250 mm, [CALIBRATE]) + car length + 60 mm. The centred front sonar watches ahead during the pass; an obstacle confirmed there stops the car (STOPPED, `path blocked`).
 3. Turn back towards the line and drive until either IR sensor sees it.
 4. Advance by the sensor-to-axle offset, turn to the original heading, and sweep until centred.
 5. Hand control back to line following.
 
-Every step is abortable, and failures fall back to LINE_SEARCH.
+Every step is abortable, including the scan (STOP is checked every 20 ms while the servo settles and after every ping, so it acts within about one ping, 0.1 s), and failures fall back to LINE_SEARCH. After an IMU impact the car first reverses 120 mm, because the HC-SR04 gets no echo closer than 20 mm and the scan would otherwise report a clear path.
+
+**Worst-case obstacle time.** Worked out from the constants in `obstacle.c`, `avoidance.c`, `vehicle.c` and `car_config.h`, not measured yet. Bypass legs run at `SPEED_SLOW` (160 mm/s) and turns at `SPEED_TURN` (120 mm/s).
+
+| Step | How it is worked out | Worst | Typical |
+|---|---|---|---|
+| Stop and settle | `STOP_SETTLE_MS` | 0.2 s | 0.2 s |
+| Scan | each point: servo move (5° per 20 ms) + 120 ms settle + 3 pings × 60 ms. Coarse 65/90/115° ≈ 1.2 s, fine ±20° in 5° steps (11 points) ≈ 3.7 s, recentre ≈ 0.2 s | 5.1 s | 5.1 s |
+| Too close: reverse and re-scan | 120 mm at 160 mm/s ≈ 0.95 s + settle + scan; at most `OBST_MAX_ATTEMPTS` (2), then STOP | 2 × 6.25 s | 0 |
+| 4 × 90° turns | ≈ 1.2 s each | 4.8 s | 4.8 s |
+| Sidestep | object edge + 80 mm half corridor + 60 mm margin, ≤ ≈ 270 mm | 1.7 s | 1.0 s |
+| Pass | closest + 250 mm depth + 200 mm car + 60 mm margin, ≤ ≈ 810 mm | 5.1 s | 3.5 s |
+| Seek the line | sidestep + 200 mm | 3.0 s | 1.5 s |
+| Advance to the axle | `LINE_SENSOR_AHEAD_MM` 140 mm | 0.9 s | 0.9 s |
+| Re-acquire sweeps | 5 sweeps of 350 × (n + 1) ms | 5.25 s | 0.5 s |
+| **Total** | | **≈ 39 s** | **≈ 17 s** |
+
+Each move also has a 10 s timeout (`MOVE_TIMEOUT_MS`), so a stuck leg ends in STOP rather than hanging, and the 250 ms watchdog is fed throughout the scan. The team should compare the 39 s worst case with the course time limit and record measured times in step 3 of the hardware test below.
+
+**Servo direction.** The code assumes 0° points to the car's right. `SERVO_INVERT` in `car_config.h` corrects a mirrored mount; `TEST_ULTRASONIC` prints which side the closest echo is on, so a box offset to the right must read RIGHT.
 
 **Verification.**
 
@@ -428,25 +429,40 @@ Every step is abortable, and failures fall back to LINE_SEARCH.
 - Too close: REVERSE, then STOP.
 - Box outside the corridor: CONTINUE.
 
-Hardware: record the profile against the true values for 3 obstacle positions (`APP_MODE=TEST_ULTRASONIC`), and the bypass success rate ___/10 and line re-acquisition rate ___/10.
+**Hardware test procedure** (`APP_MODE=TEST_ULTRASONIC`, then `MISSION`). Save the serial console to a file and run `python3 tools/scan_plot.py <log> --box X,Y,W` for one figure per scan and the error table.
+
+1. **Servo direction (A9).** Put a box 250 mm ahead and 60 mm to the right. The console must say `closest echo on the RIGHT`; otherwise set `SERVO_INVERT` to 1 in `car_config.h`.
+2. **Profile accuracy (A9).** Take three scans per position and record the mean (true / estimated, mm).
+
+| Box position (tape) | Closest | Left edge | Right edge | Width |
+|---|---|---|---|---|
+| centred, 150 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+| centred, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+| 60 mm right, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+| 60 mm left, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
+
+3. **Avoidance and recovery (A10).** With the obstacle on the line, do 10 runs in `MISSION`: bypass completed ___/10, line re-acquired ___/10, largest sideways deviation ___ mm.
+4. **Safety.** Tap STOP during a scan: the car stops within one servo step. Bump a box: the car reverses 120 mm, then scans. Drive over the hump: no obstacle stop, and the front range stays above 300 mm on the approach (A12). A full scan, bypass and calibration run without a watchdog reset.
 
 # 5. Integration — Vehicle Controller
 
 ![Mission state machine](img/states.png){width=100%}
 
-The vehicle task owns mission state and is the only caller of motion commands during a run, which avoids conflicting commands. Subsystems communicate only through their public APIs. Manoeuvres are sequences of blocking moves, but every wait polls the STOP button and MQTT `stop`, so the car can always be halted.
+The vehicle task owns mission state and is the only caller of motion commands during a run, which avoids conflicting commands. Subsystems communicate only through their public APIs. Manoeuvres are sequences of blocking moves, but every wait, and every step of an obstacle scan, polls the STOP button and MQTT `stop`, so the car can always be halted.
 
 Controls:
 
-- **GP20 (START)** starts a run.
-- **GP21 (STOP)** stops the car; pressed while idle, it runs calibration.
+- **GP20 (START)** acts on release, so the car never moves under the user's hand: a short press starts a run; held for 2 s while idle, it runs calibration.
+- **GP21 (STOP)** stops the car and never moves it. Presses are latched by an interrupt, so a short press during a scan is not missed.
 - MQTT commands can do the same remotely.
+
+A new run discards barcodes decoded while the car stood still (pushed by hand, or seen during the calibration spin), so they cannot become its first turn.
 
 # 6. Verification and Evidence
 
 **Build verification.** All eight application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
 
-**Host unit tests** (`make -C tests/host`): **89/89 pass**. The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
+**Host unit tests** (`make -C tests/host`): **231/231 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
 
 | Module | What is proven |
 |---|---|
@@ -458,6 +474,7 @@ Controls:
 | avoidance | width/centre estimates, side choice with a wall, reverse/stop/continue |
 | mqtt_lwip | against a fake lwIP (`tests/host/lwip/`): no attempt without a network, a 2 s window before a new attempt, `online` (retained) and the `cmd` subscription on connect, a message kept while the client is full, commands only from the `cmd` topic, reconnects counted |
 | mqtt_bridge | ring capacity, drop-when-offline, command path |
+| vehicle + obstacle | the real `vehicle.c`, `obstacle.c` and `servo.c` in a simulation on a fake µT-Kernel (`tests/host/sim/`, `tk/`, `tm/`) with simulated time, buttons, motion, IR, IMU and sonar: START on release and 2 s hold to calibrate, STOP never moves the car, a 6 ms STOP press between polls is latched, speed limited to 300 mm/s; one close echo ignored and two stop the car; coarse then fine scan and the box-shaped bypass back to the line; reverse before the scan after an impact; triggers ignored on a hump; a STOP or `stop` ends a scan at the next servo step; a STOP in a line search, U-turn or bypass gives one `STOPPED (stop command)`; stale barcodes discarded at START; the watchdog armed only while the car can move, and the longest time without a feed while armed 101 ms (one ping); two FAULT pings in a row, or 300 ms without a front reading, stop the car; a STOP during a scan ends it while the servo moves or after the current ping, with no further move; the servo never goes past the mount's limits; the pass distance is closest + deepest box + car length + margin, and an obstacle ahead during the pass gives STOPPED (path blocked). Each of these fixes was broken on purpose once to confirm a check fails |
 | command | every command and its limits, spaces and case, rejection of bad counts, negative gains and trailing text; serial line assembly (CRLF, backspace, control bytes, overflow recovery); 3-decimal formatter (including NaN); live line gains surviving re-initialisation |
 
 **Dashboard.** Tested end to end against a Mosquitto broker with `sim_car.py`, which checked commands, acks, rejected commands, rate changes and CSV logs. The serial path was tested against an emulated USB console on a pseudo-terminal. That test also confirmed the 16-byte write pacing and that the dashboard requests the gains when the port opens.
@@ -481,8 +498,9 @@ The BARR-C conformance pass and the independent review of it found seven more; t
 
 - **Sensor faults.** Missing echoes, I2C timeouts (2 ms per transfer, counted in the heartbeat as `i2cerr`) and low-contrast calibration are all detected and reported. They never hang a task.
 - **Motion safety.** Every move has a stall timeout and every manoeuvre can be aborted.
+- **Watchdog.** The RP2040 watchdog (`WATCHDOG_TIMEOUT_MS`, 250 ms, the Week 6 value) guards motion: `set_state()` arms it in every state that can move the car and stops it in IDLE and STOPPED, the only states in which the WiFi chip may be restarted (that restart stalls the cyw43 task, which runs above the vehicle task). The vehicle task feeds it in every wait, about every 0.1 s at most (the longest gap is one sonar ping, 101 ms in the host simulation), so a stalled task stops the car within 250 ms (A14 asks for 500 ms). The motor outputs go off with the reset, and the first state after boot reports `watchdog reset` as its reason. `usermain()` stops the watchdog first thing at start-up.
 - **Line recovery.** A lost line gets an expanding sweep search before the car gives up with a reason.
-- **Collision.** An IMU impact triggers a stop, a scan and avoidance.
+- **Collision.** An IMU impact triggers a stop, a 120 mm reverse, a scan and avoidance.
 - **Communication.** Reconnection uses back-off, the last-will marks the car offline, a heartbeat sequence number reveals lost messages, and telemetry is simply dropped (and counted) when offline, so control is never delayed by the network.
 - **Real-time.** Control runs at higher priority than communication, and interrupt handlers are short.
 
@@ -538,6 +556,7 @@ Beyond these mechanical rules, the pass also marked every variable shared betwee
 | 2.2.a (complete sentences) | end-of-line comments on `#define`s and structure members | they label units and ranges (`/* mm/s per percent duty */`), which a sentence would not make clearer | block comments are full sentences |
 | scope | template files: kernel, libraries, `demo_tasks.c/.h`, `usb_console_compat.h` and the six patched template files | not our code; reformatting them would bury the real changes in the template patch | our hunks in the patched files follow the template's own style |
 | scope | `tests/host/lwip/`, the fake lwIP for the host test of `mqtt_lwip.c` | it must copy lwIP's own names and types | the test that drives it (`test_main.c`) is checked |
+| scope | `tests/host/tk/`, `tm/` and `sim/`, the fake µT-Kernel and the vehicle simulation | they copy the kernel's names and types, and `sim/vehicle_sim.c` includes `vehicle.c` to run its loop | the tests that drive them (`test_main.c`) are checked |
 
 ## 8.3 Latent defects found by the conformance pass
 
@@ -559,10 +578,11 @@ Pure algorithm modules contain no RTOS calls, which is why they can be unit-test
 - No hardware measurements yet. Tables marked ___ are to be completed in the lab, and all gains and geometry in `car_config.h` marked [CALIBRATE] need tuning on the real car.
 - Encoders have no direction channel, so direction is inferred from the commanded sign. A wheel pushed backwards by an external force is counted as forward.
 - Ultrasonic beam width (±7.5°) makes obstacles look wider. We accept this as a safety margin; a beam-width correction could reduce the detour.
-- Obstacle depth is measured by side-looking sonar while passing. A very long obstacle is capped at 600 mm.
+- The sensor mount limits the scan to about ±25°. Free space beside the obstacle beyond about ±130 mm is assumed (A10), and the obstacle's depth is not measured: the pass assumes at most `OBST_DEPTH_MAX_MM` (250 mm). Measure the course's obstacles and set it; a deeper obstacle would be clipped when the car turns back to the line.
+- A low-mounted sonar can still see a hump's face before the car tilts (assumption A12). Log the front range while approaching the course hump; if it drops under 300 mm, aim the sensor higher.
 - Tuned gains are held in RAM only and must be copied into `car_config.h`. Saving them to flash would need the template's core-parking protocol, which it does not provide.
 - MQTT commands are not authenticated beyond the broker login. Anyone who can publish to the broker can stop or start the car, so use a private network or set `MQTT_USERNAME`/`MQTT_PASSWORD` with a Mosquitto password file.
-- The build targets the qualified single-core profile. The data structures are SMP-aware (barriers, single-owner IRQs), but dual-core operation has not been tested.
+- The firmware needs the qualified single-core kernel profile. Status snapshots are copied with interrupts disabled, which is atomic only on one core (assumption A13), so `app_main.c` stops an `SMP=1` build with a compile error. Dual-core operation would need spinlock-protected copies.
 
 # 10. Week 10 Demonstration Plan
 

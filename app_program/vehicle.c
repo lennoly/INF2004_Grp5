@@ -4,14 +4,17 @@
  *
  * IDLE --start--> LINE_FOLLOW --barcode+junction--> NAV_TURN --> LINE_FOLLOW
  *                   |  |  +--line lost--> LINE_SEARCH --found--> LINE_FOLLOW
- *                   |  +--front < OBST_DETECT_MM or impact--> OBSTACLE
+ *                   |  +--2 front pings < OBST_DETECT_MM or impact--> OBSTACLE
  *                   |       OBSTACLE: scan, plan, bypass, reacquire line
  * any --stop / blocked / line not found--> STOPPED --start--> LINE_FOLLOW
- * IDLE/STOPPED --calibrate--> CALIBRATE (360 degree spin: IR + compass)
+ * any running state --fault bit / no fresh front reading--> STOPPED
+ * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (360 degree spin)
  *
  * Manoeuvres are sequences of blocking motion moves executed in this task;
- * every wait polls the STOP button and queued commands, so any manoeuvre
- * can be aborted.  The same diagram is drawn in docs/img/states.png (Rule
+ * every wait, and every step of an obstacle scan, polls the STOP button and
+ * queued commands, so any manoeuvre can be aborted.  STOP presses are also
+ * latched by an interrupt, so a short press is never missed, and STOP never
+ * moves the car.  The same diagram is drawn in docs/img/states.png (Rule
  * 2.2.f) and explained in the report (docs/REPORT.md).
  */
 
@@ -22,6 +25,7 @@
 #include "car_config.h"
 #include "car_math.h"
 #include "hal.h"
+#include "hal_irq.h"
 #include "motion.h"
 #include "ir_sensor.h"
 #include "barcode.h"
@@ -30,6 +34,9 @@
 #include "ultrasonic.h"
 #include "obstacle.h"
 #include "timing.h"
+#include "bitpack.h"
+#include "fault.h"
+#include "packed.h"
 #include "vehicle.h"
 
 #define TASK_PRIORITY      (6)
@@ -40,37 +47,52 @@
 #define MBF_MSGS           (4u)
 #define LINE_GAINS         (3u)
 #define REACQ_SPEED        (90.0f)
-#define LINE_SEEN_LEVEL    (0.5f)
-#define CENTRED_ERROR      (0.35f)
-#define CENTRED_SUM        (0.6f)
 #define QUARTER_TURN       (90.0f)
+#define EIGHTH_TURN        (45.0f)
+#define DIAGONAL_PER_SIDE  (1.41421356f) /* 45 deg leg per mm sideways */
+#define COS_45             (0.70710678f)
 #define HALF_TURN          (180.0f)
 #define FULL_TURN          (360.0f)
-#define SERVO_FULL_DEG     (180)
 #define REVERSE_MM         (120.0f)
-#define PASS_STEP_MM       (50.0f)
-#define SIDE_SEEN_EXTRA_MM (150.0f)
-#define SEEK_EXTRA_MM      (200.0f)
 #define FRONT_IGNORE_MM    (150.0f)
 #define STRAIGHT_EXTRA_MM  (20.0f)
 #define SPEED_MIN_CMD      (SPEED_CMD_MIN_MM_S) /* car_config.h, NFR2 */
 #define SPEED_MAX_CMD      (SPEED_CMD_MAX_MM_S)
 #define STOP_SETTLE_MS     (200u)
+#define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
+/* Line search: alternating sweeps, each REACQ_BASE_MS longer.  At 90 mm/s
+   per wheel on the 138 mm track the car turns about 75 deg/s, so 200 ms is
+   a 15 deg step: +15, -15, +30, -30, +45 deg (was 350 ms, out to 78 deg). */
 #define REACQ_SWEEPS       (5u)
-#define REACQ_BASE_MS      (350u)
+#define REACQ_BASE_MS      (200u)
+#define REJOIN_EXTRA_MM    (60.0f) /* return leg past the original path   */
+#define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
-#define FULL_MISSION       (APP_MODE != APP_MODE_TEST_BUDDY3)
 
 /* Cast: the loop period is a small number of milliseconds, which
    float32_t holds exactly. */
 #define DT_S ((float32_t) LOOP_MS / MS_PER_S)
 
+#define MSG_ARG_BITS  (9u)  /* VCMD_SET_SPEED: mm/s, 0..511     */
+#define MSG_GAIN_BITS (20u) /* line gains: 0..1000.000 in 0.001 */
+#define MSG_GAIN_STEP (1000.0f)
+
+/* Faults that stop a run (Tribunal 1: sonar, motors and IMU leave the car
+   blind or out of control; Wi-Fi loss is report-only). */
+#define STOP_FAULTS                                                         \
+    ((1u << FAULT_MOTOR_STALL) | (1u << FAULT_ENCODER) | (1u << FAULT_IMU) \
+     | (1u << FAULT_NO_ECHO))
+
+/* Queue message to this task, packed (Change Requirement 1): 12 bytes
+   instead of 20.  Gains keep the 3 decimals of the text commands. */
 typedef struct
 {
-    vehicle_cmd_t cmd;
-    int32_t       arg;
-    float32_t     gains[LINE_GAINS]; /* VCMD_SET_LINE_GAINS: kp, ki, kd */
+    uint32_t cmd    : 3;  /* vehicle_cmd_t, 5 values           */
+    uint32_t arg    : 9;  /* MSG_ARG_BITS                      */
+    uint32_t gain_p : 20; /* VCMD_SET_LINE_GAINS: MSG_GAIN_BITS */
+    uint32_t gain_i : 20;
+    uint32_t gain_d : 20;
 } vehicle_msg_t;
 
 typedef enum
@@ -80,50 +102,84 @@ typedef enum
     SEARCH_ABORTED
 } search_result_t;
 
-/* Published status and the command queue, used by other tasks: volatile
-   (Rule 1.8.c). */
+/* Working status (this task) and the packed copy published for other
+   tasks (Change Requirement 1: 16 bytes instead of 48), plus the command
+   queue: volatile (Rule 1.8.c). */
 static volatile vehicle_status_t g_st;
+static volatile packed_vehicle_t g_pub;
 static volatile ID               gh_mbuf = 0;
+
+/* Set by the STOP button interrupt, cleared by the vehicle task: volatile
+   (Rule 1.8.c). */
+static volatile bool gb_stop_latched = false;
+
+/* Time a STOP command was queued (a command task), cleared by the vehicle
+   task once the motors are told to stop; 0 = none.  One aligned 32-bit
+   word, single core (A13): volatile (Rule 1.8.c). */
+static volatile uint32_t g_stop_cmd_us = 0u;
 
 /* Vehicle-task private state. */
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
+static float32_t     g_pending_odo        = 0.0f;
+static bool          gb_left_junction     = false; /* since the command */
+static bool          gb_no_line_yet       = false; /* TEST_OBSTACLE start */
+static bool          gb_bar_black         = false; /* barcode IR on black */
+static float32_t     g_bar_start_odo      = 0.0f;
+static bool          gb_bar_junction      = false; /* junction line passed */
+static barcode_decode_nav_t g_nav_request = NAV_NONE; /* nav= command */
+static bool          gb_settling          = false; /* slow after a turn */
+static float32_t     g_settle_end_odo     = 0.0f;
+static uint32_t      g_settle_start_ms    = 0u;
 static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
 static uint32_t      g_seen_impacts       = 0u;
 static uint32_t      g_run_start_ms       = 0u;
-static volatile bool gb_stop_pending      = false;
+static uint32_t      g_start_down_ms      = 0u;
 static bool          gb_abort             = false;
+static char const *  gp_abort_why         = NULL; /* fault that aborted */
 static bool          gb_start             = false;
 static bool          gb_calib             = false;
 static bool          gb_btn_start_prev    = false;
 static bool          gb_btn_stop_prev     = false;
+static bool          gb_start_armed       = false;
+static bool          gb_after_impact      = false;
+static bool          gb_path_blocked      = false; /* front watch hit */
 
 /* Names indexed by vehicle_state_t. */
 static char const * const g_state_names[] = {
     "IDLE",        "CALIBRATE", "LINE_FOLLOW", "NAV_TURN",
     "LINE_SEARCH", "OBSTACLE",  "STOPPED"};
 
-static void            reset_line_follow(void);
 static uint32_t        now_ms(void);
 static void            set_state(vehicle_state_t state, char const * p_reason);
 static int32_t         clamp_speed(int32_t speed_mm_s);
+static void            poll_start_button(bool b_start, bool b_idle);
 static void            poll_buttons(void);
 static void            poll_messages(void);
 static void            poll_inputs(void);
-static bool            run_move(void);
+static bool            stop_requested(void);
+static void            wait_polled(uint32_t wait_ms);
+static void            check_faults(void);
+static void            publish_status(void);
+static uint32_t        gain_field(float32_t gain);
+static bool            run_move(bool b_watch_front);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
-static bool            line_centred(ir_sensor_snapshot_t const * p_ir);
+static bool            line_seen(ir_sensor_snapshot_t const * p_ir);
 static search_result_t reacquire_poll(void);
 static bool            reacquire_line(float32_t side);
+static void            start_settling(void);
 static void            execute_nav(barcode_decode_nav_t cmd);
-static bool            pass_obstacle(float32_t side, float32_t offset);
-static bool            seek_line(float32_t max_mm);
+static bool            pass_obstacle(float32_t pass_mm);
 static bool            bypass(avoidance_plan_t const * p_plan);
+static bool            diagonal_to_line(float32_t dist_mm);
+static void            act_on_scan(avoidance_profile_t const * p_prof);
 static void            handle_obstacle(void);
-static void            take_barcode(void);
-static bool            nav_due(void);
+static void            take_barcode(float32_t odo_mm);
+static void            watch_junction_bar(float32_t odo_mm);
+static bool            nav_due(float32_t odo_mm);
+static char const *    nav_reason(barcode_decode_nav_t pending);
 static bool            obstacle_due(float32_t odo_mm);
 static void            handle_line_follow(void);
 static void            handle_line_search(void);
@@ -132,28 +188,37 @@ static void            calibrate(void);
 static void            handle_requests(void);
 static void            run_state(void);
 static void            vehicle_task(INT stacd, void * p_exinf);
+static void stop_button_isr(uint32_t pin, uint32_t events, uint32_t t_us);
 
 /*!
  * @brief Configure the buttons, create the command queue and start the
  *        vehicle task.
  *
  * @return E_OK, E_LIMIT if a kernel object could not be created, or a
- *         tk_sta_tsk() error.
+ *         tk_sta_tsk() or hal_irq_gpio_attach() error.
  */
 int32_t
 vehicle_init (void)
 {
-    T_CMBF cmbf   = {0};
-    T_CTSK ctsk   = {0};
-    ID     h_task = 0;
-    ER     ercd   = E_LIMIT;
+    T_CMBF cmbf     = {0};
+    T_CTSK ctsk     = {0};
+    ID     h_task   = 0;
+    ER     ercd     = E_LIMIT;
+    ER     btn_ercd = E_OK;
 
     hal_gpio_init_in(PIN_BTN_START, true);
     hal_gpio_init_in(PIN_BTN_STOP, true);
+
+    /* Latch STOP presses: the task cannot poll the button while it waits
+       for the sonar. */
+    btn_ercd =
+        hal_irq_gpio_attach(PIN_BTN_STOP, HAL_GPIO_EDGE_FALL, stop_button_isr);
+
     g_st.state       = VS_IDLE;
     g_st.cruise_mm_s = car_math_round(SPEED_CRUISE_MM_S);
     g_st.front_mm    = ULTRASONIC_NO_ECHO;
-    g_st.p_reason    = "boot";
+    g_st.p_reason    = hal_watchdog_caused_reset() ? "watchdog reset" : "boot";
+    publish_status();
 
     cmbf.mbfatr = TA_TFIFO;
     cmbf.bufsz  = MBF_MSGS * (sizeof(vehicle_msg_t) + sizeof(UW));
@@ -175,6 +240,9 @@ vehicle_init (void)
         ercd = tk_sta_tsk(h_task, 0);
     }
 
+    /* Without the interrupt STOP is still polled; report the fault. */
+    ercd = (E_OK == ercd) ? btn_ercd : ercd;
+
     return (ercd);
 }
 
@@ -191,24 +259,20 @@ vehicle_init (void)
 bool
 vehicle_command (vehicle_cmd_t cmd, int32_t arg)
 {
-    vehicle_msg_t msg = {VCMD_START, 0, {0.0f, 0.0f, 0.0f}};
+    vehicle_msg_t msg = {0u, 0u, 0u, 0u, 0u};
 
-    UINT imask = 0u;
+    /* Cast: enumeration constants are small and non-negative. */
+    msg.cmd = (uint32_t) cmd & bitpack_max_u(3u);
+    msg.arg = bitpack_clamp_u(arg, MSG_ARG_BITS);
 
+    /* INT-02 (NFR3): time from here to the motors told to stop. */
     if (VCMD_STOP == cmd)
     {
-        DI(imask);
-        gb_stop_pending = true;
-        EI(imask);
-        motion_emergency_stop();
+        g_stop_cmd_us = timing_start();
     }
 
-    msg.cmd = cmd;
-    msg.arg = arg;
-
-    /* Cast: the message is a few dozen bytes, far below INT's range. */
-    return ((VCMD_STOP == cmd)
-            || (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL)));
+    /* Cast: the message is 12 bytes, far below INT range. */
+    return (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL));
 }
 
 /*!
@@ -224,13 +288,15 @@ vehicle_command (vehicle_cmd_t cmd, int32_t arg)
 bool
 vehicle_set_line_gains (float32_t gain_p, float32_t gain_i, float32_t gain_d)
 {
-    vehicle_msg_t msg = {VCMD_SET_LINE_GAINS, 0, {0.0f, 0.0f, 0.0f}};
+    vehicle_msg_t msg = {0u, 0u, 0u, 0u, 0u};
 
-    msg.gains[0] = gain_p;
-    msg.gains[1] = gain_i;
-    msg.gains[2] = gain_d;
+    /* Cast: enumeration constants are small and non-negative. */
+    msg.cmd    = (uint32_t) VCMD_SET_LINE_GAINS;
+    msg.gain_p = gain_field(gain_p);
+    msg.gain_i = gain_field(gain_i);
+    msg.gain_d = gain_field(gain_d);
 
-    /* Cast: the message is a few dozen bytes, far below INT's range. */
+    /* Cast: the message is 12 bytes, far below INT range. */
     return (E_OK == tk_snd_mbf(gh_mbuf, &msg, (INT) sizeof(msg), TMO_POL));
 }
 
@@ -242,11 +308,14 @@ vehicle_set_line_gains (float32_t gain_p, float32_t gain_i, float32_t gain_d)
 void
 vehicle_get_status (vehicle_status_t * p_out)
 {
-    UINT imask = 0u;
+    packed_vehicle_t copy;
+    UINT             imask = 0u;
 
     DI(imask);
-    *p_out = g_st;
+    copy = g_pub;
     EI(imask);
+
+    packed_vehicle_unpack(&copy, p_out);
 }
 
 /*!
@@ -273,19 +342,6 @@ vehicle_state_name (vehicle_state_t state)
 }
 
 /*!
- * @brief Begin fresh line classification at the current odometry reading.
- */
-static void
-reset_line_follow (void)
-{
-    motion_status_t motion;
-
-    motion_get_status(&motion);
-    g_prev_odo = motion.odo_mm;
-    line_follow_init(&g_lf);
-}
-
-/*!
  * @brief The kernel's millisecond clock.
  *
  * @return Milliseconds since boot, modulo 2^32.
@@ -309,13 +365,39 @@ now_ms (void)
 static void
 set_state (vehicle_state_t state, char const * p_reason)
 {
-    UINT imask = 0u;
+    UINT         imask = 0u;
+    imu_status_t imu;
+
+    if ((VS_OBSTACLE == g_st.state) && (VS_OBSTACLE != state))
+    {
+        /* Jolts from the car's own scan, reverse and bypass moves are not
+           collisions: forget them, or the next line step would stop again
+           at once. */
+        imu_get_status(&imu);
+        g_seen_impacts = imu.impacts;
+    }
 
     DI(imask);
     g_st.state = state;
     g_st.state_seq++;
     g_st.p_reason = p_reason;
     EI(imask);
+
+    /* The watchdog guards motion: armed in every state that can move the
+       car, so a stalled loop (a hung or starved task) resets the chip and
+       stops the motors.  It is off in IDLE and STOPPED, the only states
+       in which the WiFi chip may be restarted, which stalls the cyw43
+       task above this one. */
+    if ((VS_IDLE == state) || (VS_STOPPED == state))
+    {
+        hal_watchdog_stop();
+    }
+    else
+    {
+        hal_watchdog_start(WATCHDOG_TIMEOUT_MS);
+    }
+
+    publish_status();
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
     (void) tm_printf((UB const *) "[vehicle] -> %s (%s)\n",
@@ -351,8 +433,49 @@ clamp_speed (int32_t speed_mm_s)
 }
 
 /*!
- * @brief Buttons (active low, edge detected).  STOP while idle requests a
- *        calibration.
+ * @brief START button, acted on when released so that the car never moves
+ *        under the user's hand: a short press starts a run, a press held
+ *        for at least CALIB_HOLD_MS requests a calibration.  Only presses
+ *        that begin while the car is idle count.
+ *
+ * @param[in] b_start START is pressed now.
+ * @param[in] b_idle  The car is idle or stopped.
+ */
+static void
+poll_start_button (bool b_start, bool b_idle)
+{
+    uint32_t now = now_ms();
+
+    if (b_start && (!gb_btn_start_prev))
+    {
+        /* Just pressed: time the hold. */
+        g_start_down_ms = now;
+        gb_start_armed  = b_idle;
+    }
+    else if ((!b_start) && gb_btn_start_prev && gb_start_armed)
+    {
+        gb_start_armed = false;
+
+        if ((now - g_start_down_ms) >= CALIB_HOLD_MS)
+        {
+            gb_calib = true;
+        }
+        else
+        {
+            gb_start = true;
+        }
+    }
+    else
+    {
+        /* Held, or released after a press that began during a run. */
+    }
+}
+
+/*!
+ * @brief Buttons (active low).  START: see poll_start_button().  STOP
+ *        aborts a run or manoeuvre and is ignored while idle, so it never
+ *        moves the car; a press latched by stop_button_isr() counts even if
+ *        the button was released before this poll.
  */
 static void
 poll_buttons (void)
@@ -361,18 +484,36 @@ poll_buttons (void)
     bool b_stop    = !hal_gpio_get(PIN_BTN_STOP);
     bool b_idle    = (VS_IDLE == g_st.state) || (VS_STOPPED == g_st.state);
     bool b_pressed = b_stop && (!gb_btn_stop_prev);
+    UINT imask     = 0u;
 
-    gb_start          = gb_start || (b_start && (!gb_btn_start_prev));
-    gb_calib          = gb_calib || (FULL_MISSION && b_pressed && b_idle);
-    gb_abort          = gb_abort || (FULL_MISSION ? (b_pressed && (!b_idle))
-                                                 : b_stop);
-    if (gb_abort)
-    {
-        motion_emergency_stop();
-    }
+    DI(imask);
+    b_pressed       = b_pressed || gb_stop_latched;
+    gb_stop_latched = false;
+    EI(imask);
 
+    poll_start_button(b_start, b_idle);
+    gb_abort          = gb_abort || (b_pressed && (!b_idle));
     gb_btn_start_prev = b_start;
     gb_btn_stop_prev  = b_stop;
+}
+
+/*!
+ * @brief STOP button edge callback (interrupt context): latch the press for
+ *        poll_buttons().
+ *
+ * @param[in] pin    Button pin (unused).
+ * @param[in] events HAL_GPIO_EDGE_* bits (unused: only the falling edge,
+ *                   a press, is enabled).
+ * @param[in] t_us   Time stamp of the interrupt (unused).
+ */
+static void
+stop_button_isr (uint32_t pin, uint32_t events, uint32_t t_us)
+{
+    (void) pin;
+    (void) events;
+    (void) t_us;
+
+    gb_stop_latched = true;
 }
 
 /*!
@@ -381,12 +522,13 @@ poll_buttons (void)
 static void
 poll_messages (void)
 {
-    vehicle_msg_t msg = {VCMD_START, 0, {0.0f, 0.0f, 0.0f}};
+    vehicle_msg_t msg = {0u, 0u, 0u, 0u, 0u};
 
-    /* Cast: the message is a few dozen bytes, far below INT's range. */
+    /* Casts: the message is 12 bytes, far below INT range; the cmd field
+       holds a vehicle_cmd_t written by vehicle_command(). */
     while ((INT) sizeof(msg) == tk_rcv_mbf(gh_mbuf, &msg, TMO_POL))
     {
-        switch (msg.cmd)
+        switch ((vehicle_cmd_t) msg.cmd)
         {
             case VCMD_START:
                 gb_start = true;
@@ -401,12 +543,24 @@ poll_messages (void)
             break;
 
             case VCMD_SET_SPEED:
-                g_st.cruise_mm_s = clamp_speed(msg.arg);
+                /* Cast: the field is below 2^9. */
+                g_st.cruise_mm_s = clamp_speed((int32_t) msg.arg);
             break;
 
             case VCMD_SET_LINE_GAINS:
-                line_follow_set_gains(&g_lf, msg.gains[0], msg.gains[1],
-                                      msg.gains[2]);
+                /* Casts: the fields are below 2^20, exact in float32_t. */
+                line_follow_set_gains(&g_lf,
+                                      (float32_t) msg.gain_p / MSG_GAIN_STEP,
+                                      (float32_t) msg.gain_i / MSG_GAIN_STEP,
+                                      (float32_t) msg.gain_d / MSG_GAIN_STEP);
+            break;
+
+            case VCMD_NAV:
+                /* Cast: the field holds a checked 1..4 (command.c). */
+                g_nav_request = ((msg.arg >= (uint32_t) NAV_LEFT)
+                                 && (msg.arg <= (uint32_t) NAV_UTURN))
+                                    ? (barcode_decode_nav_t) msg.arg
+                                    : NAV_NONE;
             break;
 
             default:
@@ -417,65 +571,171 @@ poll_messages (void)
 }
 
 /*!
- * @brief Buttons and queued commands.
+ * @brief Buttons and queued commands; also feeds the watchdog, because every
+ *        wait in this task calls this at least once a second (every LOOP_MS,
+ *        or between the servo steps of a scan).
  */
 static void
 poll_inputs (void)
 {
-    UINT imask = 0u;
-
+    hal_watchdog_feed();
     poll_buttons();
     poll_messages();
+    check_faults();
+    publish_status();
+    motion_keep_alive(); /* this loop is alive: keep driving (FR14) */
+}
+
+/*!
+ * @brief Read the shared fault mask (one call) and stop the run on a fault
+ *        that leaves the car blind or out of control.  A stalled owner
+ *        cannot set its own bit (fault.h), so the age of the front reading
+ *        is checked here too: none for OBST_STALE_MS means obstacles can no
+ *        longer be seen.
+ */
+static void
+check_faults (void)
+{
+    uint32_t mask      = fault_mask() & STOP_FAULTS;
+    bool     b_running = (VS_IDLE != g_st.state) && (VS_STOPPED != g_st.state);
+    bool     b_stale   = obstacle_front_stale();
+
+    if (b_running && ((0u != mask) || b_stale) && (!gb_abort))
+    {
+        gb_abort = true;
+
+        if (0u != (mask & (1u << FAULT_MOTOR_STALL)))
+        {
+            gp_abort_why = "fault: motor stall";
+        }
+        else if (0u != (mask & (1u << FAULT_ENCODER)))
+        {
+            gp_abort_why = "fault: encoder";
+        }
+        else if (0u != (mask & (1u << FAULT_IMU)))
+        {
+            gp_abort_why = "fault: IMU";
+        }
+        else if (0u != (mask & (1u << FAULT_NO_ECHO)))
+        {
+            gp_abort_why = "fault: sonar no echo";
+        }
+        else
+        {
+            gp_abort_why = "sonar stale";
+        }
+    }
+}
+
+/*!
+ * @brief Publish the packed status for the other tasks (short DI section).
+ */
+static void
+publish_status (void)
+{
+    vehicle_status_t work;
+    packed_vehicle_t packed;
+    UINT             imask = 0u;
+
     DI(imask);
-    gb_abort = gb_abort || gb_stop_pending;
-    gb_stop_pending = false;
+    work = g_st;
     EI(imask);
+
+    packed_vehicle_pack(&work, &packed);
+
+    DI(imask);
+    g_pub = packed;
+    EI(imask);
+}
+
+/*!
+ * @brief A line gain in 0.001 steps for the queue message.
+ *
+ * @param[in] gain Gain, 0..1000 (checked by the command parser).
+ *
+ * @return Field value.
+ */
+static uint32_t
+gain_field (float32_t gain)
+{
+    /* Casts: 20 bits fit int32_t; the quantised value is in 0..max. */
+    int32_t max = (int32_t) bitpack_max_u(MSG_GAIN_BITS);
+
+    return ((uint32_t) bitpack_quantise(gain, MSG_GAIN_STEP, 0, max));
+}
+
+/*!
+ * @brief Scan callback (see obstacle_scan()): service the buttons and
+ *        queued commands between servo steps.
+ *
+ * @return true if a stop was requested, to end the scan early.
+ */
+static bool
+stop_requested (void)
+{
+    poll_inputs();
+
+    return (gb_abort);
+}
+
+/*!
+ * @brief Wait in LOOP_MS steps, servicing the buttons, queued commands and
+ *        watchdog after each; returns early on a stop request.
+ *
+ * @param[in] wait_ms Time to wait.
+ */
+static void
+wait_polled (uint32_t wait_ms)
+{
+    uint32_t waited_ms = 0u;
+
+    while ((!gb_abort) && (waited_ms < wait_ms))
+    {
+        (void) tk_dly_tsk(LOOP_MS);
+        poll_inputs();
+        waited_ms += LOOP_MS;
+    }
 }
 
 /*!
  * @brief Wait for the issued motion move; abortable by STOP.
  *
+ * @param[in] b_watch_front true to also end the move when the front monitor
+ *                          confirms an obstacle ahead (gb_path_blocked).
+ *
  * @return true if the move completed normally.
  */
 static bool
-run_move (void)
+run_move (bool b_watch_front)
 {
     uint32_t waited    = 0u;
     int32_t  result    = MOTION_WAIT_BUSY;
     bool     b_ok      = false;
     bool     b_waiting = true;
 
+    gb_path_blocked = false;
+
     while (b_waiting)
     {
         result = motion_wait(LOOP_MS);
-        poll_inputs();
 
-        if (gb_abort || (motion_stop_requested()))
-        {
-            motion_emergency_stop();
-            b_waiting = false;
-        }
-        else if (MOTION_WAIT_BUSY != result)
+        if (MOTION_WAIT_BUSY != result)
         {
             b_ok      = (MOTION_WAIT_OK == result);
             b_waiting = false;
         }
         else
         {
+            poll_inputs();
             waited += LOOP_MS;
+            gb_path_blocked = b_watch_front && (obstacle_ahead());
 
-            if (gb_abort || (waited > MOVE_TIMEOUT_MS))
+            if (gb_abort || gb_path_blocked || (waited > MOVE_TIMEOUT_MS))
             {
                 motion_stop();
                 b_waiting = false;
             }
         }
-    }
-
-    if ((!b_ok) && (!gb_abort))
-    {
-        motion_emergency_stop();
-        set_state(VS_STOPPED, "motion failed / timed out");
     }
 
     return (b_ok);
@@ -501,7 +761,7 @@ turn_side (float32_t side, float32_t angle_deg)
         motion_turn_right(angle_deg);
     }
 
-    return (run_move());
+    return (run_move(false));
 }
 
 /*!
@@ -517,30 +777,30 @@ forward (float32_t dist_mm, float32_t speed)
 {
     motion_move_forward(dist_mm, speed);
 
-    return (run_move());
+    return (run_move(false));
 }
 
 /*!
- * @brief Whether the line is centred under the two line sensors.
+ * @brief Whether either line sensor sees the line.  A search that waited
+ *        for both sensors to read alike (centred) often turned past the
+ *        line between two 20 ms reads (28 Oct); the settling follow after
+ *        the search lines the car up instead.
  *
  * @param[in] p_ir IR snapshot.
  *
- * @return true if both sensors see about the same, and enough, black.
+ * @return true if either sensor is black enough.
  */
 static bool
-line_centred (ir_sensor_snapshot_t const * p_ir)
+line_seen (ir_sensor_snapshot_t const * p_ir)
 {
-    float32_t left  = p_ir->norm[IR_LEFT];
-    float32_t right = p_ir->norm[IR_RIGHT];
-
-    return ((car_math_abs(left - right) < CENTRED_ERROR)
-            && ((left + right) > CENTRED_SUM));
+    return ((p_ir->norm[IR_LEFT] > REJOIN_SEEN_LEVEL)
+            || (p_ir->norm[IR_RIGHT] > REJOIN_SEEN_LEVEL));
 }
 
 /*!
  * @brief One 20 ms step of a line search.
  *
- * @return SEARCH_ABORTED on STOP, SEARCH_FOUND once the line is centred,
+ * @return SEARCH_ABORTED on STOP, SEARCH_FOUND once the line is seen,
  *         otherwise SEARCH_RUNNING.
  */
 static search_result_t
@@ -557,7 +817,7 @@ reacquire_poll (void)
     {
         result = SEARCH_ABORTED;
     }
-    else if (line_centred(&ir_snap))
+    else if (line_seen(&ir_snap))
     {
         result = SEARCH_FOUND;
     }
@@ -570,8 +830,8 @@ reacquire_poll (void)
 }
 
 /*!
- * @brief Rotate in growing alternating sweeps until the line is centred
- *        under the sensors.
+ * @brief Rotate in growing alternating sweeps until a line sensor sees the
+ *        line.
  *
  * @param[in] side Direction of the first sweep (SIDE_LEFT or SIDE_RIGHT).
  *
@@ -606,10 +866,27 @@ reacquire_line (float32_t side)
 
     if (SEARCH_FOUND == result)
     {
-        reset_line_follow();
+        line_follow_init(&g_lf);
+        start_settling();
     }
 
     return (SEARCH_FOUND == result);
+}
+
+/*!
+ * @brief After a turn or a line search the car is rarely aligned with the
+ *        line: follow it at SPEED_SLOW_MM_S for the next LINE_SETTLE_MM so
+ *        the steering can line it up before cruise speed.
+ */
+static void
+start_settling (void)
+{
+    motion_status_t motion;
+
+    motion_get_status(&motion);
+    g_settle_end_odo  = motion.odo_mm + LINE_SETTLE_MM;
+    g_settle_start_ms = now_ms();
+    gb_settling       = true;
 }
 
 /*!
@@ -623,8 +900,8 @@ execute_nav (barcode_decode_nav_t cmd)
     bool b_ok = true;
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
-    (void) tm_printf((UB const *) "[vehicle] barcode %c: executing %s\n",
-                     g_st.pending_code, barcode_decode_command_name(cmd));
+    (void) tm_printf((UB const *) "[vehicle] executing %s\n",
+                     barcode_decode_command_name(cmd));
 
     switch (cmd)
     {
@@ -649,129 +926,73 @@ execute_nav (barcode_decode_nav_t cmd)
             /* Same as the default: cross the junction. */
         default:
             b_ok = forward(LINE_SENSOR_AHEAD_MM + STRAIGHT_EXTRA_MM,
-                           SPEED_SLOW_MM_S);
+                           SPEED_CRUISE_MM_S);
         break;
     }
 
     g_st.last_nav    = cmd;
     g_st.pending_nav = NAV_NONE;
-    g_st.pending_code = '\0';
-    reset_line_follow();
+    line_follow_init(&g_lf);
 
-    if (gb_abort || (motion_stop_requested()))
-    {
-        motion_stop();
-        set_state(VS_STOPPED, "navigation stopped / motion failed");
-    }
-    else if (b_ok)
+    if (b_ok)
     {
         set_state(VS_LINE_FOLLOW, "nav done");
     }
-    else
+    else if (!gb_abort)
     {
         set_state(VS_LINE_SEARCH, "nav: line not found");
+    }
+    else
+    {
+        /* Stopped: handle_requests() sets the state on the next loop. */
     }
 }
 
 /*!
- * @brief Drive alongside the obstacle until the side-looking sensor sees
- *        past its far end, then clear the car's tail.
+ * @brief Drive alongside the obstacle for the planned distance (the sensor
+ *        cannot turn far enough to watch it go by; see avoidance_plan()).
+ *        The centred front sensor watches the way ahead: an obstacle there
+ *        ends the move (gb_path_blocked).
  *
- * @param[in] side   Bypass side, SIDE_LEFT or SIDE_RIGHT.
- * @param[in] offset Sideways offset of the car from the obstacle's edge.
+ * @param[in] pass_mm Distance to drive.
  *
- * @return true if every move completed normally.
+ * @return true if the car is past the obstacle.
  */
 static bool
-pass_obstacle (float32_t side, float32_t offset)
+pass_obstacle (float32_t pass_mm)
 {
-    int32_t   look    = (side > 0.0f) ? OBST_SIDE_SERVO_DEG
-                                      : (SERVO_FULL_DEG - OBST_SIDE_SERVO_DEG);
-    float32_t travel  = 0.0f;
-    int32_t   dist_mm = ULTRASONIC_NO_ECHO;
-    bool      b_ok    = true;
-    bool      b_near  = false;
-    bool      b_seen  = false;
-    bool      b_past  = false;
+    bool b_ok = false;
 
-    while (b_ok && (!b_past) && (travel < OBST_PASS_MAX_MM))
-    {
-        dist_mm = obstacle_look_mm(look);
-
-        /* Cast: distances are at most US_MAX_MM, exact in float32_t. */
-        b_near = (ULTRASONIC_NO_ECHO != dist_mm)
-                 && ((float32_t) dist_mm < (offset + SIDE_SEEN_EXTRA_MM));
-        b_past = b_seen && (!b_near);
-        b_seen = b_seen || b_near;
-
-        if (!b_past)
-        {
-            b_ok = forward(PASS_STEP_MM, SPEED_SLOW_MM_S);
-            travel += PASS_STEP_MM;
-        }
-    }
-
-    servo_set_angle(SERVO_CENTRE_DEG);
-
-    if (b_ok)
-    {
-        b_ok = forward(CAR_LENGTH_MM, SPEED_SLOW_MM_S);
-    }
+    obstacle_monitor_enable(true);
+    motion_move_forward(pass_mm, SPEED_BYPASS_MM_S);
+    b_ok = run_move(true);
+    obstacle_monitor_enable(false);
 
     return (b_ok);
 }
 
 /*!
- * @brief Drive back towards the line until the IR row sees it.
+ * @brief Diagonal bypass that keeps the deviation to the planned offset:
+ *        45 deg out until the car is offset_mm to the side, straight past
+ *        (front sensor watching), 45 deg back until the line sensors meet
+ *        the line, then line following straight away (diagonal_to_line()).
+ *        Half the turning of a box-shaped bypass.
  *
- * @param[in] max_mm Give up after this distance.
+ * On a 45 deg leg the car's inner side stays on one 45 deg line, so a box
+ * corner is cleared by OBST_CORNER_MARGIN_MM (m) when it is m x sqrt2
+ * (forward + sideways) inside that line; the end of a 45 deg turn is the
+ * worst point of the turn.  Forward from the axle at the scan point,
+ * sideways from the line towards the pass side, W the car width:
  *
- * @return true if the line was seen.
- */
-static bool
-seek_line (float32_t max_mm)
-{
-    ir_sensor_snapshot_t ir_snap;
-    motion_status_t      motion;
-    float32_t            start  = 0.0f;
-    float32_t            limit  = car_math_is_finite(max_mm) ? max_mm : 0.0f;
-    search_result_t      result = SEARCH_RUNNING;
-
-    motion_get_status(&motion);
-    start = motion.odo_mm;
-    motion_set_velocity(SPEED_SLOW_MM_S, SPEED_SLOW_MM_S);
-
-    while (SEARCH_RUNNING == result)
-    {
-        (void) tk_dly_tsk(LOOP_MS);
-        poll_inputs();
-        ir_sensor_read(&ir_snap);
-        motion_get_status(&motion);
-
-        if ((ir_snap.norm[IR_LEFT] > LINE_SEEN_LEVEL)
-            || (ir_snap.norm[IR_RIGHT] > LINE_SEEN_LEVEL))
-        {
-            result = SEARCH_FOUND;
-        }
-        else if (gb_abort || ((motion.odo_mm - start) > limit))
-        {
-            result = SEARCH_ABORTED;
-        }
-        else
-        {
-            /* Keep driving. */
-        }
-    }
-
-    motion_stop();
-
-    return (SEARCH_FOUND == result);
-}
-
-/*!
- * @brief Box-shaped bypass that keeps the deviation to the planned
- *        offset: sidestep, pass (side-looking sonar), return, rejoin the
- *        line.
+ *     box edge    E = offset - W / 2 - OBST_MARGIN_MM
+ *     near face   N = closest + OBST_SENSOR_AHEAD_MM (+ any back-off)
+ *     out leg     N - E >= cos45 x W + sqrt2 x m, else back off first
+ *     far face    F = N + OBST_DEPTH_MAX_MM
+ *     return at   S = F + E - offset + cos45 x W + sqrt2 x m
+ *
+ * closest is pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM - OBST_MARGIN_MM
+ * (see avoidance_plan()).  The out leg covers offset_mm, so the straight
+ * leg is S - offset_mm.
  *
  * @param[in] p_plan Plan with AVOID_TURN_LEFT or AVOID_TURN_RIGHT.
  *
@@ -782,17 +1003,43 @@ bypass (avoidance_plan_t const * p_plan)
 {
     float32_t side =
         (AVOID_TURN_LEFT == p_plan->action) ? SIDE_LEFT : SIDE_RIGHT;
-    bool b_ok = false;
+    float32_t diagonal = p_plan->offset_mm * DIAGONAL_PER_SIDE;
+    float32_t inner    = (COS_45 * CAR_WIDTH_MM)
+                      + (DIAGONAL_PER_SIDE * OBST_CORNER_MARGIN_MM);
+    float32_t edge     = p_plan->offset_mm - (CAR_WIDTH_MM / 2.0f)
+                     - OBST_MARGIN_MM;
+    float32_t near     = (p_plan->pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM
+                      - OBST_MARGIN_MM)
+                     + OBST_SENSOR_AHEAD_MM;
+    float32_t back     = (edge + inner) - near;
+    float32_t straight = 0.0f;
+    bool      b_ok     = true;
 
+    back     = (back > 0.0f) ? back : 0.0f;
+    straight = ((near + back + OBST_DEPTH_MAX_MM + edge + inner)
+                - p_plan->offset_mm)
+               - p_plan->offset_mm;
+    straight = (straight > 0.0f) ? straight : 0.0f;
     obstacle_monitor_enable(false);
-    b_ok = (turn_side(side, QUARTER_TURN))
-           && (forward(p_plan->offset_mm, SPEED_SLOW_MM_S))
-           && (turn_side(-side, QUARTER_TURN))
-           && (pass_obstacle(side, p_plan->offset_mm))
-           && (turn_side(-side, QUARTER_TURN))
-           && (seek_line(p_plan->offset_mm + SEEK_EXTRA_MM))
-           && (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
-           && (turn_side(side, QUARTER_TURN)) && (reacquire_line(side));
+
+    if (back > 0.0f)
+    {
+        /* Too close for the out leg to clear the near corner. */
+        motion_move_backward(back, SPEED_SLOW_MM_S);
+        b_ok = run_move(false);
+    }
+
+    b_ok = b_ok && (turn_side(side, EIGHTH_TURN))
+           && (forward(diagonal, SPEED_BYPASS_MM_S))
+           && (turn_side(-side, EIGHTH_TURN)) && (pass_obstacle(straight))
+           && (turn_side(-side, EIGHTH_TURN))
+           /* Back along the 45 deg leg until the IR row meets the line,
+              then line following takes over at the settling speed (no
+              turn to line up first).  The line not met: line up and
+              search as before. */
+           && ((diagonal_to_line(diagonal + REJOIN_EXTRA_MM))
+               || ((!gb_abort) && (turn_side(side, EIGHTH_TURN))
+                   && (reacquire_line(side))));
     servo_set_angle(SERVO_CENTRE_DEG);
     obstacle_monitor_enable(true);
 
@@ -800,20 +1047,58 @@ bypass (avoidance_plan_t const * p_plan)
 }
 
 /*!
- * @brief Obstacle state (Buddy 5 with Buddy 2): stop, scan, plan and act.
+ * @brief Return leg of a bypass: drive forward until either line sensor
+ *        sees the line, then hand over to line following (settling).
+ *
+ * @param[in] dist_mm Longest distance to drive.
+ *
+ * @return true if the line was met.
  */
-static void
-handle_obstacle (void)
+static bool
+diagonal_to_line (float32_t dist_mm)
 {
-    avoidance_profile_t prof;
-    avoidance_plan_t    plan;
-    motion_status_t     motion;
-    INT                 offset_mm = 0;
+    ir_sensor_snapshot_t ir_snap;
+    uint32_t             waited = 0u;
+    int32_t              result = MOTION_WAIT_BUSY;
+    bool                 b_seen = false;
+
+    motion_move_forward(dist_mm, SPEED_BYPASS_MM_S);
+
+    while ((MOTION_WAIT_BUSY == result) && (!b_seen) && (!gb_abort)
+           && (waited <= MOVE_TIMEOUT_MS))
+    {
+        result = motion_wait(LOOP_MS);
+        poll_inputs();
+        ir_sensor_read(&ir_snap);
+        b_seen = (ir_snap.norm[IR_LEFT] > REJOIN_SEEN_LEVEL)
+                 || (ir_snap.norm[IR_RIGHT] > REJOIN_SEEN_LEVEL);
+        waited += LOOP_MS;
+    }
 
     motion_stop();
-    (void) tk_dly_tsk(STOP_SETTLE_MS);
-    (void) obstacle_scan(&prof);
-    plan             = avoidance_plan(&prof, g_attempts);
+
+    if (b_seen && (!gb_abort))
+    {
+        line_follow_init(&g_lf);
+        start_settling();
+    }
+
+    return (b_seen && (!gb_abort));
+}
+
+/*!
+ * @brief Plan and carry out the avoidance action for a completed scan.
+ *
+ * @param[in] p_prof Obstacle profile from obstacle_scan().
+ */
+static void
+act_on_scan (avoidance_profile_t const * p_prof)
+{
+    avoidance_plan_t plan;
+    motion_status_t  motion;
+    INT              offset_mm = 0;
+
+    plan             = avoidance_plan(p_prof, g_attempts);
     g_st.last_action = plan.action;
     offset_mm        = car_math_round(plan.offset_mm);
 
@@ -827,6 +1112,7 @@ handle_obstacle (void)
             g_attempts = 0u;
             motion_get_status(&motion);
             g_front_ignore_until = motion.odo_mm + FRONT_IGNORE_MM;
+            start_settling();
             set_state(VS_LINE_FOLLOW, "path clear");
         break;
 
@@ -834,7 +1120,7 @@ handle_obstacle (void)
             /* Back off; the state stays OBSTACLE, so it re-scans. */
             g_attempts++;
             motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
-            (void) run_move();
+            (void) run_move(false);
         break;
 
         case AVOID_TURN_LEFT:
@@ -845,7 +1131,17 @@ handle_obstacle (void)
             if (bypass(&plan))
             {
                 g_st.obstacles_passed++;
+                gb_no_line_yet = false;
                 set_state(VS_LINE_FOLLOW, "obstacle bypassed");
+            }
+            else if (gb_abort)
+            {
+                /* Stopped: handle_requests() sets the state next loop. */
+            }
+            else if (gb_path_blocked)
+            {
+                /* Something ahead on the pass: stay off it. */
+                set_state(VS_STOPPED, "path blocked");
             }
             else
             {
@@ -863,40 +1159,166 @@ handle_obstacle (void)
 }
 
 /*!
- * @brief Take a decoded barcode, if any, as the pending navigation
- *        command.
+ * @brief Obstacle state (Buddy 5 with Buddy 2): stop, back off after an
+ *        impact, scan, then plan and act.  A STOP during the reverse or the
+ *        scan skips the rest; handle_requests() then stops the car.
  */
 static void
-take_barcode (void)
+handle_obstacle (void)
+{
+    avoidance_profile_t prof;
+
+    motion_stop();
+    wait_polled(STOP_SETTLE_MS);
+
+    /* After an impact the obstacle can be closer than US_MIN_MM, where the
+       sonar gets no echo and the scan would report a clear path. */
+    if (gb_after_impact)
+    {
+        gb_after_impact = false;
+        motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
+        (void) run_move(false);
+    }
+
+    if (!gb_abort)
+    {
+        (void) obstacle_scan(&prof, stop_requested);
+    }
+
+    if (!gb_abort)
+    {
+        act_on_scan(&prof);
+    }
+}
+
+/*!
+ * @brief Take a decoded barcode, if any, as the pending navigation
+ *        command.
+ *
+ * @param[in] odo_mm Current odometer reading.
+ */
+static void
+take_barcode (float32_t odo_mm)
 {
     barcode_event_t event;
 
     if ((barcode_get_event(&event, TMO_POL)) && (NAV_NONE != event.cmd))
     {
         g_st.pending_nav = event.cmd;
-        g_st.pending_code = event.text[0];
         g_st.barcodes++;
+        g_pending_odo    = odo_mm;
+        gb_left_junction = false;
+        gb_bar_junction  = false;
+    }
+
+    /* A nav= command is handled exactly like a barcode (not counted). */
+    if (NAV_NONE != g_nav_request)
+    {
+        g_st.pending_nav = g_nav_request;
+        g_nav_request    = NAV_NONE;
+        g_pending_odo    = odo_mm;
+        gb_left_junction = false;
+        gb_bar_junction  = false;
+    }
+
+    /* Only a junction met after the command counts: the barcode's own bars
+       (or a junction the car is still on) must not trigger the turn. */
+    if (LINE_JUNCTION != g_st.line_state)
+    {
+        gb_left_junction = true;
     }
 }
 
 /*!
+ * @brief Measure each black stretch under the barcode sensor.  One of
+ *        NAV_JUNCTION_BAR_MIN_MM..MAX_MM is the junction line; it counts
+ *        once the sensor is past it (on white again).
+ *
+ * @param[in] odo_mm Current odometer reading.
+ */
+static void
+watch_junction_bar (float32_t odo_mm)
+{
+    bool      b_black = ir_sensor_barcode_is_black();
+    float32_t width   = odo_mm - g_bar_start_odo;
+
+    if (b_black && (!gb_bar_black))
+    {
+        g_bar_start_odo = odo_mm;
+    }
+    else if ((!b_black) && gb_bar_black && (width >= NAV_JUNCTION_BAR_MIN_MM)
+             && (width <= NAV_JUNCTION_BAR_MAX_MM))
+    {
+        gb_bar_junction = true;
+
+        /* Casts: tm_printf() takes the kernel's UB string type (ASCII);
+           the width is a few tens of mm, so it fits INT. */
+        (void) tm_printf((UB const *) "[vehicle] junction line %d mm\n",
+                         (INT) width);
+    }
+    else
+    {
+        /* Still on the same colour, or a bar of another width. */
+    }
+
+    gb_bar_black = b_black;
+}
+
+/*!
  * @brief Whether the pending navigation command should run now: at the
- *        next junction, including U-turns. No distance fallback may turn
- *        the car before a junction.
+ *        next junction reached after the command (the barcode sensor
+ *        past the junction line, or with NAV_LINE_JUNCTION the line
+ *        sensors on one; or at once, if so configured), or after
+ *        NAV_PENDING_MAX_MM without a junction.
+ *
+ * @param[in] odo_mm Current odometer reading.
  *
  * @return true to execute the pending command.
  */
 static bool
-nav_due (void)
+nav_due (float32_t odo_mm)
 {
     barcode_decode_nav_t pending = g_st.pending_nav;
 
-    return ((NAV_NONE != pending) && (LINE_JUNCTION == g_st.line_state));
+    return ((NAV_NONE != pending)
+            && ((0 == NAV_EXECUTE_AT_JUNCTION) || gb_bar_junction
+                || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
+                    && (LINE_JUNCTION == g_st.line_state))
+                || ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM)));
 }
 
 /*!
- * @brief Whether an obstacle is ahead (front sonar) or the car was hit
- *        (IMU impact).  Updates the published front distance.
+ * @brief NAV_TURN reason: the command's name, with ", no junction" when it
+ *        ran because NAV_PENDING_MAX_MM passed without a junction (the
+ *        dashboard shows where a barcode turn happened).
+ *
+ * @param[in] pending Command about to run (nav_due() was true).
+ *
+ * @return Reason string (a literal in packed.c's table).
+ */
+static char const *
+nav_reason (barcode_decode_nav_t pending)
+{
+    static char const * const p_no_junction[] = {
+        "", "LEFT, no junction", "RIGHT, no junction",
+        "STRAIGHT, no junction"};
+    bool b_junction = gb_bar_junction
+                      || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
+                          && (LINE_JUNCTION == g_st.line_state));
+    bool b_no_junction = (0 != NAV_EXECUTE_AT_JUNCTION) && (!b_junction)
+                         && (pending > NAV_NONE) && (pending < NAV_UTURN);
+
+    return (b_no_junction ? p_no_junction[pending]
+                          : barcode_decode_command_name(pending));
+}
+
+/*!
+ * @brief Whether an obstacle is ahead (front sonar, confirmed by
+ *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
+ *        Both triggers are ignored while the IMU reports the car on a hump:
+ *        the sonar sees the floor when the nose dips, and the landing jolt
+ *        can look like an impact.  Updates the published front distance
+ *        and records whether an impact was the reason.
  *
  * @param[in] odo_mm Current odometer reading.
  *
@@ -906,22 +1328,23 @@ static bool
 obstacle_due (float32_t odo_mm)
 {
     imu_status_t imu;
-    int32_t      front   = obstacle_front_mm();
+    bool         b_hump  = false;
     bool         b_ahead = false;
     bool         b_hit   = false;
 
-    g_st.front_mm = front;
+    g_st.front_mm = obstacle_front_mm();
     imu_get_status(&imu);
-    b_ahead = (ULTRASONIC_NO_ECHO != front) && (front < OBST_DETECT_MM)
-              && (odo_mm > g_front_ignore_until);
-    b_hit = (imu.impacts > g_seen_impacts);
+    b_hump = (HUMP_FLAT != imu.hump.state);
+    b_ahead =
+        (!b_hump) && (obstacle_ahead()) && (odo_mm > g_front_ignore_until);
+    b_hit = (0 != OBST_ON_IMPACT) && (!b_hump)
+            && (imu.impacts > g_seen_impacts);
 
-    /* The IMU clears its impact counter at the start of a run
-       (imu_reset_run()); a smaller count is that reset, not an impact. */
-    if (b_ahead || b_hit || (imu.impacts < g_seen_impacts))
-    {
-        g_seen_impacts = imu.impacts;
-    }
+    /* Always follow the IMU's impact counter: an impact on a hump is
+       dropped, not kept for later, and a smaller count is the reset at the
+       start of a run (imu_reset_run()), not an impact. */
+    g_seen_impacts  = imu.impacts;
+    gb_after_impact = b_hit;
 
     return (b_ahead || b_hit);
 }
@@ -935,6 +1358,7 @@ handle_line_follow (void)
 {
     ir_sensor_snapshot_t ir_snap;
     motion_status_t      motion;
+    imu_status_t         imu;
     float32_t            steer = 0.0f;
     float32_t            speed = 0.0f;
 
@@ -944,18 +1368,25 @@ handle_line_follow (void)
                                            ir_snap.norm[IR_RIGHT],
                                            motion.odo_mm - g_prev_odo, LOOP_MS);
     g_prev_odo      = motion.odo_mm;
-    take_barcode();
+    take_barcode(motion.odo_mm);
+    watch_junction_bar(motion.odo_mm);
 
-    if (nav_due())
+    if (gb_no_line_yet)
+    {
+        g_st.line_state  = LINE_ON; /* no line: never lost, no turns */
+        g_st.pending_nav = NAV_NONE;
+    }
+
+    if (nav_due(motion.odo_mm))
     {
         motion_stop();
-        set_state(VS_NAV_TURN, barcode_decode_command_name(g_st.pending_nav));
+        set_state(VS_NAV_TURN, nav_reason(g_st.pending_nav));
     }
     else if (LINE_LOST == g_st.line_state)
     {
         set_state(VS_LINE_SEARCH, "line lost");
     }
-    else if (FULL_MISSION && (obstacle_due(motion.odo_mm)))
+    else if (obstacle_due(motion.odo_mm))
     {
         motion_stop();
         set_state(VS_OBSTACLE, "obstacle ahead / impact");
@@ -965,9 +1396,32 @@ handle_line_follow (void)
         steer = line_follow_steer(&g_lf, ir_snap.norm[IR_LEFT],
                                   ir_snap.norm[IR_RIGHT], DT_S);
 
-        /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t. */
-        speed = line_follow_speed((float32_t) g_st.cruise_mm_s, g_lf.error);
+        /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t.
+           On a hump: a push up the ramp, held back coming down. */
+        imu_get_status(&imu);
+        speed = (HUMP_CLIMBING == imu.hump.state)     ? SPEED_HUMP_UP_MM_S
+                : (HUMP_DESCENDING == imu.hump.state) ? SPEED_HUMP_DOWN_MM_S
+                : (float32_t) g_st.cruise_mm_s;
+        gb_settling = gb_settling && (motion.odo_mm < g_settle_end_odo)
+                      && ((now_ms() - g_settle_start_ms) < LINE_SETTLE_MAX_MS);
+
+        if (gb_settling)
+        {
+            /* Align, then go: slow, with firm proportional steering. */
+            speed = (speed > SPEED_SLOW_MM_S) ? SPEED_SLOW_MM_S : speed;
+            steer = LINE_SETTLE_KP * g_lf.error;
+        }
+
+        speed = line_follow_speed(speed, g_lf.error);
         g_st.line_error = g_lf.error;
+
+        if (gb_no_line_yet)
+        {
+            /* Cast: as above. */
+            speed = (float32_t) g_st.cruise_mm_s;
+            steer = 0.0f;
+        }
+
         motion_set_velocity(speed - steer, speed + steer);
     }
 }
@@ -984,56 +1438,55 @@ handle_line_search (void)
     {
         set_state(VS_LINE_FOLLOW, "line reacquired");
     }
-    else if (VS_LINE_SEARCH == g_st.state)
+    else if (!gb_abort)
     {
         set_state(VS_STOPPED, "line not found / end");
     }
     else
     {
-        /* Aborted: the stop request sets the state. */
+        /* Stopped: handle_requests() sets the state on the next loop. */
     }
 }
 
 /*!
- * @brief Begin a mission run.
+ * @brief Begin a mission run.  Barcodes decoded while the car stood still
+ *        (pushed by hand, or seen during the calibration spin) are
+ *        discarded: they are not commands for this run.
  */
 static void
 start_run (void)
 {
-    imu_status_t imu;
+    imu_status_t    imu;
+    barcode_event_t stale;
+    uint32_t        discarded = 0u;
 
-    if (gb_stop_pending || (!hal_gpio_get(PIN_BTN_STOP)))
+    while (barcode_get_event(&stale, TMO_POL))
     {
-        motion_emergency_stop();
-        set_state(VS_STOPPED, "stop still active");
+        discarded++;
     }
-    else if (!barcode_decode_get_mapping(NULL))
-    {
-        set_state(VS_IDLE, "configure barcode mapping before start");
-    }
-    else
-    {
-        motion_clear_stop();
-        /* Both modes discard scans collected before this run. */
-        barcode_set_enabled(false);
-        barcode_set_enabled(true);
 
-        if (FULL_MISSION)
-        {
-            imu_reset_run();
-            imu_get_status(&imu);
-            g_seen_impacts = imu.impacts;
-        }
-
-        reset_line_follow();
-        g_st.pending_nav      = NAV_NONE;
-        g_st.pending_code     = '\0';
-        g_st.barcodes         = 0u;
-        g_st.obstacles_passed = 0u;
-        g_attempts            = 0u;
-        g_run_start_ms        = now_ms();
-        set_state(VS_LINE_FOLLOW, "start");
+    if (discarded > 0u)
+    {
+        /* Casts: tm_printf() takes the kernel's UB string type (ASCII); at
+           most a few queued events, so the count fits INT. */
+        (void) tm_printf((UB const *) "[vehicle] %d stale barcode(s) "
+                                      "discarded\n",
+                         (INT) discarded);
     }
+
+    imu_reset_run();
+    imu_get_status(&imu);
+    g_seen_impacts = imu.impacts;
+    line_follow_init(&g_lf);
+    g_st.pending_nav      = NAV_NONE;
+    g_nav_request         = NAV_NONE; /* a nav= sent while idle is dropped */
+    start_settling(); /* the car is rarely lined up at the start */
+    gb_no_line_yet        = (0 != OBST_TEST_STRAIGHT); /* line after the box */
+    g_st.barcodes         = 0u;
+    g_st.obstacles_passed = 0u;
+    g_attempts            = 0u;
+    g_run_start_ms        = now_ms();
+    set_state(VS_LINE_FOLLOW, "start");
 }
 
 /*!
@@ -1045,24 +1498,14 @@ calibrate (void)
 {
     bool b_ok = false;
 
-    /* An explicit mission calibration is an accepted movement request. */
-    motion_clear_stop();
-    barcode_set_enabled(false);
     set_state(VS_CALIBRATE, "spin 360");
     ir_sensor_calib_begin();
     imu_mag_calib_begin();
     motion_turn_left(FULL_TURN);
-    (void) run_move();
+    (void) run_move(false);
     b_ok = ir_sensor_calib_end();
     imu_mag_calib_end();
-    if (gb_abort || (motion_stop_requested()))
-    {
-        set_state(VS_STOPPED, "calibration stopped / motion failed");
-    }
-    else
-    {
-        set_state(VS_IDLE, b_ok ? "calibrated" : "IR contrast too low");
-    }
+    set_state(VS_IDLE, b_ok ? "calibrated" : "IR contrast too low");
 }
 
 /*!
@@ -1075,27 +1518,24 @@ handle_requests (void)
     {
         gb_abort = false;
         gb_start = false;
-        gb_calib = false;
-        motion_emergency_stop();
-        g_st.pending_nav = NAV_NONE;
-        g_st.pending_code = '\0';
+        motion_stop();
 
-        if (!FULL_MISSION)
+        /* Only a STOP command has a start time (not a button or fault). */
+        if (0u != g_stop_cmd_us)
         {
-            barcode_set_enabled(false);
+            timing_stop(TIMING_STOP, g_stop_cmd_us);
+            g_stop_cmd_us = 0u;
         }
 
-        if (FULL_MISSION)
-        {
-            servo_set_angle(SERVO_CENTRE_DEG);
-        }
-
-        set_state(VS_STOPPED, "stop command");
+        servo_set_angle(SERVO_CENTRE_DEG);
+        set_state(VS_STOPPED,
+                  (NULL != gp_abort_why) ? gp_abort_why : "stop command");
+        gp_abort_why = NULL;
     }
 
     if ((VS_IDLE == g_st.state) || (VS_STOPPED == g_st.state))
     {
-        if (FULL_MISSION && gb_calib)
+        if (gb_calib)
         {
             gb_calib = false;
             calibrate();
@@ -1140,10 +1580,7 @@ run_state (void)
         break;
 
         case VS_OBSTACLE:
-            if (FULL_MISSION)
-            {
-                handle_obstacle();
-            }
+            handle_obstacle();
         break;
 
         default:
@@ -1168,7 +1605,7 @@ vehicle_task (INT stacd, void * p_exinf)
     (void) p_exinf;
 
     /* The line follower is private to this task, so it is set up here. */
-    reset_line_follow();
+    line_follow_init(&g_lf);
 
     for (;;)
     {

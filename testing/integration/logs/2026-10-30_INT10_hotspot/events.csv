@@ -1,0 +1,7 @@
+pc_time,type,json
+2026-10-30T18:39:06.062,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-30T18:39:06.125,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":200}"
+2026-10-30T18:40:14.384,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-30T18:40:14.385,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-10-30T18:40:45.042,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""stop"",""ok"":1}"
+2026-10-30T18:40:45.045,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""stop command""}"

@@ -8,18 +8,23 @@
  * "#<id> " (1..999999999), which the reply repeats, e.g. "#17 gains":
  *
  *   start | stop | calibrate | gains | help | timing
- *   speed=<mm/s>                 cruise speed for line following, 60..300
+ *   speed=<mm/s>                 cruise speed for line following, 50..300
  *   pid=<kp>,<ki>,<kd>           wheel speed PID
  *   ff=<kf>,<offset_pct>         speed feed-forward + static-friction offset
  *   line=<kp>,<ki>,<kd>          line-following PID
- *   map=<forward>,<uturn>,<left>,<right>  four distinct A-Z letters
- *   mapping                      report the active barcode mapping
  *   rate=<ms>                    telemetry period, 0 = off, 50..5000
+ *   nav=<1..4>                   as if a barcode was read: 1 left,
+ *                                2 right, 3 straight, 4 U-turn (testing
+ *                                turns without barcodes; while running)
+ *   map=<1..4>,<0..42>           barcode letter for a command (same
+ *                                numbers as nav=) as its Code 39 index,
+ *                                0-9 then A=10 .. Z=35 (the dashboard
+ *                                converts letters); back to car_config.h
+ *                                at reset
  *
  * Numbers are plain decimals ("0.08", "-1.5", "12"), without exponents.
- * The tuning commands (speed=, pid=, ff=, line=) are accepted only while
- * the car is IDLE or STOPPED (command_allowed()). Mapping changes also
- * require IDLE or STOPPED. Lowercase mapping letters are normalised to A-Z.
+ * The tuning commands (speed=, pid=, ff=, line=, map=) are accepted only
+ * while the car is IDLE or STOPPED (command_allowed()).
  */
 
 #ifndef COMMAND_H
@@ -28,7 +33,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "car_types.h"
-#include "barcode_decode.h"
 
 #define COMMAND_MAX_ARGS    (3u)
 #define COMMAND_LINE_MAX    (64u) /* longest accepted command line       */
@@ -38,6 +42,9 @@
 #define COMMAND_OFFSET_MAX  (100.0f)
 #define COMMAND_RATE_MIN_MS (50)
 #define COMMAND_RATE_MAX_MS (5000)
+#define COMMAND_NAV_MIN     (1) /* NAV_LEFT  */
+#define COMMAND_NAV_MAX     (4) /* NAV_UTURN */
+#define COMMAND_SYMBOL_MAX  (42) /* last Code 39 index ('%') */
 
 typedef enum
 {
@@ -52,8 +59,8 @@ typedef enum
     COMMAND_LINE,
     COMMAND_RATE,
     COMMAND_TIMING,
+    COMMAND_NAV,
     COMMAND_MAP,
-    COMMAND_MAPPING,
     COMMAND_INVALID
 } command_id_t;
 
@@ -62,8 +69,6 @@ typedef struct
     command_id_t kind;
     uint32_t     n_args;
     float32_t    arg[COMMAND_MAX_ARGS];
-    /* Order: forward, U-turn, left, right. */
-    char         nav_letters[BARCODE_MAPPING_SIZE];
     uint32_t     req_id; /* "#<id>" prefix, 0 if none */
 } command_t;
 
@@ -78,6 +83,8 @@ typedef struct
 bool         command_parse(char const * p_text, command_t * p_cmd);
 char const * command_error(void);
 bool         command_allowed(command_id_t kind, bool b_stationary);
+bool         command_check(command_t * p_cmd);
+uint32_t     command_arg_count(command_id_t kind);
 void         command_line_init(command_line_t * p_line);
 bool command_line_feed(command_line_t * p_line, uint8_t rx_byte, char * p_out,
                        uint32_t out_size);

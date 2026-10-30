@@ -31,7 +31,8 @@ typedef enum
     VCMD_STOP,
     VCMD_CALIBRATE,
     VCMD_SET_SPEED,
-    VCMD_SET_LINE_GAINS
+    VCMD_SET_LINE_GAINS,
+    VCMD_NAV /* arg: barcode_decode_nav_t, as if that barcode was read */
 } vehicle_cmd_t;
 
 typedef struct
@@ -41,7 +42,6 @@ typedef struct
     line_follow_state_t  line_state;
     float32_t            line_error;
     barcode_decode_nav_t pending_nav;
-    char                 pending_code; /* decoded letter kept until junction */
     barcode_decode_nav_t last_nav;
     uint32_t             barcodes;
     avoidance_action_t   last_action;

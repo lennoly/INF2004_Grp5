@@ -2,9 +2,11 @@
  *
  * @brief Buddy 1 - telemetry task (see telemetry.h).
  *
- * All values are integers in documented units (tm_sprintf() has no
- * floating-point conversion): mm, mm/s, percent, permille (IR) and tenths
- * of a degree (angles).
+ * Change Requirement 1: every message is a compact binary frame
+ * (frames.h).  On MQTT the frame is the payload; on the serial console it
+ * is printed as '@' followed by its bytes in hex, so the dashboard reads
+ * both links the same way.  Command replies, gains and timing also get a
+ * short human-readable '#' line on the console.
  */
 
 #include <stdint.h>
@@ -14,6 +16,7 @@
 #include "car_config.h"
 #include "car_math.h"
 #include "motion.h"
+#include "encoder.h"
 #include "ir_sensor.h"
 #include "barcode.h"
 #include "imu.h"
@@ -24,29 +27,25 @@
 #include "console_in.h"
 #include "line_follow.h"
 #include "timing.h"
+#include "fault.h"
+#include "packed.h"
+#include "frames.h"
 #include "telemetry.h"
-
-#if defined(TM_WIFI_MQTT) && TM_WIFI_MQTT
-#include "mqtt_config.h"
-#define BROKER_TEXT MQTT_BROKER_IP
-#else
-#define BROKER_TEXT "-"
-#endif
 
 #define TASK_PRIORITY      (10)
 #define TASK_STACK         (3072)
 #define MAX_BYTES_PER_POLL (64u) /* bound the console work per tick     */
 #define GAINS_REPORT_TICKS (3u)  /* 60 ms: the vehicle applies first    */
-#define TENTHS             (10.0f)
-#define PERMILLE           (1000.0f)
 #define PERCENT            (100u)
 #define MS_PER_S           (1000u)
 #define NO_STATE_SEEN      (0xFFFFFFFFu)
 #define GAIN_TEXTS         (8u) /* 3 PID + 2 feed-forward + 3 line     */
 #define LINE_GAINS         (3u)
 #define TERMINATOR         ('\0')
-#define BYTE_MASK          (0xFFu)
-#define BITS_PER_BYTE      (8u)
+#define HEX_DIGITS         (2u)
+#define NIBBLE_BITS        (4u)
+#define NIBBLE_MASK        (0xFu)
+#define HEX_MAX            ((FRAMES_MAX_BYTES * HEX_DIGITS) + 2u)
 
 /* The WiFi test build also prints the heartbeat on the USB console, so the
    link can be watched there even while MQTT is down. */
@@ -56,12 +55,10 @@
 #define HEARTBEAT_ON_CONSOLE (false)
 #endif
 
-/* JSON output buffer; used only by the telemetry task. */
-static char g_buf[MQTT_BRIDGE_PAYLOAD_MAX];
-
-/* Cast: tm_sprintf() writes the kernel's UB bytes; the buffer only ever
-   holds ASCII text, so it is equally valid as a char string. */
-static UB * const gp_out = (UB *) g_buf;
+/* Frame and its hex text; used only by the telemetry task. */
+static uint8_t  g_frame[FRAMES_MAX_BYTES];
+static uint32_t g_frame_len = 0u;
+static char     g_hex[HEX_MAX];
 
 /* Set by telemetry_init() (init task) and by commands, read by the
    telemetry task: volatile (Rule 1.8.c). */
@@ -79,34 +76,29 @@ static uint32_t g_seen_barcode = 0u;
 static uint32_t g_seen_humps   = 0u;
 static uint32_t g_seen_scans   = 0u;
 static uint32_t g_seen_impacts = 0u;
+/* Peak jerk of the last two event checks (imu_take_peak_jerk()): the
+   impact's own jolt can land just before or after the check that sees the
+   new count.  Taken only here; events are off in the TEST_IMU / TEST_CRASH
+   builds, which read it themselves. */
+static float32_t g_jerk_prev_mg = 0.0f;
 
-/* Names indexed by mqtt_bridge_link_t. */
-static char const * const g_link_names[] = {
-    "DISABLED", "WAIT_NET", "CONNECTING", "CONNECTED", "BACKOFF"};
+static char const g_hex_chars[] = "0123456789abcdef";
 
-static void         telemetry_task(INT stacd, void * p_exinf);
-static void         handle_commands(void);
-static void         handle_command_text(char const * p_text);
-static char const * execute(command_t const * p_cmd);
-static bool         stationary(void);
-static void         emit_timing(void);
-static void         json_safe(char * p_dst, char const * p_src, uint32_t size);
-static void         emit(mqtt_bridge_topic_t topic, bool b_console);
-static void         build_telemetry(void);
-static void         send_heartbeat(void);
-static void         check_events(void);
-static void         emit_obstacle(vehicle_status_t const * p_veh);
-static void         emit_gains(void);
-static void         emit_help(void);
-static void         emit_mapping(void);
-static char const * line_name(line_follow_state_t line_state);
-static char const * link_name(mqtt_bridge_link_t link);
-static INT          to_int(float32_t value);
-static INT          tenths(float32_t value);
-static INT          permille(float32_t value);
-static INT          as_int(int32_t value);
-static UINT         ip_byte(uint32_t address, uint32_t index);
-static UINT         as_uint(uint32_t value);
+static void           telemetry_task(INT stacd, void * p_exinf);
+static void           handle_commands(void);
+static void           reply(command_t const * p_cmd, frames_error_t error,
+                            char const * p_text);
+static frames_error_t execute(command_t const * p_cmd);
+static char const *   error_text(frames_error_t error);
+static bool           stationary(void);
+static void           emit_timing(void);
+static void           emit(mqtt_bridge_topic_t topic, bool b_console);
+static void           build_telemetry(void);
+static void           send_heartbeat(void);
+static void           check_events(void);
+static void           emit_obstacle(vehicle_status_t const * p_veh);
+static void           emit_gains(void);
+static void           emit_help(void);
 
 /*!
  * @brief Choose the output streams and start the telemetry task.
@@ -208,8 +200,9 @@ telemetry_task (INT stacd, void * p_exinf)
                                    || (VS_STOPPED == veh.state));
         mqtt_bridge_get_stats(&link_stats);
 
-        if ((LINK_DISABLED != link_stats.link)
-            && ((now - last_hb) >= HEARTBEAT_PERIOD_MS))
+        /* Every link: without WiFi, emit() prints it on the console
+           (uptime, state and IMU health; the link counters stay 0). */
+        if ((now - last_hb) >= HEARTBEAT_PERIOD_MS)
         {
             last_hb = now;
             send_heartbeat();
@@ -220,14 +213,18 @@ telemetry_task (INT stacd, void * p_exinf)
 }
 
 /*!
- * @brief Commands from the serial console and from MQTT.
+ * @brief Commands: text lines from the serial console, binary command
+ *        frames from MQTT.
  */
 static void
 handle_commands (void)
 {
-    char     line[COMMAND_LINE_MAX];
-    uint8_t  rx_byte = 0u;
-    uint32_t count   = 0u;
+    char      line[COMMAND_LINE_MAX];
+    uint8_t   frame[MQTT_BRIDGE_CMD_MAX];
+    uint32_t  len     = 0u;
+    uint8_t   rx_byte = 0u;
+    uint32_t  count   = 0u;
+    command_t cmd     = {COMMAND_INVALID, 0u, {0.0f, 0.0f, 0.0f}, 0u};
 
     while ((count < MAX_BYTES_PER_POLL) && (console_in_getc(&rx_byte)))
     {
@@ -235,89 +232,79 @@ handle_commands (void)
 
         if (command_line_feed(&g_line, rx_byte, line, sizeof(line)))
         {
-            handle_command_text(line);
+            cmd.req_id = 0u;
+
+            if (command_parse(line, &cmd))
+            {
+                reply(&cmd, execute(&cmd), line);
+            }
+            else
+            {
+                reply(&cmd, FRAMES_ERR_INVALID, line);
+            }
         }
     }
 
-    while (mqtt_bridge_get_command(line, sizeof(line)))
+    while (mqtt_bridge_get_command(frame, sizeof(frame), &len))
     {
-        handle_command_text(line);
+        if (frames_parse_command(frame, len, &cmd))
+        {
+            reply(&cmd, execute(&cmd), "(mqtt)");
+        }
+        else
+        {
+            reply(&cmd, FRAMES_ERR_INVALID, "(mqtt)");
+        }
     }
 }
 
 /*!
- * @brief Parse, execute and acknowledge one command line.
+ * @brief Send the reply frame and a readable line on the console.
  *
- * @param[in] p_text NUL-terminated command line.
+ * @param[in] p_cmd  The command (kind COMMAND_INVALID if it failed).
+ * @param[in] error  FRAMES_OK or why it was refused.
+ * @param[in] p_text Where it came from (console text or "(mqtt)").
  */
 static void
-handle_command_text (char const * p_text)
+reply (command_t const * p_cmd, frames_error_t error, char const * p_text)
 {
-    command_t    cmd;
-    char         safe[COMMAND_LINE_MAX];
-    char const * p_err = NULL;
-
-    json_safe(safe, p_text, sizeof(safe));
-
-    /* Casts in this function: tm_sprintf() takes the kernel's UB string
-       type; the formats are ASCII. */
-    if (command_parse(p_text, &cmd))
-    {
-        p_err = execute(&cmd);
-
-        if ((NULL == p_err) && (COMMAND_MAP == cmd.kind))
-        {
-            emit_mapping();
-        }
-
-        (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
-                                       "\"cmd\":\"%s\",\"ok\":%d%s%s%s}",
-                          as_uint(cmd.req_id), safe, (NULL == p_err) ? 1 : 0,
-                          (NULL == p_err) ? "" : ",\"err\":\"",
-                          (NULL == p_err) ? "" : p_err,
-                          (NULL == p_err) ? "" : "\"");
-    }
-    else
-    {
-        (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"cmd\",\"id\":%u,"
-                                       "\"cmd\":\"%s\",\"ok\":0,"
-                                       "\"err\":\"%s\"}",
-                          as_uint(cmd.req_id), safe, command_error());
-    }
-
+    /* Cast: tm_printf() takes the kernel's UB string type; the literal is
+       ASCII and the id is printed as an unsigned 32-bit value. */
+    (void) tm_printf((UB const *) "# cmd #%u %s: %s%s\n",
+                     (UINT) p_cmd->req_id, p_text,
+                     (FRAMES_OK == error) ? "ok" : "refused: ",
+                     (FRAMES_OK == error) ? "" : error_text(error));
+    g_frame_len = frames_reply(g_frame, sizeof(g_frame), p_cmd->req_id,
+                               p_cmd->kind, error);
     emit(TOPIC_EVENT, true);
 }
 
 /*!
- * @brief Carry out one parsed command.  Tuning commands are refused while
+ * @brief Carry out one valid command.  Tuning commands are refused while
  *        the car is driving (CSC05 review, FR10).
  *
  * @param[in] p_cmd Valid command.
  *
- * @return NULL if it ran, otherwise the reason it did not.
+ * @return FRAMES_OK, or the reason it did not run.
  */
-static char const *
+static frames_error_t
 execute (command_t const * p_cmd)
 {
-    char const * p_err     = "only while IDLE or STOPPED";
-    bool         b_allowed = command_allowed(p_cmd->kind, stationary());
-    bool         b_ok      = b_allowed;
+    bool b_allowed = command_allowed(p_cmd->kind, stationary());
+    bool b_ok      = b_allowed;
 
     /* A refused command runs nothing: COMMAND_INVALID is the default. */
     switch (b_allowed ? p_cmd->kind : COMMAND_INVALID)
     {
         case COMMAND_START:
-            b_ok = (barcode_decode_get_mapping(NULL))
-                   && (vehicle_command(VCMD_START, 0));
+            b_ok = vehicle_command(VCMD_START, 0);
         break;
 
         case COMMAND_STOP:
             /* Test builds have no vehicle task: stop the motors directly. */
             if (!vehicle_command(VCMD_STOP, 0))
             {
-                motion_emergency_stop();
+                motion_stop();
             }
         break;
 
@@ -354,16 +341,8 @@ execute (command_t const * p_cmd)
             g_gains_due = GAINS_REPORT_TICKS;
         break;
 
-        case COMMAND_MAP:
-            b_ok = barcode_decode_set_mapping(p_cmd->nav_letters);
-        break;
-
-        case COMMAND_MAPPING:
-            emit_mapping();
-        break;
-
         case COMMAND_RATE:
-            /* Cast: command_parse() only accepts 0 or 50..5000 ms. */
+            /* Cast: command_check() only accepts 0 or 50..5000 ms. */
             g_period_ms = (uint32_t) car_math_round(p_cmd->arg[0]);
             g_gains_due = GAINS_REPORT_TICKS;
         break;
@@ -380,50 +359,63 @@ execute (command_t const * p_cmd)
             emit_timing();
         break;
 
+        case COMMAND_NAV:
+            /* As if this barcode was read (testing turns on the line). */
+            b_ok = vehicle_command(VCMD_NAV, car_math_round(p_cmd->arg[0]));
+        break;
+
+        case COMMAND_MAP:
+            /* Casts: command_check() only accepts 1..4 and 0..42. */
+            barcode_decode_set_symbol(
+                (barcode_decode_nav_t) car_math_round(p_cmd->arg[0]),
+                packed_symbol_char((uint32_t) car_math_round(p_cmd->arg[1])));
+            (void) tm_printf((UB const *) "# map L=%c R=%c S=%c U=%c\n",
+                             (INT) barcode_decode_symbol(NAV_LEFT),
+                             (INT) barcode_decode_symbol(NAV_RIGHT),
+                             (INT) barcode_decode_symbol(NAV_STRAIGHT),
+                             (INT) barcode_decode_symbol(NAV_UTURN));
+        break;
+
         default:
-            /* Refused above: p_err keeps its reason. */
+            /* Refused: the result below says why. */
         break;
     }
 
-    if (b_allowed)
-    {
-        p_err = b_ok ? NULL : "not available in this build";
-
-        if ((COMMAND_START == p_cmd->kind)
-            && (!barcode_decode_get_mapping(NULL)))
-        {
-            p_err = "configure map=forward,uturn,left,right before start";
-        }
-    }
-
-    return (p_err);
+    return ((!b_allowed) ? FRAMES_ERR_DRIVING
+                         : (b_ok ? FRAMES_OK : FRAMES_ERR_UNAVAILABLE));
 }
 
 /*!
- * @brief Copy text into a JSON string safely (double quotes and
- *        backslashes become apostrophes).
+ * @brief Readable text for a reply error code.
  *
- * @param[out] p_dst Destination, NUL-terminated.
- * @param[in]  p_src Source text.
- * @param[in]  size  Size of p_dst in bytes (at least 1).
+ * @param[in] error Error code.
+ *
+ * @return Text for the console.
  */
-static void
-json_safe (char * p_dst, char const * p_src, uint32_t size)
+static char const *
+error_text (frames_error_t error)
 {
-    uint32_t idx = 0u;
+    char const * p_text = command_error();
 
-    for (idx = 0u; (idx < (size - 1u)) && (TERMINATOR != p_src[idx]); idx++)
+    if (FRAMES_ERR_DRIVING == error)
     {
-        p_dst[idx] =
-            (('"' == p_src[idx]) || ('\\' == p_src[idx])) ? '\'' : p_src[idx];
+        p_text = "only while IDLE or STOPPED";
+    }
+    else if (FRAMES_ERR_UNAVAILABLE == error)
+    {
+        p_text = "not available in this build";
+    }
+    else
+    {
+        /* FRAMES_ERR_INVALID: the parser's reason. */
     }
 
-    p_dst[idx] = TERMINATOR;
+    return (p_text);
 }
 
 /*!
- * @brief Publish g_buf if MQTT is enabled; echo it to the console when
- *        asked to or when there is no MQTT.
+ * @brief Publish g_frame if MQTT is enabled; print it on the console as
+ *        '@' + hex when asked to or when there is no MQTT.
  *
  * @param[in] topic     Topic to publish on.
  * @param[in] b_console true to print it on the console as well.
@@ -432,74 +424,60 @@ static void
 emit (mqtt_bridge_topic_t topic, bool b_console)
 {
     mqtt_bridge_stats_t link_stats;
+    uint32_t            idx = 0u;
 
     mqtt_bridge_get_stats(&link_stats);
 
-    if (LINK_DISABLED != link_stats.link)
+    if ((LINK_DISABLED != link_stats.link) && (g_frame_len > 0u))
     {
-        (void) mqtt_bridge_publish(topic, g_buf);
+        (void) mqtt_bridge_publish(topic, g_frame, g_frame_len);
     }
 
-    /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
-    if (b_console || (LINK_DISABLED == link_stats.link))
+    if ((b_console || (LINK_DISABLED == link_stats.link))
+        && (g_frame_len > 0u))
     {
-        (void) tm_printf((UB const *) "%s\n", g_buf);
+        g_hex[0] = '@';
+
+        for (idx = 0u; idx < g_frame_len; idx++)
+        {
+            g_hex[1u + (idx * HEX_DIGITS)] =
+                g_hex_chars[(g_frame[idx] >> NIBBLE_BITS) & NIBBLE_MASK];
+            g_hex[2u + (idx * HEX_DIGITS)] =
+                g_hex_chars[g_frame[idx] & NIBBLE_MASK];
+        }
+
+        g_hex[1u + (g_frame_len * HEX_DIGITS)] = TERMINATOR;
+
+        /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
+        (void) tm_printf((UB const *) "%s\n", g_hex);
     }
 }
 
 /*!
- * @brief Full snapshot into g_buf (about 350 bytes worst case, which fits
- *        the 512-byte slot).
+ * @brief Telemetry frame into g_frame (43 bytes).
  */
 static void
 build_telemetry (void)
 {
-    vehicle_status_t     veh;
-    motion_status_t      motion;
+    frames_telemetry_t   tel;
     ir_sensor_snapshot_t ir_snap;
     barcode_stats_t      bc_stats;
-    imu_status_t         imu;
-    INT                  count = 0;
+    uint32_t             idx = 0u;
 
-    vehicle_get_status(&veh);
-    motion_get_status(&motion);
+    vehicle_get_status(&tel.veh);
+    motion_get_status(&tel.motion);
+    imu_get_status(&tel.imu);
     ir_sensor_read(&ir_snap);
     barcode_get_stats(&bc_stats);
-    imu_get_status(&imu);
 
-    /* Casts in this function: tm_sprintf() takes the kernel's UB string
-       type; the formats are ASCII. */
-    count = tm_sprintf(
-        gp_out,
-        (UB const *) "{\"t\":%u,\"st\":\"%s\",\"spd\":[%d,%d],"
-                     "\"tgt\":[%d,%d],\"pwm\":[%d,%d],\"enc\":[%u,%u],"
-                     "\"odo\":%d,\"hdg\":%d,",
-        as_uint(veh.run_ms), vehicle_state_name(veh.state),
-        to_int(motion.speed_l_mm_s), to_int(motion.speed_r_mm_s),
-        to_int(motion.target_l_mm_s), to_int(motion.target_r_mm_s),
-        to_int(motion.pwm_l_pct), to_int(motion.pwm_r_pct),
-        as_uint(motion.ticks_l), as_uint(motion.ticks_r), to_int(motion.odo_mm),
-        tenths(motion.heading_deg));
-    count += tm_sprintf(
-        &gp_out[count],
-        (UB const *) "\"ir\":[%d,%d,%d],\"le\":%d,\"ls\":\"%s\","
-                     "\"bc\":\"%s\",\"nav\":\"%s\",\"nbc\":%u,",
-        permille(ir_snap.norm[IR_LEFT]), permille(ir_snap.norm[IR_RIGHT]),
-        permille(ir_snap.norm[IR_BARCODE]), permille(veh.line_error),
-        line_name(veh.line_state), bc_stats.last.text,
-        barcode_decode_command_name(veh.last_nav), as_uint(veh.barcodes));
-    (void) tm_sprintf(
-        &gp_out[count],
-        (UB const *) "\"pitch\":%d,\"roll\":%d,\"yaw\":%d,\"rate\":%d,"
-                     "\"hump\":{\"h\":%d,\"pk\":%d,\"max\":%d,\"n\":%u},"
-                     "\"ev\":\"%s\",\"front\":%d,\"act\":\"%s\","
-                     "\"nobs\":%u}",
-        tenths(imu.pitch_deg), tenths(imu.roll_deg), tenths(imu.heading_deg),
-        tenths(imu.enc_rate_dps), to_int(imu.hump.height_mm),
-        to_int(imu.hump.peak_mm), to_int(imu.hump.max_peak_mm),
-        as_uint(imu.hump.humps), terrain_event_name(imu.event),
-        as_int(veh.front_mm), avoidance_action_name(veh.last_action),
-        as_uint(veh.obstacles_passed));
+    for (idx = 0u; idx < FRAMES_IR_COUNT; idx++)
+    {
+        tel.ir_norm[idx] = ir_snap.norm[idx];
+    }
+
+    tel.barcode = bc_stats.last.symbol;
+    tel.faults  = fault_mask();
+    g_frame_len = frames_telemetry(g_frame, sizeof(g_frame), &tel);
 }
 
 /*!
@@ -508,36 +486,48 @@ build_telemetry (void)
 static void
 send_heartbeat (void)
 {
+    frames_heartbeat_t  beat;
     vehicle_status_t    veh;
     imu_status_t        imu;
     mqtt_bridge_stats_t link_stats;
     SYSTIM              now = {0, 0u};
+    uint32_t            idx = 0u;
 
     vehicle_get_status(&veh);
     imu_get_status(&imu);
     mqtt_bridge_get_stats(&link_stats);
-    (void) tk_get_tim(&now);
+    /* Operating time since boot: the system clock (tk_get_tim) starts at
+       a calendar base, so its seconds always clamped to the 20-bit
+       maximum (up=1048575 in every heartbeat, 29 Oct). */
+    (void) tk_get_otm(&now);
     g_hb_seq++;
 
-    /* Cast: tm_sprintf() takes the kernel's UB string type; ASCII. */
-    (void) tm_sprintf(
-        gp_out,
-        (UB const *) "{\"up\":%u,\"seq\":%u,\"st\":\"%s\",\"link\":\"%s\","
-                     "\"pub\":%u,\"drop\":%u,\"rx\":%u,\"recon\":%u,"
-                     "\"rejoin\":%u,\"wreset\":%u,\"wifi\":\"%s\","
-                     "\"ip\":\"%u.%u.%u.%u\",\"broker\":\"%s\","
-                     "\"tries\":%u,\"why\":\"%s\",\"imu\":%d,"
-                     "\"i2cerr\":%u}",
-        as_uint(now.lo / MS_PER_S), as_uint(g_hb_seq),
-        vehicle_state_name(veh.state), link_name(link_stats.link),
-        as_uint(link_stats.published), as_uint(link_stats.dropped),
-        as_uint(link_stats.commands), as_uint(link_stats.reconnects),
-        as_uint(link_stats.rejoins), as_uint(link_stats.wifi_restarts),
-        link_stats.p_wifi, ip_byte(link_stats.address, 0u),
-        ip_byte(link_stats.address, 1u), ip_byte(link_stats.address, 2u),
-        ip_byte(link_stats.address, 3u), BROKER_TEXT,
-        as_uint(link_stats.attempts), link_stats.p_why, imu.b_ok ? 1 : 0,
-        as_uint(imu.i2c_errors));
+    /* Casts: enumeration constants are small and non-negative. */
+    beat.up_s          = now.lo / MS_PER_S;
+    beat.seq           = g_hb_seq;
+    beat.state         = (uint32_t) veh.state;
+    beat.link          = (uint32_t) link_stats.link;
+    beat.published     = link_stats.published;
+    beat.dropped       = link_stats.dropped;
+    beat.commands      = link_stats.commands;
+    beat.reconnects    = link_stats.reconnects;
+    beat.rejoins       = link_stats.rejoins;
+    beat.wifi_restarts = link_stats.wifi_restarts;
+    beat.wifi_code     = link_stats.wifi_code;
+    beat.address       = link_stats.address;
+    beat.attempts      = link_stats.attempts;
+    beat.why_code      = link_stats.why_code;
+    beat.b_imu_ok      = imu.b_ok;
+    beat.i2c_errors    = imu.i2c_errors;
+    beat.faults        = fault_mask();
+
+    for (idx = 0u; idx < (uint32_t) FAULT_COUNT; idx++)
+    {
+        /* Cast: idx is below FAULT_COUNT, a valid fault_id_t. */
+        beat.fault_counts[idx] = fault_count((fault_id_t) idx);
+    }
+
+    g_frame_len = frames_heartbeat(g_frame, sizeof(g_frame), &beat);
     emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 
@@ -551,42 +541,36 @@ check_events (void)
     barcode_stats_t  bc_stats;
     imu_status_t     imu;
 
+    float32_t jerk_mg = imu_take_peak_jerk();
+    float32_t shock_mg = (jerk_mg > g_jerk_prev_mg) ? jerk_mg : g_jerk_prev_mg;
+
+    g_jerk_prev_mg = jerk_mg;
     vehicle_get_status(&veh);
     barcode_get_stats(&bc_stats);
     imu_get_status(&imu);
 
-    /* Casts in this function: tm_sprintf() takes the kernel's UB string
-       type; the formats are ASCII. */
     if (veh.state_seq != g_seen_state)
     {
         g_seen_state = veh.state_seq;
-        (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"state\",\"st\":\"%s\","
-                                       "\"why\":\"%s\"}",
-                          vehicle_state_name(veh.state),
-                          (NULL != veh.p_reason) ? veh.p_reason : "");
+        g_frame_len  = frames_state(g_frame, sizeof(g_frame), veh.state,
+                                    packed_reason_code(veh.p_reason));
         emit(TOPIC_EVENT, false);
     }
 
     if (bc_stats.decoded != g_seen_barcode)
     {
         g_seen_barcode = bc_stats.decoded;
-        (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"barcode\",\"code\":"
-                                       "\"%s\",\"cmd\":\"%s\"}",
-                          bc_stats.last.text,
-                          barcode_decode_command_name(bc_stats.last.cmd));
+        g_frame_len    = frames_barcode(g_frame, sizeof(g_frame),
+                                        bc_stats.last.symbol,
+                                        bc_stats.last.cmd);
         emit(TOPIC_EVENT, false);
     }
 
     if (imu.hump.humps != g_seen_humps)
     {
         g_seen_humps = imu.hump.humps;
-        (void) tm_sprintf(gp_out,
-                          (UB const *) "{\"type\":\"hump\",\"n\":%u,"
-                                       "\"peak_mm\":%d,\"max_mm\":%d}",
-                          as_uint(imu.hump.humps), to_int(imu.hump.peak_mm),
-                          to_int(imu.hump.max_peak_mm));
+        g_frame_len  = frames_hump(g_frame, sizeof(g_frame), imu.hump.humps,
+                                   imu.hump.peak_mm, imu.hump.max_peak_mm);
         emit(TOPIC_EVENT, true);
     }
 
@@ -597,12 +581,11 @@ check_events (void)
         g_seen_impacts = imu.impacts; /* counter cleared for a new run */
     }
 
-    /* Cast: tm_sprintf() takes the kernel's UB string type; ASCII. */
     if (imu.impacts > g_seen_impacts)
     {
         g_seen_impacts = imu.impacts;
-        (void) tm_sprintf(gp_out, (UB const *) "{\"type\":\"impact\",\"n\":%u}",
-                          as_uint(imu.impacts));
+        g_frame_len    = frames_impact(g_frame, sizeof(g_frame), imu.impacts,
+                                       shock_mg);
         emit(TOPIC_EVENT, true);
     }
 }
@@ -620,116 +603,135 @@ emit_obstacle (vehicle_status_t const * p_veh)
 
     obstacle_get_last(&prof, &scans);
 
-    /* Cast: tm_sprintf() takes the kernel's UB string type; ASCII. */
     if (scans != g_seen_scans)
     {
         g_seen_scans = scans;
-        (void) tm_sprintf(
-            gp_out,
-            (UB const *) "{\"type\":\"obstacle\",\"found\":%d,\"dist\":%d,"
-                         "\"ang\":%d,\"width\":%d,\"centre\":%d,\"cl\":%d,"
-                         "\"cr\":%d,\"act\":\"%s\"}",
-            prof.b_found ? 1 : 0, as_int(prof.closest_mm),
-            as_int(prof.closest_angle), to_int(prof.width_mm),
-            to_int(prof.centre_mm), as_int(prof.clear_left_mm),
-            as_int(prof.clear_right_mm),
-            avoidance_action_name(p_veh->last_action));
+        g_frame_len  = frames_obstacle(g_frame, sizeof(g_frame), &prof,
+                                       p_veh->last_action);
         emit(TOPIC_EVENT, false);
     }
 }
 
 /*!
- * @brief Current gains as one event line (plain decimal values).
+ * @brief Current gains: one frame plus a readable console line.
  */
 static void
 emit_gains (void)
 {
-    motion_gains_t   gains;
+    frames_gains_t   gains;
+    motion_gains_t   speed;
     vehicle_status_t veh;
-    float32_t        line_gains[LINE_GAINS];
     char             text[GAIN_TEXTS][COMMAND_DECIMAL_MAX];
 
-    motion_get_gains(&gains);
+    motion_get_gains(&speed);
     vehicle_get_status(&veh);
-    line_follow_get_gains(&line_gains[0], &line_gains[1], &line_gains[2]);
-    command_format_decimal(text[0], gains.gain_p);
-    command_format_decimal(text[1], gains.gain_i);
-    command_format_decimal(text[2], gains.gain_d);
-    command_format_decimal(text[3], gains.gain_ff);
-    command_format_decimal(text[4], gains.offset_pct);
-    command_format_decimal(text[5], line_gains[0]);
-    command_format_decimal(text[6], line_gains[1]);
-    command_format_decimal(text[7], line_gains[2]);
+    gains.pid[0] = speed.gain_p;
+    gains.pid[1] = speed.gain_i;
+    gains.pid[2] = speed.gain_d;
+    gains.ff[0]  = speed.gain_ff;
+    gains.ff[1]  = speed.offset_pct;
+    line_follow_get_gains(&gains.line[0], &gains.line[1], &gains.line[2]);
+    gains.speed_mm_s = veh.cruise_mm_s;
+    gains.rate_ms    = g_period_ms;
+    command_format_decimal(text[0], gains.pid[0]);
+    command_format_decimal(text[1], gains.pid[1]);
+    command_format_decimal(text[2], gains.pid[2]);
+    command_format_decimal(text[3], gains.ff[0]);
+    command_format_decimal(text[4], gains.ff[1]);
+    command_format_decimal(text[5], gains.line[0]);
+    command_format_decimal(text[6], gains.line[1]);
+    command_format_decimal(text[7], gains.line[2]);
 
-    /* Cast: tm_sprintf() takes the kernel's UB string type; ASCII. */
-    (void) tm_sprintf(gp_out,
-                      (UB const *) "{\"type\":\"gains\",\"pid\":[%s,%s,%s],"
-                                   "\"ff\":[%s,%s],\"line\":[%s,%s,%s],"
-                                   "\"speed\":%d,\"rate\":%u}",
-                      text[0], text[1], text[2], text[3], text[4], text[5],
-                      text[6], text[7], as_int(veh.cruise_mm_s),
-                      as_uint(g_period_ms));
+    /* Cast: tm_printf() takes the kernel's UB string type; ASCII.  The
+       speed and rate are small integers. */
+    (void) tm_printf((UB const *) "# gains pid=%s,%s,%s ff=%s,%s "
+                                  "line=%s,%s,%s speed=%d rate=%u\n",
+                     text[0], text[1], text[2], text[3], text[4], text[5],
+                     text[6], text[7], (INT) gains.speed_mm_s,
+                     (UINT) gains.rate_ms);
+    g_frame_len = frames_gains(g_frame, sizeof(g_frame), &gains);
     emit(TOPIC_EVENT, true);
 }
 
 /*!
- * @brief Report the current RAM mapping so the PC can verify it.
- */
-static void
-emit_mapping (void)
-{
-    char letters[BARCODE_MAPPING_SIZE];
-    bool b_ready = barcode_decode_get_mapping(letters);
-
-    /* Casts: tm_sprintf takes the kernel UB string type; ASCII formats. */
-
-    if (b_ready)
-    {
-        (void) tm_sprintf(gp_out,
-            (UB const *) "{\"type\":\"mapping\",\"configured\":1,"
-                         "\"forward\":\"%c\",\"uturn\":\"%c\","
-                         "\"left\":\"%c\",\"right\":\"%c\"}",
-            letters[0], letters[1], letters[2], letters[3]);
-    }
-    else
-    {
-        (void) tm_sprintf(gp_out,
-            (UB const *) "{\"type\":\"mapping\",\"configured\":0}");
-    }
-
-    emit(TOPIC_EVENT, true);
-}
-
-/*!
- * @brief Human-readable usage on the console plus a compact event.
+ * @brief Human-readable usage on the console (no frame: it is text for a
+ *        person at the console).
  */
 static void
 emit_help (void)
 {
-    /* Casts: tm_printf() and tm_sprintf() take the kernel's UB string
-       type; the texts are ASCII. */
+    /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
     (void) tm_printf(
         (UB const *) "# commands: start | stop | calibrate | gains | help "
                      "| timing\n"
-                     "#   speed=<mm/s>        cruise speed (60..300)\n"
+                     "#   speed=<mm/s>        cruise speed (50..300)\n"
                      "#   pid=<kp>,<ki>,<kd>  wheel speed PID\n"
                      "#   ff=<kf>,<offset>    feed-forward + friction "
                      "offset (pct)\n"
                      "#   line=<kp>,<ki>,<kd> line-following PID\n"
-                     "#   map=<forward>,<uturn>,<left>,<right> "
-                     "four distinct A-Z letters\n"
-                     "#   mapping             report active assignments\n"
                      "#   rate=<ms>           telemetry period, 0 = off\n"
-                     "#   map=, speed=, pid=, ff=, line= only while IDLE or "
-                     "STOPPED\n"
+                     "#   nav=<1..4>          as if a barcode was read: 1 "
+                     "left, 2 right, 3 straight, 4 U-turn\n"
+                     "#   map=<1..4>,<idx>    barcode letter for that turn, "
+                     "Code 39 index (A=10 .. Z=35)\n"
+                     "#   speed=, pid=, ff=, line=, map= only while IDLE "
+                     "or STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "
-                     "since the last timing\n");
-    (void) tm_sprintf(gp_out,
-                      (UB const *) "{\"type\":\"help\",\"cmds\":\"start|stop|"
-                                   "calibrate|gains|help|timing|speed=|"
-                                   "pid=|ff=|line=|rate=|"
-                                   "map=forward,uturn,left,right|mapping\"}");
-    emit(TOPIC_EVENT, false);
+                     "since the last timing\n"
+                     "# MQTT takes the same commands as binary frames "
+                     "(tools/dashboard/frames.py)\n");
+    encoder_check_filter();
+}
+
+/*!
+ * @brief Report the timing window and start a new one (CSC05 review: WCET,
+ *        CPU load and the A2 control-jitter test): every section on the
+ *        console as [max_us, avg_us, count], and a summary frame.
+ */
+static void
+emit_timing (void)
+{
+    timing_report_t report;
+    timing_stat_t   stat;
+    frames_timing_t frame = {0u, 0u, 0u, 0u, {0u}};
+    uint32_t        idx   = 0u;
+    uint32_t        busy = 0u;
+
+    timing_take(&report);
+    busy = report.window_ms - report.idle_ms;
+    frame.window_ms = report.window_ms;
+    frame.load_pct =
+        (0u == report.window_ms) ? 0u : ((busy * PERCENT) / report.window_ms);
+    frame.jitter_max_us = report.jitter_max_us;
+    frame.periods       = report.periods;
+
+    /* Casts: tm_printf() takes the kernel's UB string type (ASCII); the
+       values are 32-bit unsigned. */
+    (void) tm_printf((UB const *) "# timing win_ms=%u load_pct=%u "
+                                  "jit_max_us=%u periods=%u\n",
+                     (UINT) frame.window_ms, (UINT) frame.load_pct,
+                     (UINT) frame.jitter_max_us, (UINT) frame.periods);
+
+    /* Cast: TIMING_COUNT is a small positive enumeration constant. */
+    for (idx = 0u; idx < (uint32_t) TIMING_COUNT; idx++)
+    {
+        stat = report.stat[idx];
+        if (idx < FRAMES_TIMING_SLOTS)
+        {
+            frame.max_us[idx] = stat.max_us;
+        }
+
+        /* Casts: idx is below TIMING_COUNT, a valid timing_id_t; the
+           values are 32-bit unsigned. */
+        (void) tm_printf(
+            (UB const *) "#   %s [%u, %u, %u]\n",
+            timing_name((timing_id_t) idx), (UINT) stat.max_us,
+            (UINT) ((0u == stat.count) ? 0u : (stat.sum_us / stat.count)),
+            (UINT) stat.count);
+    }
+
+    g_frame_len = frames_timing(g_frame, sizeof(g_frame), &frame);
+    emit(TOPIC_EVENT, true);
 }
 
 /*!
@@ -746,188 +748,6 @@ stationary (void)
     vehicle_get_status(&veh);
 
     return ((VS_IDLE == veh.state) || (VS_STOPPED == veh.state));
-}
-
-/*!
- * @brief Publish the timing window and start a new one (CSC05 review:
- *        WCET, CPU load and the A2 control-jitter test).  Each section is
- *        [max_us, avg_us, count]; load_pct includes every task, the
- *        template's USB and Wi-Fi tasks and the kernel (idle probe).
- */
-static void
-emit_timing (void)
-{
-    timing_report_t report;
-    timing_stat_t   stat;
-    uint32_t        idx   = 0u;
-    uint32_t        busy  = 0u;
-    uint32_t        load  = 0u;
-    INT             count = 0;
-
-    timing_take(&report);
-    busy = report.window_ms - report.idle_ms;
-    load =
-        (0u == report.window_ms) ? 0u : ((busy * PERCENT) / report.window_ms);
-
-    /* Casts in this function: tm_sprintf() takes the kernel's UB string
-       type; the formats are ASCII. */
-    count = tm_sprintf(gp_out,
-                       (UB const *) "{\"type\":\"timing\",\"win_ms\":%u,"
-                                    "\"load_pct\":%u,\"jit_max_us\":%u,"
-                                    "\"periods\":%u",
-                       as_uint(report.window_ms), as_uint(load),
-                       as_uint(report.jitter_max_us), as_uint(report.periods));
-
-    /* Cast: TIMING_COUNT is a small positive enumeration constant. */
-    for (idx = 0u; idx < (uint32_t) TIMING_COUNT; idx++)
-    {
-        stat = report.stat[idx];
-
-        /* Cast: idx is below TIMING_COUNT, a valid timing_id_t. */
-        count += tm_sprintf(
-            &gp_out[count], (UB const *) ",\"%s\":[%u,%u,%u]",
-            timing_name((timing_id_t) idx), as_uint(stat.max_us),
-            as_uint((0u == stat.count) ? 0u : (stat.sum_us / stat.count)),
-            as_uint(stat.count));
-    }
-
-    (void) tm_sprintf(&gp_out[count], (UB const *) "}");
-    emit(TOPIC_EVENT, true);
-}
-
-/*!
- * @brief Short name of a line state for the JSON output.
- *
- * @param[in] line_state Line state.
- *
- * @return "ON", "LOST" or "JUNC".
- */
-static char const *
-line_name (line_follow_state_t line_state)
-{
-    char const * p_name = "JUNC";
-
-    if (LINE_ON == line_state)
-    {
-        p_name = "ON";
-    }
-    else if (LINE_LOST == line_state)
-    {
-        p_name = "LOST";
-    }
-    else
-    {
-        /* LINE_JUNCTION keeps the default. */
-    }
-
-    return (p_name);
-}
-
-/*!
- * @brief Printable name of an MQTT link state.
- *
- * @param[in] link Link state.
- *
- * @return Upper-case name, or "?" for an out-of-range value.
- */
-static char const *
-link_name (mqtt_bridge_link_t link)
-{
-    /* Cast: enumeration constants are non-negative, so the conversion to
-       an unsigned index keeps their value; the range is checked below. */
-    uint32_t     index  = (uint32_t) link;
-    char const * p_name = "?";
-
-    if (index < (sizeof(g_link_names) / sizeof(g_link_names[0])))
-    {
-        p_name = g_link_names[index];
-    }
-
-    return (p_name);
-}
-
-/*!
- * @brief Round a measurement to a whole unit for %d.
- *
- * @param[in] value Measurement (well inside the int32_t range).
- *
- * @return Nearest integer (0 if not finite).
- */
-static INT
-to_int (float32_t value)
-{
-    return (car_math_round(value));
-}
-
-/*!
- * @brief An angle in tenths of a degree for %d.
- *
- * @param[in] value Angle in degrees.
- *
- * @return Nearest tenth of a degree, times 10.
- */
-static INT
-tenths (float32_t value)
-{
-    return (car_math_round(value * TENTHS));
-}
-
-/*!
- * @brief A 0..1 fraction in permille for %d.
- *
- * @param[in] value Fraction.
- *
- * @return Nearest permille.
- */
-static INT
-permille (float32_t value)
-{
-    return (car_math_round(value * PERMILLE));
-}
-
-/*!
- * @brief A 32-bit signed value as the INT that %d expects (same width on
- *        this target, so the implicit conversion keeps the value).
- *
- * @param[in] value Value.
- *
- * @return The same value.
- */
-static INT
-as_int (int32_t value)
-{
-    return (value);
-}
-
-/*!
- * @brief One byte of an IPv4 address for printing.
- *
- * @param[in] address Address in network byte order, as lwIP stores it
- *                    (the first byte in memory is the first number).
- * @param[in] index   0 for the first number .. 3 for the last.
- *
- * @return The byte, 0..255.
- */
-static UINT
-ip_byte (uint32_t address, uint32_t index)
-{
-    /* The RP2040 is little-endian, so the first byte in memory is the
-       least significant one. */
-    return ((address >> (index * BITS_PER_BYTE)) & BYTE_MASK);
-}
-
-/*!
- * @brief A 32-bit unsigned value as the UINT that %u expects (same width
- *        on this target, so the implicit conversion keeps the value).
- *
- * @param[in] value Value.
- *
- * @return The same value.
- */
-static UINT
-as_uint (uint32_t value)
-{
-    return (value);
 }
 
 /*** end of file ***/

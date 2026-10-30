@@ -506,7 +506,8 @@ def check(path):
                                               "err_t", "avoidance",
                                               "barcode", "terrain",
                                               "line_follow", "search",
-                                              "mqtt")) and \
+                                              "mqtt", "packed",
+                                              "ultrasonic")) and \
                 not lines[k].endswith(";"):
             k -= 1
         if k < 0 or not lines[k].strip().endswith("*/") or \
