@@ -1,0 +1,18 @@
+
+
+<pasted_content id="820d">
+[i2c] the LSM303D answers at 0x1D (WHO_AM_I reg0F=0x49)
+[init] imu        OK (0)
+# trial,result,travel,speed,startImpacts,startJerk,wallJerk,back,backImpacts,backJerk,stopJerk
+1,WALL,479,436,0,156,922,153,0,989,639
+2,WALL,227,414,0,126,1720,151,0,930,1187
+3,WALL,218,587,0,125,1115,152,0,804,649
+4,WALL,239,508,0,646,1790,153,0,736,646
+5,WALL,453,400,0,64,826,153,0,402,824
+6,WALL,339,386,0,53,1170,152,0,275,597
+7,WALL,239,493,0,605,1683,153,0,219,847
+8,WALL,229,500,0,817,1745,152,0,419,564
+9,WALL,220,584,0,20,1285,153,0,290,943
+10,WALL,268,484,0,650,1025,153,0,841,948
+# walls 10 of 10
+</pasted_content id="820d">

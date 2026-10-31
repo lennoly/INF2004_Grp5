@@ -1,0 +1,137 @@
+diff --git a/app_program/subsystem2/encoder.c b/app_program/subsystem2/encoder.c
+index 0291292..b38d48a 100644
+--- a/app_program/subsystem2/encoder.c
++++ b/app_program/subsystem2/encoder.c
+@@ -85,6 +85,13 @@ encoder_init (void)
+     return (ercd);
+ }
+ 
++/* INT-07 one-off: the ISR counter itself (aligned word, atomic read). */
++uint32_t
++encoder_ticks (uint32_t wheel)
++{
++    return (g_wheel[wheel].ticks);
++}
++
+ /*!
+  * @brief Consistent snapshot of one wheel with a speed estimate.
+  *
+diff --git a/app_program/subsystem2/encoder.h b/app_program/subsystem2/encoder.h
+index d6278c8..2bde4f8 100644
+--- a/app_program/subsystem2/encoder.h
++++ b/app_program/subsystem2/encoder.h
+@@ -26,6 +26,7 @@ typedef struct
+ int32_t   encoder_init(void);
+ void      encoder_read(uint32_t wheel, encoder_reading_t * p_out);
+ float32_t encoder_mm_per_tick(void);
++uint32_t  encoder_ticks(uint32_t wheel);
+ void      encoder_check_filter(void);
+ 
+ #endif /* ENCODER_H */
+diff --git a/app_program/subsystem4/subsystem4_test.c b/app_program/subsystem4/subsystem4_test.c
+index 309e736..9107310 100644
+--- a/app_program/subsystem4/subsystem4_test.c
++++ b/app_program/subsystem4/subsystem4_test.c
+@@ -10,6 +10,8 @@
+ #include <tk/tkernel.h>
+ #include <tm/tmonitor.h>
+ #include "car_config.h" /* APP_MODE_* names: without it every #if is true */
++#include "car_math.h"
++#include "encoder.h"
+ #include "hal.h"
+ #include "imu.h"
+ #include "motion.h"
+@@ -129,6 +131,80 @@ subsystem4_test_init (void)
+     return (g_imu_ercd);
+ }
+ 
++/* INT-07 one-off: packed encoder data under load. */
++#define INT07_RUN_MS   (300000u)
++#define INT07_STEP_MS  (20u)
++#define INT07_PRINT    (500u)    /* one row each 10 s */
++#define INT07_TORN_MM  (2.0f)
++#define INT07_SETTLE_MS (3000)
++
++static void
++int07_run (void)
++{
++    motion_status_t m;
++    uint32_t  last_l = 0u, last_r = 0u, raw_l = 0u, raw_r = 0u;
++    uint32_t  lag_max = 0u, back = 0u, torn = 0u, step = 0u;
++    uint32_t  steps = INT07_RUN_MS / INT07_STEP_MS, lost_l = 0u, lost_r = 0u;
++    float32_t dist_l = 0.0f, dist_r = 0.0f, err = 0.0f, err_max = 0.0f;
++    float32_t mm = encoder_mm_per_tick();
++
++    (void) tm_printf((UB const *) "# INT-07 5 min, wheels off the ground, full duty\n");
++    (void) tm_printf((UB const *) "# t_s,ticksL,ticksR,lag_max,back,torn,err_max_x100,spdL,spdR\n");
++    motion_get_status(&m);
++    last_l = m.ticks_l;
++    last_r = m.ticks_r;
++    dist_l = m.dist_l_mm;
++    dist_r = m.dist_r_mm;
++    motion_set_open_loop(100.0f, 100.0f);
++
++    for (step = 1u; step <= steps; step++)
++    {
++        (void) tk_dly_tsk(INT07_STEP_MS);
++        motion_get_status(&m);
++        raw_l = encoder_ticks(ENCODER_LEFT);
++        raw_r = encoder_ticks(ENCODER_RIGHT);
++        back += (((int32_t) (m.ticks_l - last_l)) < 0) ? 1u : 0u;
++        back += (((int32_t) (m.ticks_r - last_r)) < 0) ? 1u : 0u;
++        lag_max = ((raw_l - m.ticks_l) > lag_max) ? (raw_l - m.ticks_l) : lag_max;
++        lag_max = ((raw_r - m.ticks_r) > lag_max) ? (raw_r - m.ticks_r) : lag_max;
++        err = car_math_abs((m.dist_l_mm - dist_l) - (mm * (float32_t) (m.ticks_l - last_l)));
++        err_max = (err > err_max) ? err : err_max;
++        torn += (err > INT07_TORN_MM) ? 1u : 0u;
++        err = car_math_abs((m.dist_r_mm - dist_r) - (mm * (float32_t) (m.ticks_r - last_r)));
++        err_max = (err > err_max) ? err : err_max;
++        torn += (err > INT07_TORN_MM) ? 1u : 0u;
++        last_l = m.ticks_l;
++        last_r = m.ticks_r;
++        dist_l = m.dist_l_mm;
++        dist_r = m.dist_r_mm;
++        motion_set_open_loop(100.0f, 100.0f);
++
++        if (0u == (step % INT07_PRINT))
++        {
++            (void) tm_printf((UB const *) "%u,%u,%u,%u,%u,%u,%d,%d,%d\n",
++                             (UINT) (step / 50u), (UINT) m.ticks_l,
++                             (UINT) m.ticks_r, (UINT) lag_max, (UINT) back,
++                             (UINT) torn, (INT) (err_max * 100.0f),
++                             (INT) m.speed_l_mm_s, (INT) m.speed_r_mm_s);
++        }
++    }
++
++    motion_stop();
++    (void) tk_dly_tsk(INT07_SETTLE_MS);
++    motion_get_status(&m);
++    lost_l = encoder_ticks(ENCODER_LEFT) - m.ticks_l;
++    lost_r = encoder_ticks(ENCODER_RIGHT) - m.ticks_r;
++    (void) tm_printf((UB const *) "# reference ticks L=%u R=%u packed L=%u R=%u\n",
++                     (UINT) encoder_ticks(ENCODER_LEFT),
++                     (UINT) encoder_ticks(ENCODER_RIGHT), (UINT) m.ticks_l,
++                     (UINT) m.ticks_r);
++    (void) tm_printf((UB const *) "# INT-07 %s: lost L=%u R=%u back=%u torn=%u lag_max=%u\n",
++                     ((0u == lost_l) && (0u == lost_r) && (0u == back)
++                      && (0u == torn)) ? "PASS" : "FAIL",
++                     (UINT) lost_l, (UINT) lost_r, (UINT) back, (UINT) torn,
++                     (UINT) lag_max);
++}
++
+ /*!
+  * @brief Buddy 4 IMU test: push the car forward by hand (over a hump if
+  *        one is placed ahead); prints tilt (tenths of a degree), rates,
+@@ -141,6 +217,12 @@ subsystem4_test_imu (void)
+     motion_status_t motion;
+     uint32_t        elapsed_ms = 0u;
+ 
++    if (0u == APP_MODE - APP_MODE_TEST_IMU)
++    {
++        int07_run();
++        return;
++    }
++
+     print_scan();
+ 
+     /* Start each run flat with no impacts: tilting the car to press START

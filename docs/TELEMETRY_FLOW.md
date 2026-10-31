@@ -77,5 +77,5 @@ dashboard ─► picocar/car1/cmd (binary) or USB text ─► command parser (Bu
           ─► barcode_decode_set_symbol()  map=  (Buddy 3 demo letters)
 ```
 
-Tuning commands (`speed= pid= ff= line= map=`) are refused while the car
+Tuning commands (`speed= pid= ff= line= map= detect=`) are refused while the car
 drives. Every command gets a reply frame (ok, or the reason it was refused).

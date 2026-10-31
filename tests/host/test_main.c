@@ -156,7 +156,7 @@
 #define NEAR_MM   (140)
 #define NEARER_MM (130)
 #define FAR_MM    (500)
-#define CENTRE_US (1500u) /* servo pulse at 90 degrees */
+#define CENTRE_US ((uint32_t) (1500 + SERVO_TRIM_US)) /* at 90 degrees */
 
 typedef struct
 {
@@ -1378,6 +1378,39 @@ test_obstacle (void)
     (void) avoidance_profile(points, count, &prof);
     check(AVOID_REVERSE == avoidance_plan(&prof, 0u).action,
           "too close: reverse");
+    prof.closest_mm = 70;
+    prof.centre_mm  = 60.0f;
+    plan            = avoidance_plan_lost(&prof, 120.0f);
+    check((AVOID_TURN_LEFT == plan.action)
+              && (nearly(plan.offset_mm, OBST_BLIND_OFFSET_MM, 0.5f))
+              && (nearly(plan.pass_mm,
+                         190.0f + OBST_DEPTH_MAX_MM + CAR_LENGTH_MM
+                             + OBST_MARGIN_MM,
+                         0.5f)),
+          "avoidance: box lost after a reverse, wide pass away from it");
+    check(nearly(plan.edge_mm, OBST_BLIND_OFFSET_MM - CAR_WIDTH_MM / 2.0f
+                                   - OBST_MARGIN_MM,
+                 0.5f),
+          "avoidance: lost box, edge assumed as far out as the pass");
+    prof.centre_mm = -60.0f;
+    check(AVOID_TURN_RIGHT == avoidance_plan_lost(&prof, 120.0f).action,
+          "avoidance: lost box on the left, pass on the right");
+    /* The edge is kept for the bypass: near the box it decides a back-off. */
+    prof.closest_mm     = 150;
+    prof.centre_mm      = 20.0f;
+    prof.width_mm       = 60.0f;
+    prof.left_edge_mm   = -10.0f;
+    prof.right_edge_mm  = 50.0f;
+    prof.clear_left_mm  = 1000;
+    prof.clear_right_mm = 0;
+    plan                = avoidance_plan(&prof, 0u);
+    check((AVOID_TURN_LEFT == plan.action)
+              && (nearly(plan.offset_mm, OBST_BLIND_OFFSET_MM, 0.5f))
+              && (nearly(plan.edge_mm, 10.0f, 0.5f)),
+          "avoidance: wide pass keeps the edge seen on its side");
+    count = scan_box(points, 0.0f, 70.0f, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
+                     SCAN_LAST_DEG);
+    (void) avoidance_profile(points, count, &prof);
     check(AVOID_STOP == avoidance_plan(&prof, OBST_MAX_ATTEMPTS).action,
           "then stop");
 
@@ -1495,8 +1528,8 @@ test_obstacle (void)
               && (plan.offset_mm >= OBST_BLIND_OFFSET_MM),
           "wide box past both sweep ends: blind pass on OBST_BLIND_LEFT's side");
     check((OBST_BLIND_OFFSET_MM - (CAR_WIDTH_MM / 2.0f) - OBST_MARGIN_MM)
-              >= ((OBST_WIDTH_MAX_MM / 2.0f) + OBST_LINE_OFFSET_MAX_MM),
-          "blind pass clears a 200 mm box 60 mm off the line either way");
+              >= (OBST_WIDTH_MAX_MM / 2.0f),
+          "blind pass clears a 200 mm box on the line with the margin");
 
     /* Edge hysteresis: one point past the box is not an edge, two are;
        a single dropout inside the box is not one either. */
@@ -1976,6 +2009,12 @@ test_command (void)
           "map: left = K (index 20), only while stopped");
     check((!command_parse("map=5,10", &cmd)) && (!command_parse("map=1,43", &cmd)),
           "map: 1..4 and index 0..42 only");
+    check((command_parse("detect=240", &cmd)) && (COMMAND_DETECT == cmd.kind)
+              && (!command_allowed(COMMAND_DETECT, false)),
+          "detect: distance, only while stopped");
+    check((!command_parse("detect=99", &cmd))
+              && (!command_parse("detect=280", &cmd)),
+          "detect: 100..279 only");
     check(!command_parse("pid=1,2", &cmd), "pid needs 3 values");
     check(!command_parse("pid=1,2,3,4", &cmd), "too many values");
     check(!command_parse("pid=-1,0,0", &cmd), "negative gain rejected");
@@ -2272,16 +2311,16 @@ test_vehicle_obstacle (void)
               && (0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: diagonal bypass, line followed from the return leg");
-    /* Box seen 75..105 deg, centred: side unsure, blind offset 300 mm.
-       45 deg leg 300 x 1.414 = 424.  Box edge 300 - 80 - 60 = 160, near
-       face 150 + sonar 70 = 220, so back off 160 + 0.707 x 160 + 1.414 x
-       30 - 220 = 96; return at 220 + 96 + deepest 150 + 160 + 156 - 300 =
-       481, less the 300 the leg covered.  The return leg may run 60 mm
-       past the original path while it looks for the line (484). */
-    check((1u == vehicle_sim_count("back96;"))
-              && (1u == vehicle_sim_count("fwd424;"))
-              && (1u == vehicle_sim_count("fwd484;"))
-              && (1u == vehicle_sim_count("fwd181;")),
+    /* Box seen 75..105 deg, centred: side unsure, blind offset 240 mm.
+       45 deg leg 240 x 1.414 = 339.  The left edge is seen 39 mm off the
+       line and the near face is 150 + sonar 70 = 220 away, so no back-off
+       is needed: 39 + 0.707 x 160 + 1.414 x 30 = 195.  Return at 220 +
+       deepest 150 + edge 100 + 156 - 240 = 386, less the 240 the leg
+       covered, plus the extra 90.  The return leg is as long as
+       the leg out, 339 mm, while it looks for the line. */
+    check((0u == vehicle_sim_count("back"))
+              && (2u == vehicle_sim_count("fwd339;"))
+              && (1u == vehicle_sim_count("fwd236;")),
           "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
 
@@ -2408,7 +2447,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_front_ambient(ULTRASONIC_VALID, NEAR_MM);
     vehicle_sim_step();
     vehicle_sim_front_ambient(ULTRASONIC_OUT_OF_RANGE, ULTRASONIC_NO_ECHO);
-    check((1u == vehicle_sim_count("fwd181;"))
+    check((1u == vehicle_sim_count("fwd236;"))
               && (1u == vehicle_sim_count("L45")) && (1u == vehicle_sim_count("R45"))
               && (vehicle_is(VS_STOPPED, "path blocked"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
@@ -2504,6 +2543,19 @@ test_vehicle_barcode_watchdog (void)
     vehicle_sim_step();
     check(vehicle_is(VS_NAV_TURN, "UTURN"),
           "vehicle: U-turn once past the junction line");
+
+    /* detect= moves the front monitor's stop distance. */
+    vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
+    vehicle_sim_run(200u);
+    vehicle_start(200u);
+    vehicle_sim_front(200);
+    vehicle_sim_front(190);
+    check(!obstacle_ahead(), "vehicle: 190 mm is past the default distance");
+    obstacle_set_detect_mm(240u);
+    vehicle_sim_front(200);
+    vehicle_sim_front(190);
+    check(obstacle_ahead(), "vehicle: detect=240 sees 190 mm");
+    obstacle_set_detect_mm(OBST_DETECT_MM);
 
     gap = vehicle_sim_watchdog_gap_ms();
     check((WATCHDOG_TIMEOUT_MS == vehicle_sim_watchdog_timeout_ms())

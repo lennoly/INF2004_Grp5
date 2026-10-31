@@ -52,7 +52,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"rate", COMMAND_RATE, 1u},
                                          {"timing", COMMAND_TIMING, 0u},
                                          {"nav", COMMAND_NAV, 1u},
-                                         {"map", COMMAND_MAP, 2u}};
+                                         {"map", COMMAND_MAP, 2u},
+                                         {"detect", COMMAND_DETECT, 1u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -169,7 +170,7 @@ command_allowed (command_id_t kind, bool b_stationary)
 {
     bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
                     || (COMMAND_FF == kind) || (COMMAND_LINE == kind)
-                    || (COMMAND_MAP == kind);
+                    || (COMMAND_MAP == kind) || (COMMAND_DETECT == kind);
 
     return ((!b_tuning) || b_stationary);
 }
@@ -681,6 +682,14 @@ validate (command_t const * p_cmd)
                    && (p_cmd->arg[1] > -0.5f)
                    && (p_cmd->arg[1] < ((float32_t) COMMAND_SYMBOL_MAX + 0.5f));
             gp_error = b_ok ? gp_error : "map: 1..4, then a letter index 0..42";
+        break;
+
+        case COMMAND_DETECT:
+            /* Casts: the limits are small integers, exact in float32_t;
+               only < and > on floats (Rule 5.4.b.iv). */
+            b_ok = (p_cmd->arg[0] >= (float32_t) COMMAND_DETECT_MIN_MM)
+                   && (p_cmd->arg[0] <= (float32_t) COMMAND_DETECT_MAX_MM);
+            gp_error = b_ok ? gp_error : "detect: 100..279 mm";
         break;
 
         default:

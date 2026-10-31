@@ -364,6 +364,13 @@ execute (command_t const * p_cmd)
             b_ok = vehicle_command(VCMD_NAV, car_math_round(p_cmd->arg[0]));
         break;
 
+        case COMMAND_DETECT:
+            /* Cast: command_check() only accepts 100..279 mm. */
+            obstacle_set_detect_mm((uint32_t) car_math_round(p_cmd->arg[0]));
+            (void) tm_printf((UB const *) "# detect=%d mm\n",
+                             (INT) car_math_round(p_cmd->arg[0]));
+        break;
+
         case COMMAND_MAP:
             /* Casts: command_check() only accepts 1..4 and 0..42. */
             barcode_decode_set_symbol(
@@ -674,7 +681,10 @@ emit_help (void)
                      "left, 2 right, 3 straight, 4 U-turn\n"
                      "#   map=<1..4>,<idx>    barcode letter for that turn, "
                      "Code 39 index (A=10 .. Z=35)\n"
-                     "#   speed=, pid=, ff=, line=, map= only while IDLE "
+                     "#   detect=<mm>         obstacle stop distance "
+                     "(100..279), until restart\n"
+                     "#   speed=, pid=, ff=, line=, map=, detect= only while "
+                     "IDLE "
                      "or STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "
                      "since the last timing\n"

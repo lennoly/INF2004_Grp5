@@ -68,6 +68,7 @@
    reading's age.  The last profile is packed to 16 bytes. */
 static volatile packed_front_t   g_front         = PACKED_FRONT_NONE;
 static volatile uint8_t          g_counts        = 0u; /* see COUNT_BITS */
+static volatile uint16_t         g_detect_mm     = OBST_DETECT_MM;
 static volatile bool             gb_monitor      = true;
 static volatile bool             gb_monitor_busy = false;
 static volatile packed_profile_t g_last;
@@ -146,10 +147,23 @@ obstacle_front_mm (void)
 }
 
 /*!
+ * @brief Set the front monitor's detect distance (detect= command).  Back
+ *        to OBST_DETECT_MM at the next restart.
+ *
+ * @param[in] detect_mm Distance in mm (command_check() limits it).
+ */
+void
+obstacle_set_detect_mm (uint32_t detect_mm)
+{
+    /* Cast: the command allows 100..279 mm. */
+    g_detect_mm = (uint16_t) detect_mm;
+}
+
+/*!
  * @brief Whether the front monitor has confirmed an obstacle ahead.
  *
  * @return true once OBST_CONFIRM_READINGS readings in a row were closer
- *         than OBST_DETECT_MM.
+ *         than the detect distance (OBST_DETECT_MM, or detect=).
  */
 bool
 obstacle_ahead (void)
@@ -617,7 +631,7 @@ static void
 monitor_update (ultrasonic_ping_t const * p_ping)
 {
     bool     b_valid = (ULTRASONIC_VALID == p_ping->result);
-    bool     b_close = b_valid && (p_ping->dist_mm < OBST_DETECT_MM);
+    bool     b_close = b_valid && (p_ping->dist_mm < (int32_t) g_detect_mm);
     bool     b_fault = (ULTRASONIC_FAULT == p_ping->result);
     uint32_t counts  = g_counts;
     uint32_t n_close = counts & COUNT_MASK;
