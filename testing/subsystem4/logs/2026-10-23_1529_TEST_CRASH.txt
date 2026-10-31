@@ -1,0 +1,45 @@
+
+
+<pasted_content id="820d">
+[i2c] the LSM303D answers at 0x1D (WHO_AM_I reg0F=0x49)
+[init] imu        OK (0)
+[init] test       OK (0)
+# gains pid=0.080,0.600,0.000 ff=0.104,2.300 line=20.000,0.000,0.000 speed=0 rate=0
+@1950008025000000800600fc08409c000000000000000000
+# press START (GP20)
+[i2c] SDA GP4=1 SCL GP5=1 (idle should be 1 and 1)
+[i2c] devices found: 0x1D
+[i2c] 0x1D id: reg00=0x00 reg0D=0xFB reg0F=0x49
+[i2c] the LSM303D answers at 0x1D (WHO_AM_I reg0F=0x49)
+[init] imu        OK (0)
+# trial,result,travel,speed,back,backImpacts
+1,WALL,461,577,153,1
+2,WALL,146,571,151,0
+3,START,11,41,154,0
+4,WALL,365,575,152,1
+5,WALL,122,540,151,1
+6,WALL,101,502,166,1
+7,WALL,147,611,151,0
+8,START,18,42,165,0
+9,WALL,100,495,165,1
+10,WALL,332,621,153,1
+# walls 8 of 10
+# test done
+# press START (GP20)
+[i2c] SDA GP4=1 SCL GP5=1 (idle should be 1 and 1)
+[i2c] devices found: 0x1D
+[i2c] 0x1D id: reg00=0x00 reg0D=0xFB reg0F=0x49
+[i2c] the LSM303D answers at 0x1D (WHO_AM_I reg0F=0x49)
+[init] imu        OK (0)
+# trial,result,travel,speed,back,backImpacts
+1,START,2,0,166,0
+2,WALL,424,499,153,0
+3,WALL,111,501,151,1
+4,WALL,112,512,150,1
+5,WALL,160,627,152,1
+6,START,18,39,165,0
+7,WALL,111,519,156,0
+8,START,25,69,166,0
+9,START,18,41,167,1
+10,WALL,591,607,154,1
+</pasted_content id="820d">

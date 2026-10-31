@@ -1,0 +1,13 @@
+pc_time,type,json
+2026-10-31T18:17:50.938,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-10-31T18:17:50.939,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":1000}"
+2026-10-31T18:17:52.373,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-10-31T18:17:52.373,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-10-31T18:17:52.373,hump,"{""type"":""hump"",""n"":0,""peak_mm"":0.0,""max_mm"":0.0}"
+2026-10-31T18:17:54.811,state,"{""type"":""state"",""st"":""OBSTACLE"",""why"":""obstacle ahead / impact""}"
+2026-10-31T18:17:59.294,obstacle,"{""type"":""obstacle"",""found"":1,""dist"":127,""ang"":90,""width"":131,""centre"":-1,""cl"":0,""cr"":0,""act"":""TURN_RIGHT"",""width_known"":false}"
+2026-10-31T18:18:01.341,hump,"{""type"":""hump"",""n"":1,""peak_mm"":19.1,""max_mm"":19.1}"
+2026-10-31T18:18:04.208,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""obstacle bypassed""}"
+2026-10-31T18:18:04.623,state,"{""type"":""state"",""st"":""LINE_SEARCH"",""why"":""line lost""}"
+2026-10-31T18:18:04.823,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""stop"",""ok"":1}"
+2026-10-31T18:18:04.823,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""stop command""}"

@@ -205,6 +205,9 @@
 #define SERVO_MIN_US                (500u)    /* pulse at 0 deg [CALIBRATE] */
 #define SERVO_MAX_US                (2500u)   /* pulse at 180 deg           */
 #define SERVO_CENTRE_DEG            (90)      /* straight ahead             */
+/* [CALIBRATE] Pulse trim: at 1500 us the sensor looks 2.5 deg left, so a
+   box on the right was seen 40 mm later than one on the left (31 Oct). */
+#define SERVO_TRIM_US               (-28)
 /* [CALIBRATE] The mount stops the sensor at about 60 and 120 deg (bench,
    22 Oct): never command past these, so the servo cannot push on it.      */
 #define SERVO_MIN_DEG               (65)      /* furthest right             */
@@ -217,9 +220,9 @@
 #define US_SEM_TIMEOUT_MS           (100u)    /* NFR9: sensor wait limit    */
 #define US_MIN_MM                   (20)
 #define US_MAX_MM                   (4000)
-/* Start profiling below this (25 Oct: 200 was too close to see the box
-   edges; 30 Oct: 150 asked for, the +/-25 deg scan then covers +/-70 mm). */
-#define OBST_DETECT_MM              (150)
+/* Start profiling below this (31 Oct: at 200 scans found the box 5 of 9
+   and 6 of 9, at 150 3 of 9).  detect= changes it until the next restart. */
+#define OBST_DETECT_MM              (200)
 /* The floor echoes at about 300-380 mm (the sensor is low and cannot tilt
    up): the profile treats echoes this far or further as no echo.  The
    front sensor still watches the pass for real objects. */
@@ -243,13 +246,13 @@
    150 mm box read 94 mm, one side only, 28 Oct), so its edges are not
    trusted and the car passes wide by OBST_BLIND_OFFSET_MM. */
 #define OBST_WIDTH_MIN_MM           (100.0f)
-#define OBST_LINE_OFFSET_MAX_MM     (60.0f)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
-   pass this far to one side, enough for the widest obstacle off the line
-   the other way (100 + 60 + corridor 140 = 300). */
+   pass this far to one side, enough for the widest obstacle on the line
+   (100 + corridor 140 = 240).  The pass goes away from the lean, so a box
+   off the line clears by more.  Ceiling: the widest box 60 mm off the line
+   on the side passed leaves no gap (a blind or wrong-lean pass). */
 #define OBST_BLIND_OFFSET_MM                                            \
-    ((OBST_WIDTH_MAX_MM / 2.0f) + OBST_LINE_OFFSET_MAX_MM               \
-     + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
+    ((OBST_WIDTH_MAX_MM / 2.0f) + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
 /* An edge counts as seen only with this many scan points past it, so a
    single dropout does not make one. */
 #define OBST_EDGE_POINTS            (2u)

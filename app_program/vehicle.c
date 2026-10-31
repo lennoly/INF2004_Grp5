@@ -65,7 +65,8 @@
    a 15 deg step: +15, -15, +30, -30, +45 deg (was 350 ms, out to 78 deg). */
 #define REACQ_SWEEPS       (5u)
 #define REACQ_BASE_MS      (200u)
-#define REJOIN_EXTRA_MM    (60.0f) /* return leg past the original path   */
+#define REJOIN_EXTRA_MM    (0.0f)  /* return leg past the original path   */
+#define PASS_EXTRA_MM      (90.0f) /* [CALIBRATE] straight leg, on top     */
 #define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
@@ -133,6 +134,7 @@ static float32_t     g_settle_end_odo     = 0.0f;
 static uint32_t      g_settle_start_ms    = 0u;
 static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
+static avoidance_profile_t g_too_close; /* scan that asked for a reverse */
 static uint32_t      g_seen_impacts       = 0u;
 static uint32_t      g_run_start_ms       = 0u;
 static uint32_t      g_start_down_ms      = 0u;
@@ -986,13 +988,15 @@ pass_obstacle (float32_t pass_mm)
  *
  *     box edge    E = offset - W / 2 - OBST_MARGIN_MM
  *     near face   N = closest + OBST_SENSOR_AHEAD_MM (+ any back-off)
- *     out leg     N - E >= cos45 x W + sqrt2 x m, else back off first
+ *     out leg     N - e >= cos45 x W + sqrt2 x m, else back off first;
+ *                 e is the edge seen on the pass side (plan edge_mm),
+ *                 E on a blind pass
  *     far face    F = N + OBST_DEPTH_MAX_MM
  *     return at   S = F + E - offset + cos45 x W + sqrt2 x m
  *
  * closest is pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM - OBST_MARGIN_MM
  * (see avoidance_plan()).  The out leg covers offset_mm, so the straight
- * leg is S - offset_mm.
+ * leg is S - offset_mm, plus PASS_EXTRA_MM.
  *
  * @param[in] p_plan Plan with AVOID_TURN_LEFT or AVOID_TURN_RIGHT.
  *
@@ -1011,7 +1015,7 @@ bypass (avoidance_plan_t const * p_plan)
     float32_t near     = (p_plan->pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM
                       - OBST_MARGIN_MM)
                      + OBST_SENSOR_AHEAD_MM;
-    float32_t back     = (edge + inner) - near;
+    float32_t back     = (p_plan->edge_mm + inner) - near;
     float32_t straight = 0.0f;
     bool      b_ok     = true;
 
@@ -1019,7 +1023,7 @@ bypass (avoidance_plan_t const * p_plan)
     straight = ((near + back + OBST_DEPTH_MAX_MM + edge + inner)
                 - p_plan->offset_mm)
                - p_plan->offset_mm;
-    straight = (straight > 0.0f) ? straight : 0.0f;
+    straight = ((straight > 0.0f) ? straight : 0.0f) + PASS_EXTRA_MM;
     obstacle_monitor_enable(false);
 
     if (back > 0.0f)
@@ -1099,6 +1103,14 @@ act_on_scan (avoidance_profile_t const * p_prof)
     INT              offset_mm = 0;
 
     plan             = avoidance_plan(p_prof, g_attempts);
+
+    /* Seen too close, reversed, and now gone: the echo was lost, not the
+       box. */
+    if ((AVOID_CONTINUE == plan.action) && (g_attempts > 0u))
+    {
+        plan = avoidance_plan_lost(&g_too_close, REVERSE_MM);
+    }
+
     g_st.last_action = plan.action;
     offset_mm        = car_math_round(plan.offset_mm);
 
@@ -1119,6 +1131,7 @@ act_on_scan (avoidance_profile_t const * p_prof)
         case AVOID_REVERSE:
             /* Back off; the state stays OBSTACLE, so it re-scans. */
             g_attempts++;
+            g_too_close = *p_prof;
             motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
             (void) run_move(false);
         break;

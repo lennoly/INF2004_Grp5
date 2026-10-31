@@ -403,6 +403,15 @@ test_command_frames (void)
     gp_check(frames_parse_command(buf, len, &out) && (COMMAND_MAP == out.kind)
                  && near(out.arg[0], 4.0f, TOL_UNIT) && near(out.arg[1], 35.0f, TOL_UNIT),
              "command: map=4,35 (U-turn = Z) round trip");
+    cmd.kind   = COMMAND_DETECT;
+    cmd.arg[0] = 240.0f;
+    len        = frames_command(buf, sizeof(buf), &cmd);
+    gp_check(frames_parse_command(buf, len, &out) && (COMMAND_DETECT == out.kind)
+                 && near(out.arg[0], 240.0f, TOL_UNIT),
+             "command: detect=240 round trip");
+    cmd.arg[0] = 300.0f;
+    len        = frames_command(buf, sizeof(buf), &cmd);
+    gp_check(!frames_parse_command(buf, len, &out), "command: detect=300 rejected");
     cmd.kind   = COMMAND_NAV;
     cmd.arg[0] = 6.0f;
     len        = frames_command(buf, sizeof(buf), &cmd);

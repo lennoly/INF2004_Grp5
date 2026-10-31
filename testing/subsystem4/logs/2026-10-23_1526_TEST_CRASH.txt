@@ -1,0 +1,17 @@
+ok now only when it is reversing it has that issue, but its hitting the wall everytime now
+
+<pasted_content id="820d">
+1,START,13,158,0
+2,START,2,85,0
+3,START,5,393,0
+4,START,6,387,0
+5,START,6,397,0
+6,START,2,87,0
+7,START,2,89,0
+8,START,14,394,0
+9,START,7,406,0
+10,START,2,79,0
+# walls 0 of 10
+# test done
+# press START (GP20)
+</pasted_content id="820d">

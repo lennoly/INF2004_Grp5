@@ -45,6 +45,8 @@
 #define COMMAND_NAV_MIN     (1) /* NAV_LEFT  */
 #define COMMAND_NAV_MAX     (4) /* NAV_UTURN */
 #define COMMAND_SYMBOL_MAX  (42) /* last Code 39 index ('%') */
+#define COMMAND_DETECT_MIN_MM (100) /* above OBST_TOO_CLOSE_MM        */
+#define COMMAND_DETECT_MAX_MM (279) /* below OBST_FLOOR_MM            */
 
 typedef enum
 {
@@ -61,6 +63,7 @@ typedef enum
     COMMAND_TIMING,
     COMMAND_NAV,
     COMMAND_MAP,
+    COMMAND_DETECT,
     COMMAND_INVALID
 } command_id_t;
 

@@ -148,6 +148,9 @@ canvas { width: 100%; height: 115px; display: block; }
       <div class="tune"><label>Cruise</label>
         <input id="speed0" placeholder="mm/s"><span></span><span></span>
         <button data-tune="speed">Set</button></div>
+      <div class="tune"><label>Scan</label>
+        <input id="detect0" placeholder="stop at mm"><span></span><span></span>
+        <button data-tune="detect">Set</button></div>
     </section>
     <section>
       <h2>Command</h2>
@@ -269,7 +272,7 @@ document.querySelectorAll("[data-cmd]").forEach(b =>
   b.addEventListener("click", () => send(b.dataset.cmd)));
 document.querySelectorAll("[data-tune]").forEach(b =>
   b.addEventListener("click", () => {
-    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1 }[k];
+    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1, detect: 1 }[k];
     const vals = [];
     for (let i = 0; i < n; i++) vals.push($(k + i).value.trim() || "0");
     send(k + "=" + vals.join(","));

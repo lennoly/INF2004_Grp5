@@ -13,6 +13,8 @@
 #define CAR_HALF_MM      (CAR_WIDTH_MM / 2.0f)
 #define NEIGHBOUR_RANGE  (2) /* other objects within 2x cluster depth */
 #define CORRIDOR_HALF_MM (CAR_HALF_MM + OBST_MARGIN_MM)
+/* Edge assumed on a blind pass: as far out as the pass allows. */
+#define BLIND_EDGE_MM    (OBST_BLIND_OFFSET_MM - CORRIDOR_HALF_MM)
 
 /* Names indexed by avoidance_action_t. */
 static char const * const g_action_names[] = {"CONTINUE", "STOP", "TURN_LEFT",
@@ -111,7 +113,7 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
 avoidance_plan_t
 avoidance_plan (avoidance_profile_t const * p_prof, uint32_t attempts)
 {
-    avoidance_plan_t plan      = {AVOID_CONTINUE, 0.0f, 0.0f};
+    avoidance_plan_t plan      = {AVOID_CONTINUE, 0.0f, 0.0f, 0.0f};
     bool             b_in_path = false;
 
     b_in_path = (p_prof->b_found) && (p_prof->left_edge_mm <= CORRIDOR_HALF_MM)
@@ -131,6 +133,35 @@ avoidance_plan (avoidance_profile_t const * p_prof, uint32_t attempts)
     {
         /* Nothing in the car's corridor: keep going. */
     }
+
+    return (plan);
+}
+
+/*!
+ * @brief Plan for a box seen too close that the scan after the reverse
+ *        cannot find: a flat or tilted face can turn the echo away (31 Oct,
+ *        2 of 4 runs drove on towards it).  Pass wide, away from the way
+ *        it leaned.
+ *
+ * @param[in] p_seen  Profile that asked for the reverse.
+ * @param[in] back_mm Distance reversed since.
+ *
+ * @return Wide bypass.
+ */
+avoidance_plan_t
+avoidance_plan_lost (avoidance_profile_t const * p_seen, float32_t back_mm)
+{
+    avoidance_plan_t plan = {AVOID_TURN_LEFT, OBST_BLIND_OFFSET_MM, 0.0f,
+                             BLIND_EDGE_MM};
+    bool b_left = (p_seen->centre_mm > 0.0f)
+                  || ((!(p_seen->centre_mm < 0.0f))
+                      && (0 != OBST_BLIND_LEFT));
+
+    plan.action = b_left ? AVOID_TURN_LEFT : AVOID_TURN_RIGHT;
+
+    /* Cast: the closest echo is at most US_MAX_MM, exact in float32_t. */
+    plan.pass_mm = (float32_t) p_seen->closest_mm + back_mm
+                   + OBST_DEPTH_MAX_MM + CAR_LENGTH_MM + OBST_MARGIN_MM;
 
     return (plan);
 }
@@ -423,7 +454,7 @@ measure_clearance (avoidance_point_t const * p_points, uint32_t count,
 static avoidance_plan_t
 choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
 {
-    avoidance_plan_t plan       = {AVOID_CONTINUE, 0.0f, 0.0f};
+    avoidance_plan_t plan       = {AVOID_CONTINUE, 0.0f, 0.0f, 0.0f};
     float32_t        need       = CAR_WIDTH_MM + OBST_MARGIN_MM;
     float32_t        off_left   = -p_prof->left_edge_mm + CORRIDOR_HALF_MM;
     float32_t        off_right  = p_prof->right_edge_mm + CORRIDOR_HALF_MM;
@@ -464,12 +495,14 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
         plan.action    = AVOID_TURN_LEFT;
         plan.offset_mm = off_left;
         plan.pass_mm   = pass;
+        plan.edge_mm   = -p_prof->left_edge_mm; /* seen on this side */
     }
     else if (b_right_ok)
     {
         plan.action    = AVOID_TURN_RIGHT;
         plan.offset_mm = off_right;
         plan.pass_mm   = pass;
+        plan.edge_mm   = p_prof->right_edge_mm; /* seen on this side */
     }
     else if ((0 == p_prof->clear_left_mm) && (0 == p_prof->clear_right_mm))
     {
@@ -482,6 +515,7 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
 #endif
         plan.offset_mm = OBST_BLIND_OFFSET_MM;
         plan.pass_mm   = pass;
+        plan.edge_mm   = BLIND_EDGE_MM;
     }
     else
     {

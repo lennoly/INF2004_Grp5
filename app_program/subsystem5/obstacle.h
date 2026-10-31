@@ -20,6 +20,7 @@ int32_t  obstacle_front_mm(void);
 bool     obstacle_ahead(void);
 bool     obstacle_front_stale(void);
 void     obstacle_monitor_enable(bool b_on);
+void     obstacle_set_detect_mm(uint32_t detect_mm);
 bool     obstacle_scan(avoidance_profile_t * p_prof,
                        obstacle_stop_cb_t    p_should_stop);
 void     obstacle_get_last(avoidance_profile_t * p_prof, uint32_t * p_scans);

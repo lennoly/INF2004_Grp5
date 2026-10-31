@@ -72,6 +72,8 @@ servo_set_angle (int32_t angle_deg)
     pulse_us = SERVO_MIN_US
                + (((uint32_t) physical * (SERVO_MAX_US - SERVO_MIN_US))
                   / (uint32_t) SERVO_RANGE_DEG);
+    /* Cast: the pulse is near 1500 us and the trim a few tens of us. */
+    pulse_us = (uint32_t) ((int32_t) pulse_us + SERVO_TRIM_US);
     hal_pwm_set_level(PIN_SERVO, pulse_us); /* 1 count = 1 us */
     /* Cast: limited is clamped to the mount's 0..180 degree range. */
     g_angle = (uint8_t) limited;
