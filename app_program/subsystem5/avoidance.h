@@ -61,6 +61,7 @@ char const *     avoidance_action_name(avoidance_action_t action);
 avoidance_plan_t avoidance_plan_lost(avoidance_profile_t const * p_seen,
                                      float32_t back_mm);
 bool             avoidance_width_known(avoidance_profile_t const * p_prof);
+float32_t        avoidance_width_estimate(avoidance_profile_t const * p_prof);
 
 #endif /* AVOIDANCE_H */
 

@@ -7,9 +7,9 @@
  *                  an 8 cm box between those angles and let the car drive
  *                  on into it (25 Oct), so it was dropped.
  * Stage 2 fine   : the whole SERVO_MIN_DEG..SERVO_MAX_DEG range in
- *                  OBST_FINE_STEP_DEG steps (11 points, median of 3 each),
+ *                  OBST_FINE_STEP_DEG steps (19 points, median of 3 each),
  *                  left to right (SERVO_MAX_DEG first).  The mount only
- *                  lets the sensor turn about 25 degrees each way, so the
+ *                  turns 45 degrees each way, so the
  *                  brief's example angles (30 .. 150) cannot be reached.
  * Stage 3 profile: avoidance_profile() on the fine points.
  *
@@ -266,13 +266,17 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
         /* Casts: tm_printf() takes the kernel's UB string type (the literal
            is ASCII); the values are small counts and distances in mm, so
            they fit in INT (the width is rounded to whole mm first).
-           w>= : an edge was not seen, the width is a lower bound. */
+           w>= : an edge was not seen, the width is a lower bound.
+           est : the width less the cone (OBST_WIDTH_BEAM_DEG). */
         (void) tm_printf(
-            (UB const *) "[scan] pts=%d found=%d d=%d w%s%d cl=%d cr=%d\n",
+            (UB const *) "[scan] pts=%d found=%d d=%d w%s%d est%s%d cl=%d "
+                         "cr=%d\n",
             (INT) count, b_found ? 1 : 0, (INT) p_prof->closest_mm,
             avoidance_width_known(p_prof) ? "=" : ">=",
-            (INT) car_math_round(p_prof->width_mm), (INT) p_prof->clear_left_mm,
-            (INT) p_prof->clear_right_mm);
+            (INT) car_math_round(p_prof->width_mm),
+            avoidance_width_known(p_prof) ? "=" : ">=",
+            (INT) car_math_round(avoidance_width_estimate(p_prof)),
+            (INT) p_prof->clear_left_mm, (INT) p_prof->clear_right_mm);
 
         /* Every point as angle:mm (-1 = no echo), so a wrong side choice
            can be traced to the readings.  Casts: as above. */
