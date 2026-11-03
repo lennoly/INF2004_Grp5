@@ -214,8 +214,9 @@
 #define SERVO_MIN_DEG               (45)      /* furthest right             */
 #define SERVO_MAX_DEG               (135)     /* furthest left              */
 /* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount).
-   1 since the 45 deg mount (3 Nov): a box 60 mm left read 41 mm right.    */
-#define SERVO_INVERT                (1)
+   0: with 1 the sweep started on the car's right, not its left (seen on
+   the car, 3 Nov), and a box 60 mm right read 32 mm left.                 */
+#define SERVO_INVERT                (0)
 #define SERVO_SETTLE_MS             (120u)
 #define SERVO_STEP_DEG              (5)       /* [CALIBRATE] per 20 ms step */
 #define US_TIMEOUT_MS               (40u)
