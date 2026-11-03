@@ -237,7 +237,10 @@ frames_obstacle (uint8_t * p_buf, uint32_t size,
     put_count(&writer,
               bitpack_clamp_u(p_prof->closest_angle, PACKED_SERVO_BITS),
               PACKED_SERVO_BITS);
-    put_value_u(&writer, p_prof->width_mm, UNIT, PACKED_RANGE_BITS);
+    /* The width estimate (the seen width less the sonar cone), which is
+       the dashboard's size; the pass still uses the seen edges. */
+    put_value_u(&writer, avoidance_width_estimate(p_prof), UNIT,
+                PACKED_RANGE_BITS);
     put_value_s(&writer, p_prof->centre_mm, UNIT, PACKED_LATERAL_BITS);
     put_count(&writer,
               bitpack_clamp_u(p_prof->clear_left_mm, PACKED_RANGE_BITS),

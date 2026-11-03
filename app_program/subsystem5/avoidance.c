@@ -88,7 +88,7 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
 
         /* An edge needs OBST_EDGE_POINTS points past it.  One nearer the
            end of the sweep is where the sweep ends, not the obstacle
-           (the mount turns only 25 degrees each way): no known room on
+           (the sweep turns only 45 degrees each way): no known room on
            that side, so no pass there.  Neither side seen:
            avoidance_plan() passes wide on OBST_BLIND_LEFT's side. */
         p_out->clear_left_mm  = ((high + OBST_EDGE_POINTS) >= count)
@@ -204,6 +204,28 @@ avoidance_width_known (avoidance_profile_t const * p_prof)
 {
     return ((p_prof->b_found) && (0 != p_prof->clear_left_mm)
             && (0 != p_prof->clear_right_mm));
+}
+
+/*!
+ * @brief Estimated obstacle width: the seen width less the cone's echo
+ *        past each edge, closest x tan(OBST_WIDTH_BEAM_DEG) a side.
+ *
+ * @param[in] p_prof Obstacle profile.
+ *
+ * @return Width in mm, never below 0; a lower bound like width_mm when
+ *         avoidance_width_known() is false.
+ */
+float32_t
+avoidance_width_estimate (avoidance_profile_t const * p_prof)
+{
+    float32_t const beam = OBST_WIDTH_BEAM_DEG * CAR_MATH_RAD_PER_DEG;
+
+    /* Cast: closest_mm is below US_MAX_MM. */
+    float32_t est = p_prof->width_mm
+                    - (2.0f * (float32_t) p_prof->closest_mm
+                       * (car_math_sin(beam) / car_math_cos(beam)));
+
+    return ((p_prof->b_found && (est > 0.0f)) ? est : 0.0f);
 }
 
 /*!

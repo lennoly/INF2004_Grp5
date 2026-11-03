@@ -117,6 +117,9 @@
 #define SCAN_FIRST_DEG  (10)
 #define SCAN_LAST_DEG   (170)
 #define SCAN_STEP_DEG   (5)
+/* Fine scan on the car: the mount's range in OBST_FINE_STEP_DEG steps. */
+#define FINE_LOOKS \
+    ((uint32_t) (((SERVO_MAX_DEG - SERVO_MIN_DEG) / OBST_FINE_STEP_DEG) + 1))
 #define NO_ECHO_MM      (9999.0f)
 #define BOX_WIDTH_MM    (100.0f)
 #define BOX_RANGE_MM    (150.0f)
@@ -1531,6 +1534,44 @@ test_obstacle (void)
               >= (OBST_WIDTH_MAX_MM / 2.0f),
           "blind pass clears a 200 mm box on the line with the margin");
 
+    /* S5-U07, 3 Nov (log 211709): a 150 mm box read w=195 and a 230 mm
+       box w=286 on the 45 deg sweep; the estimate takes the cone off. */
+    {
+        static int16_t const dist_150mm[19] = {
+            696, 563, 563, 438, 229, 208, 258, 198, 198, 199,
+            198, 198, 199, 198, 232, 293, 405, 921, 908};
+        static int16_t const dist_230mm[19] = {
+            494, 422, 290, 208, 208, 199, 198, 199, 189, 189,
+            189, 189, 211, 198, 198, 364, 221, 295, 303};
+
+        for (idx = 0u; idx < 19u; idx++)
+        {
+            /* Cast: 45..135 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (45 + (5 * (int32_t) idx));
+            points[idx].dist_mm   = dist_150mm[idx];
+        }
+
+        (void) avoidance_profile(points, 19u, &prof);
+        check(avoidance_width_known(&prof)
+                  && nearly(prof.width_mm, 195.0f, 2.0f)
+                  && nearly(avoidance_width_estimate(&prof), 150.0f, 10.0f),
+              "150 mm box, 211709: w=195, estimate within 10 mm of 150");
+
+        for (idx = 0u; idx < 19u; idx++)
+        {
+            points[idx].dist_mm = dist_230mm[idx];
+        }
+
+        (void) avoidance_profile(points, 19u, &prof);
+        check(avoidance_width_known(&prof)
+                  && nearly(prof.width_mm, 286.0f, 2.0f)
+                  && nearly(avoidance_width_estimate(&prof), 230.0f, 20.0f),
+              "230 mm box, 211709: w=286, estimate within 20 mm of 230");
+        prof.b_found = false;
+        check(nearly(avoidance_width_estimate(&prof), 0.0f, 0.5f),
+              "width estimate: 0 with nothing found");
+    }
+
     /* Edge hysteresis: one point past the box is not an edge, two are;
        a single dropout inside the box is not one either. */
     for (idx = 0u; idx < 11u; idx++)
@@ -1582,8 +1623,8 @@ test_obstacle (void)
     count = 0u;
     for (idx = 0u; idx < FLOOR_SCAN_POINTS; idx++)
     {
-        points[count].angle_deg = (int16_t) (SERVO_MIN_DEG
-                                             + ((int32_t) idx * OBST_FINE_STEP_DEG));
+        /* Recorded on the 65..115 deg mount in 5 deg steps. */
+        points[count].angle_deg = (int16_t) (65 + ((int32_t) idx * 5));
         points[count].dist_mm   = g_floor_scan_mm[idx];
         count++;
     }
@@ -2297,14 +2338,17 @@ test_vehicle_obstacle (void)
     pings = vehicle_sim_pings();
     vehicle_sim_step();
     check(vehicle_sim_log_starts("u"), "vehicle: front trigger: no reverse");
-    /* 11 fine looks x 3 pings (the monitor was the coarse stage); the
-       pass needs no side looks. */
-    check(((vehicle_sim_pings() - pings) == 33u)
-              && (1u == vehicle_sim_count("{[scan] pts=11 found=1")),
+    /* FINE_LOOKS fine looks x 3 pings (the monitor was the coarse stage);
+       the pass needs no side looks. */
+    check(((vehicle_sim_pings() - pings) == (3u * FINE_LOOKS))
+              && (1u == vehicle_sim_count("{[scan] pts=")),
           "vehicle: fine scan, inside the mount's limits");
-    check((11u == obstacle_get_points(points, SCAN_MAX_POINTS))
-              && (65 == points[0].angle_deg) && (150 == points[2].dist_mm),
-          "vehicle: last scan points kept (65..115 deg fine scan)");
+    check((FINE_LOOKS == obstacle_get_points(points, SCAN_MAX_POINTS))
+              && (SERVO_MIN_DEG == points[0].angle_deg)
+              && (150 == points[(75 - SERVO_MIN_DEG + OBST_FINE_STEP_DEG - 1)
+                                / OBST_FINE_STEP_DEG]
+                             .dist_mm),
+          "vehicle: last scan points kept (whole mount range)");
     /* Out, straight, back: three 45 deg turns; the line is met on the
        return leg, so line following starts without the fourth. */
     check((1u == vehicle_sim_count("L45")) && (2u == vehicle_sim_count("R45"))

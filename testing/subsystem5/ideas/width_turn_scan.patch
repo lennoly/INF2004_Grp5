@@ -1,0 +1,215 @@
+diff --git a/app_program/app_tests.c b/app_program/app_tests.c
+index 462128c..9a567f2 100644
+--- a/app_program/app_tests.c
++++ b/app_program/app_tests.c
+@@ -79,6 +79,9 @@ app_tests_start (void)
+     (void) motion_init();
+     (void) subsystem4_test_init(); /* I2C scan, then imu_init() */
+ #elif APP_MODE == APP_MODE_TEST_ULTRASONIC
++    /* Motion for the turn-and-scan width measurement. */
++    (void) encoder_init();
++    (void) motion_init();
+     (void) obstacle_init();
+ #else
+ #error "Unknown APP_MODE"
+diff --git a/app_program/subsystem5/subsystem5_test.c b/app_program/subsystem5/subsystem5_test.c
+index f4fb173..892594c 100644
+--- a/app_program/subsystem5/subsystem5_test.c
++++ b/app_program/subsystem5/subsystem5_test.c
+@@ -9,6 +9,8 @@
+ #include <tk/tkernel.h>
+ #include <tm/tmonitor.h>
+ #include "car_config.h" /* APP_MODE_* names: without it every #if is true */
++#include "car_math.h"
++#include "motion.h"
+ #include "ultrasonic.h"
+ #include "obstacle.h"
+ #include "avoidance.h"
+@@ -17,9 +19,23 @@
+ 
+ #define A9_PINGS (20u) /* the Week 6 A9 method asks for 20 pings */
+ 
++/* Width scan: the car turns this far each way and scans again, so the
++   sweep reaches past each box edge plus the beam (3 Nov: a centred box
++   echoed at every angle of the +/-25 deg sweep). */
++#define WIDTH_TURN_DEG (40.0f)     /* [CALIBRATE] */
++#define TURN_WAIT_MS   (5000)
++/* The beam still hears the box this far off its axis: the corrected edge
++   uses the beam's inner side (150 mm box read 235-255 mm raw, 142-172 mm
++   corrected, 3 Nov).  Width scan only: not OBST_BEAM_HALF_DEG, which
++   would move the mission's pass. */
++#define WIDTH_BEAM_DEG (12.0f)     /* [CALIBRATE] */
++
+ #if APP_MODE == APP_MODE_TEST_ULTRASONIC
+ static void         a9_check(void);
+ static char const * side_name(int32_t angle_deg);
++static void         width_scan(float32_t face_mm);
++static bool         side_edge(bool b_left, float32_t face_mm, float32_t * p_edge_mm,
++                              float32_t * p_raw_mm, float32_t * p_turned_deg);
+ 
+ /*!
+  * @brief Buddy 5 test: the A9 no-target check, then a full coarse-to-fine
+@@ -75,7 +91,163 @@ subsystem5_test_ultrasonic (void)
+                                       "right must say RIGHT, else set "
+                                       "SERVO_INVERT 1)\n",
+                          side_name(profile.closest_angle));
++
++        /* Cast: the closest echo is at most US_MAX_MM, exact in
++           float32_t. */
++        width_scan((float32_t) profile.closest_mm + OBST_SENSOR_AHEAD_MM);
++    }
++}
++
++/*!
++ * @brief Width by turning: turn WIDTH_TURN_DEG left, scan for the left
++ *        edge, turn back; the same to the right.  The car pivots on its
++ *        axle, so the wheels must be on the floor and the box at least
++ *        about 150 mm from the sonar.
++ *
++ * @param[in] face_mm Box face ahead of the axle (closest echo + sonar
++ *                    offset).
++ */
++static void
++width_scan (float32_t face_mm)
++{
++    float32_t left_mm   = 0.0f;
++    float32_t right_mm  = 0.0f;
++    float32_t left_raw  = 0.0f;
++    float32_t right_raw = 0.0f;
++    float32_t left_deg  = 0.0f;
++    float32_t right_deg = 0.0f;
++    bool      b_left    = side_edge(true, face_mm, &left_mm, &left_raw,
++                                    &left_deg);
++    bool      b_right   = side_edge(false, face_mm, &right_mm, &right_raw,
++                                    &right_deg);
++
++    /* Casts: tm_printf() takes the kernel's UB string type (the literals
++       are ASCII); edges are a few hundred mm, which fits INT. */
++    (void) tm_printf((UB const *) "# width scan: left edge %s%d mm (turned "
++                                  "%d deg), right edge %s%d mm (turned %d "
++                                  "deg)\n",
++                     b_left ? "" : "not seen, ", app_tests_print_int(left_mm),
++                     app_tests_print_int(left_deg), b_right ? "" : "not seen, ",
++                     app_tests_print_int(right_mm),
++                     app_tests_print_int(right_deg));
++
++    if (b_left && b_right)
++    {
++        (void) tm_printf((UB const *) "# width scan: width=%d mm (raw %d mm, "
++                                      "beam %d deg)\n",
++                         app_tests_print_int(right_mm - left_mm),
++                         app_tests_print_int(right_raw - left_raw),
++                         app_tests_print_int(WIDTH_BEAM_DEG));
++    }
++    else
++    {
++        (void) tm_printf((UB const *) "# width scan: width not measured\n");
++    }
++}
++
++/*!
++ * @brief Turn towards one side, scan, find that side's box edge, turn
++ *        back.  Each point is placed in the frame of the car before the
++ *        turn (x right of the axle, y ahead), from the heading the
++ *        encoders measured.  The edge is the outermost box point with
++ *        OBST_EDGE_POINTS points past it that are not the box.
++ *
++ * @param[in]  b_left       true: the left edge.
++ * @param[in]  face_mm      Box face ahead of the axle.
++ * @param[out] p_edge_mm    Edge, mm right of the axle (left is negative),
++ *                          along the beam's inner side (WIDTH_BEAM_DEG).
++ * @param[out] p_raw_mm     The same along the sensor's axis.
++ * @param[out] p_turned_deg Measured turn, positive to the left.
++ *
++ * @return true if the edge was seen.
++ */
++static bool
++side_edge (bool b_left, float32_t face_mm, float32_t * p_edge_mm,
++           float32_t * p_raw_mm, float32_t * p_turned_deg)
++{
++    avoidance_profile_t profile = {0};
++    avoidance_point_t   points[SCAN_MAX_POINTS];
++    motion_status_t     motion;
++    float32_t           start   = 0.0f;
++    float32_t           turn    = 0.0f;
++    float32_t           aim     = 0.0f;
++    float32_t           x       = 0.0f;
++    float32_t           y       = 0.0f;
++    uint32_t            count   = 0u;
++    uint32_t            step    = 0u;
++    uint32_t            idx     = 0u;
++    uint32_t            gap     = 0u;
++    bool                b_box   = false;
++    bool                b_found = false;
++    bool                b_done  = false;
++
++    motion_get_status(&motion);
++    start = motion.heading_deg;
++
++    if (b_left)
++    {
++        motion_turn_left(WIDTH_TURN_DEG);
++    }
++    else
++    {
++        motion_turn_right(WIDTH_TURN_DEG);
++    }
++
++    (void) motion_wait_done(TURN_WAIT_MS);
++    motion_get_status(&motion);
++    turn = motion.heading_deg - start;
++    (void) obstacle_scan(&profile, NULL);
++    count = obstacle_get_points(points, SCAN_MAX_POINTS);
++
++    /* Points are stored right to left; walk in from this side's end. */
++    for (step = 0u; (step < count) && (!b_done); step++)
++    {
++        idx = b_left ? ((count - 1u) - step) : step;
++
++        /* Casts: int16_t angles and distances are exact in float32_t. */
++        aim = ((float32_t) points[idx].angle_deg + turn) * CAR_MATH_RAD_PER_DEG;
++        x   = (-OBST_SENSOR_AHEAD_MM * car_math_sin(turn * CAR_MATH_RAD_PER_DEG))
++            + ((float32_t) points[idx].dist_mm * car_math_cos(aim));
++        y   = (OBST_SENSOR_AHEAD_MM * car_math_cos(turn * CAR_MATH_RAD_PER_DEG))
++            + ((float32_t) points[idx].dist_mm * car_math_sin(aim));
++        b_box = (points[idx].dist_mm >= US_MIN_MM)
++                && (points[idx].dist_mm < OBST_FLOOR_MM)
++                && (y <= (face_mm + (float32_t) OBST_CLUSTER_DEPTH_MM));
++
++        if (b_box)
++        {
++            /* The beam's inner side: towards the box, so towards the
++               right for the left edge. */
++            aim += (b_left ? -WIDTH_BEAM_DEG : WIDTH_BEAM_DEG)
++                   * CAR_MATH_RAD_PER_DEG;
++            b_found    = (gap >= OBST_EDGE_POINTS);
++            *p_raw_mm  = x;
++            *p_edge_mm = (x - ((float32_t) points[idx].dist_mm * car_math_cos(
++                                   ((float32_t) points[idx].angle_deg + turn)
++                                   * CAR_MATH_RAD_PER_DEG)))
++                         + ((float32_t) points[idx].dist_mm * car_math_cos(aim));
++            b_done     = true;
++        }
++        else
++        {
++            gap++;
++        }
++    }
++
++    /* Back to the starting heading. */
++    if (b_left)
++    {
++        motion_turn_right(turn);
++    }
++    else
++    {
++        motion_turn_left(-turn);
+     }
++
++    (void) motion_wait_done(TURN_WAIT_MS);
++    *p_turned_deg = turn;
++
++    return (b_found);
+ }
+ 
+ /*!

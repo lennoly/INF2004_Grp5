@@ -208,10 +208,11 @@
 /* [CALIBRATE] Pulse trim: at 1500 us the sensor looks 2.5 deg left, so a
    box on the right was seen 40 mm later than one on the left (31 Oct). */
 #define SERVO_TRIM_US               (-28)
-/* [CALIBRATE] The mount stops the sensor at about 60 and 120 deg (bench,
-   22 Oct): never command past these, so the servo cannot push on it.      */
-#define SERVO_MIN_DEG               (65)      /* furthest right             */
-#define SERVO_MAX_DEG               (115)     /* furthest left              */
+/* [CALIBRATE] The mount stopped the sensor at about 60 and 120 deg (bench,
+   22 Oct); fixed on 3 Nov to turn 45 deg each way.  Never command past
+   these, so the servo cannot push on it.                                  */
+#define SERVO_MIN_DEG               (45)      /* furthest right             */
+#define SERVO_MAX_DEG               (135)     /* furthest left              */
 /* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount)     */
 #define SERVO_INVERT                (0)
 #define SERVO_SETTLE_MS             (120u)
@@ -261,6 +262,12 @@
    from the real one (25 Oct); 8 deg cut a pass to 53 mm.  Keep the edges
    as seen and the cone as margin. */
 #define OBST_BEAM_HALF_DEG          (0.0f)    /* [CALIBRATE]               */
+/* Width estimate only (est= in the scan lines), not the pass: the same
+   pull-in at this cone.  6: clean scans (nothing behind the box) read a
+   150 mm box 169-195 mm wide at 186-198 mm, est 130-153, and a 230 mm box
+   286 mm, est 246 (3 Nov, 45 deg sweep).  15 was fitted to a scan with
+   other echoes beside the box. */
+#define OBST_WIDTH_BEAM_DEG         (6.0f)    /* [CALIBRATE]               */
 /* Seen centre this close to the car's centre line: the side cannot be
    trusted (a box 60 mm left read 10 mm right, or 20 mm left), so pass
    wide by OBST_BLIND_OFFSET_MM, away from the way it leans. */
