@@ -213,8 +213,9 @@
    these, so the servo cannot push on it.                                  */
 #define SERVO_MIN_DEG               (45)      /* furthest right             */
 #define SERVO_MAX_DEG               (135)     /* furthest left              */
-/* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount)     */
-#define SERVO_INVERT                (0)
+/* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount).
+   1 since the 45 deg mount (3 Nov): a box 60 mm left read 41 mm right.    */
+#define SERVO_INVERT                (1)
 #define SERVO_SETTLE_MS             (120u)
 #define SERVO_STEP_DEG              (5)       /* [CALIBRATE] per 20 ms step */
 #define US_TIMEOUT_MS               (40u)
