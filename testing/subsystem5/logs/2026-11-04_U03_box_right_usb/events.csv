@@ -1,0 +1,9 @@
+pc_time,type,json
+2026-11-04T19:05:38.916,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""gains"",""ok"":1}"
+2026-11-04T19:05:38.917,gains,"{""type"":""gains"",""pid"":[0.104,0.6,0.0],""ff"":[0.12,2.3],""line"":[45.0,0.0,0.0],""speed"":50,""rate"":1000}"
+2026-11-04T19:05:40.767,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""start"",""ok"":1}"
+2026-11-04T19:05:40.767,state,"{""type"":""state"",""st"":""LINE_FOLLOW"",""why"":""start""}"
+2026-11-04T19:05:41.796,state,"{""type"":""state"",""st"":""OBSTACLE"",""why"":""obstacle ahead / impact""}"
+2026-11-04T19:05:49.655,obstacle,"{""type"":""obstacle"",""found"":1,""dist"":179,""ang"":90,""width"":54,""centre"":30,""cl"":1000,""cr"":1000,""act"":""TURN_RIGHT"",""width_known"":true}"
+2026-11-04T19:05:50.874,cmd,"{""type"":""cmd"",""id"":0,""cmd"":""stop"",""ok"":1}"
+2026-11-04T19:05:50.875,state,"{""type"":""state"",""st"":""STOPPED"",""why"":""stop command""}"

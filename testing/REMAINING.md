@@ -9,8 +9,7 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 |---|---|---|---|---|
 | 1 | **SYS-04** obstacle bypass + rejoin | MISSION on the course, obstacles in the allowed positions (left, centre, right). Box 20 cm or less | MISSION (wifi) | no collision, line picked up again every time |
 | 2 | **S5-U03** bypass and re-acquisition | Each obstacle position 5 times. Include a **centred box of 20 cm or less** (the blind-pass rerun; the 31 Oct FAIL was a box wider than 20 cm) | TEST_OBSTACLE | clean rejoin every time |
-| 3 | **INT-11** packing timing cost | Same lap and `timing` before/after on d5f5199 (before the packing); the current-build half is done (185643) | MISSION (wifi), two builds | no task over its period, `jit_max_us` ≤ 2000 in both |
-| 4 | **S5-U07** profile accuracy (FAIL so far) | `TEST_ULTRASONIC`, 8 cm and 15 cm boxes centred at 200 mm, 3 scans each, `python3 tools/scan_plot.py <log> --box X,Y,W` | TEST_ULTRASONIC | width and centre error recorded, width within the beam margin. A recorded FAIL with the numbers is acceptable for the report |
+| 3 | **S5-U07** profile accuracy (FAIL so far) | `TEST_ULTRASONIC`, 8 cm and 15 cm boxes centred at 200 mm, 3 scans each, `python3 tools/scan_plot.py <log> --box X,Y,W` | TEST_ULTRASONIC | width and centre error recorded, width within the beam margin. A recorded FAIL with the numbers is acceptable for the report |
 
 ## Have the log, not written in yet
 
@@ -21,7 +20,7 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 
 ## Done
 
-- **Integration:** INT-01 to INT-10 (INT-06 full lap: 185643)
+- **Integration:** INT-01 to INT-11 (INT-06 and INT-11 from the 185643 full lap; INT-11 on the current build only)
 - **S1:** U01 to U09
 - **S2:** U01 to U06
 - **S3:** U01, U02
@@ -32,5 +31,4 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 ## Suggested order
 
 1. **SYS-04 and S5-U03 together.** Same runs on the new shorter bypass; log both from the same session.
-2. **INT-11.** Needs the old d5f5199 build flashed once.
-3. **S5-U07.** Only if there is time.
+2. **S5-U07.** Only if there is time.
