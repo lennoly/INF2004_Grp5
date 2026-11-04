@@ -71,7 +71,7 @@
 #define REACQ_SWEEPS       (5u)
 #define REACQ_BASE_MS      (360u)
 #define REJOIN_EXTRA_MM    (0.0f)  /* return leg past the original path   */
-#define PASS_EXTRA_MM      (30.0f) /* [CALIBRATE] straight leg, on top (90) */
+#define PASS_EXTRA_MM      (50.0f) /* [CALIBRATE] straight leg, on top (was 30) */
 #define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)

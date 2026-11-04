@@ -1356,19 +1356,19 @@ test_obstacle (void)
     uint32_t            count = 0u;
     uint32_t            idx   = 0u;
 
-    count = scan_box(points, 20.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
+    count = scan_box(points, 10.0f, BOX_RANGE_MM, BOX_WIDTH_MM, 0.0f, SCAN_FIRST_DEG,
                      SCAN_LAST_DEG);
     check(avoidance_profile(points, count, &prof), "box found");
     plan = avoidance_plan(&prof, 0u);
-    (void) printf("obstacle: box w=100 at x=+20: est width %.0f, "
+    (void) printf("obstacle: box w=100 at x=+10: est width %.0f, "
                   "centre %.0f, closest %" PRId32 " -> %s offset %.0f\n",
                   wide(prof.width_mm), wide(prof.centre_mm), prof.closest_mm,
                   avoidance_action_name(plan.action), wide(plan.offset_mm));
     check(nearly(prof.width_mm, BOX_WIDTH_MM, WIDTH_TOLERANCE),
           "width estimate");
-    /* 20 mm right is within OBST_CENTRE_UNSURE_MM: the fixed side. */
+    /* 10 mm right is within OBST_CENTRE_UNSURE_MM: the fixed side. */
     check(AVOID_TURN_RIGHT == plan.action,
-          "box 20 mm right, near the centre: pass right (fixed side)");
+          "box 10 mm right, near the centre: pass right (fixed side)");
     check(nearly(plan.pass_mm,
                  (float32_t) prof.closest_mm + OBST_DEPTH_MAX_MM
                      + CAR_LENGTH_MM + OBST_MARGIN_MM,
@@ -1450,6 +1450,24 @@ test_obstacle (void)
         (void) avoidance_profile(points, 11u, &prof);
         check(AVOID_TURN_RIGHT == avoidance_plan(&prof, 0u).action,
               "box split by floor echoes: one box, pass right");
+    }
+
+    /* 4 Nov 190538, box well right of the line: 80-85 deg and its right
+       edge missed, so it read +30 mm, 92 mm wide.  Away from it: left. */
+    {
+        static int16_t const right_box[11] = {374, 224, 189, 360, 385, 179,
+                                              180, 296, 381, 386, 390};
+
+        for (idx = 0u; idx < 11u; idx++)
+        {
+            /* Cast: 65..115 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (65 + (5 * (int32_t) idx));
+            points[idx].dist_mm   = right_box[idx];
+        }
+
+        (void) avoidance_profile(points, 11u, &prof);
+        check(AVOID_TURN_LEFT == avoidance_plan(&prof, 0u).action,
+              "box read +30 mm right (190538): pass left");
     }
 
     /* 25 Oct, 8 cm box 60 mm left.  A flat face read 10 mm right of
@@ -2391,11 +2409,11 @@ test_vehicle_obstacle (void)
        line and the near face is 150 + sonar 70 = 220 away, so no back-off
        is needed: 39 + 0.707 x 160 + 1.414 x 15 = 174.  Return at 220 +
        deepest 150 + edge 100 + 134 - 240 = 364, less the 240 the leg
-       covered, plus the extra 30.  The return leg is as long as
+       covered, plus the extra 50.  The return leg is as long as
        the leg out, 339 mm, while it looks for the line. */
     check((0u == vehicle_sim_count("back"))
               && (2u == vehicle_sim_count("fwd339;"))
-              && (1u == vehicle_sim_count("fwd154;")),
+              && (1u == vehicle_sim_count("fwd174;")),
           "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
 
@@ -2522,7 +2540,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_front_ambient(ULTRASONIC_VALID, NEAR_MM);
     vehicle_sim_step();
     vehicle_sim_front_ambient(ULTRASONIC_OUT_OF_RANGE, ULTRASONIC_NO_ECHO);
-    check((1u == vehicle_sim_count("fwd154;"))
+    check((1u == vehicle_sim_count("fwd174;"))
               && (1u == vehicle_sim_count("L45")) && (1u == vehicle_sim_count("R45"))
               && (vehicle_is(VS_STOPPED, "path blocked"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
