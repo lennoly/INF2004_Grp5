@@ -1367,8 +1367,8 @@ test_obstacle (void)
     check(nearly(prof.width_mm, BOX_WIDTH_MM, WIDTH_TOLERANCE),
           "width estimate");
     /* 10 mm right is within OBST_CENTRE_UNSURE_MM: the fixed side. */
-    check(AVOID_TURN_RIGHT == plan.action,
-          "box 10 mm right, near the centre: pass right (fixed side)");
+    check(AVOID_TURN_LEFT == plan.action,
+          "box 10 mm right, near the centre: pass left (fixed side)");
     check(nearly(plan.pass_mm,
                  (float32_t) prof.closest_mm + OBST_DEPTH_MAX_MM
                      + CAR_LENGTH_MM + OBST_MARGIN_MM,
@@ -2398,14 +2398,14 @@ test_vehicle_obstacle (void)
                              .dist_mm),
           "vehicle: last scan points kept (whole mount range)");
     /* Out, straight, back: three 45 deg turns (centred box: the fixed
-       right side); the line is met on the return leg, so line following
+       left side); the line is met on the return leg, so line following
        starts without the fourth. */
-    check((1u == vehicle_sim_count("R45")) && (2u == vehicle_sim_count("L45"))
+    check((1u == vehicle_sim_count("L45")) && (2u == vehicle_sim_count("R45"))
               && (0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: diagonal bypass, line followed from the return leg");
     /* Box seen 75..105 deg, centred: side unsure, blind offset 240 mm.
-       45 deg leg 240 x 1.414 = 339.  The right edge is seen 39 mm off the
+       45 deg leg 240 x 1.414 = 339.  The left edge is seen 39 mm off the
        line and the near face is 150 + sonar 70 = 220 away, so no back-off
        is needed: 39 + 0.707 x 160 + 1.414 x 15 = 174.  Return at 220 +
        deepest 150 + edge 100 + 134 - 240 = 364, less the 240 the leg
@@ -2527,7 +2527,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_stop_on_next_turn();
     vehicle_sim_step();
     vehicle_sim_step();
-    check((1u == vehicle_sim_count("R45")) && (0u == vehicle_sim_count("fwd"))
+    check((1u == vehicle_sim_count("L45")) && (0u == vehicle_sim_count("fwd"))
               && (vehicle_is(VS_STOPPED, "stop command"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
           "vehicle: STOP in a bypass reported once");
