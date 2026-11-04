@@ -287,8 +287,8 @@
    off, so a pass sized to it alone could clip the box (53 mm, 25 Oct). */
 #define OBST_MIN_OFFSET_MM          (150.0f)  /* [CALIBRATE]               */
 /* Side of a blind pass and of any box within OBST_CENTRE_UNSURE_MM of the */
-/* line: 0 = right (4 Nov: boxes on this course sit a little left).        */
-#define OBST_BLIND_LEFT             (0)       /* 1: pass on the left       */
+/* line: 1 = left (4 Nov, Kent's choice; was right).                      */
+#define OBST_BLIND_LEFT             (1)       /* 0: pass on the right      */
 /* Diagonal bypass: the car's inner side on the 45 deg legs keeps this    */
 /* clearance from the box's near and far corners (deepest box,            */
 /* OBST_DEPTH_MAX_MM); the car backs off first if the box is too close.   */
