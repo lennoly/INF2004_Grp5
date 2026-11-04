@@ -151,11 +151,12 @@
 #define NOIP_REJOIN_MS  (15000u) /* joined without an IP: retry period  */
 #define FAILED_STEPS    (3u)     /* failed-join retries checked         */
 
-/* Vehicle simulation (sim/): one press of START, a 1.5 s drive (past the
-   150 mm front-ignore window after "path clear") and a close echo pair. */
+/* Vehicle simulation (sim/): one press of START, a 3.5 s drive (past the
+   settling, now at 50 mm/s for up to LINE_SETTLE_MAX_MS, and the 150 mm
+   front-ignore window after "path clear") and a close echo pair. */
 #define TAP_AT_MS (20u)
 #define TAP_MS    (40u)
-#define DRIVE_MS  (1500u)
+#define DRIVE_MS  (3500u)
 #define NEAR_MM   (140)
 #define NEARER_MM (130)
 #define FAR_MM    (500)
@@ -1365,7 +1366,9 @@ test_obstacle (void)
                   avoidance_action_name(plan.action), wide(plan.offset_mm));
     check(nearly(prof.width_mm, BOX_WIDTH_MM, WIDTH_TOLERANCE),
           "width estimate");
-    check(AVOID_TURN_LEFT == plan.action, "box right of centre: pass left");
+    /* 20 mm right is within OBST_CENTRE_UNSURE_MM: the fixed side. */
+    check(AVOID_TURN_RIGHT == plan.action,
+          "box 20 mm right, near the centre: pass right (fixed side)");
     check(nearly(plan.pass_mm,
                  (float32_t) prof.closest_mm + OBST_DEPTH_MAX_MM
                      + CAR_LENGTH_MM + OBST_MARGIN_MM,
@@ -2376,22 +2379,23 @@ test_vehicle_obstacle (void)
                                 / OBST_FINE_STEP_DEG]
                              .dist_mm),
           "vehicle: last scan points kept (whole mount range)");
-    /* Out, straight, back: three 45 deg turns; the line is met on the
-       return leg, so line following starts without the fourth. */
-    check((1u == vehicle_sim_count("L45")) && (2u == vehicle_sim_count("R45"))
+    /* Out, straight, back: three 45 deg turns (centred box: the fixed
+       right side); the line is met on the return leg, so line following
+       starts without the fourth. */
+    check((1u == vehicle_sim_count("R45")) && (2u == vehicle_sim_count("L45"))
               && (0u == vehicle_sim_count("L90")) && (0u == vehicle_sim_count("R90"))
               && (vehicle_is(VS_LINE_FOLLOW, "obstacle bypassed")),
           "vehicle: diagonal bypass, line followed from the return leg");
     /* Box seen 75..105 deg, centred: side unsure, blind offset 240 mm.
-       45 deg leg 240 x 1.414 = 339.  The left edge is seen 39 mm off the
+       45 deg leg 240 x 1.414 = 339.  The right edge is seen 39 mm off the
        line and the near face is 150 + sonar 70 = 220 away, so no back-off
-       is needed: 39 + 0.707 x 160 + 1.414 x 30 = 195.  Return at 220 +
-       deepest 150 + edge 100 + 156 - 240 = 386, less the 240 the leg
-       covered, plus the extra 90.  The return leg is as long as
+       is needed: 39 + 0.707 x 160 + 1.414 x 15 = 174.  Return at 220 +
+       deepest 150 + edge 100 + 134 - 240 = 364, less the 240 the leg
+       covered, plus the extra 30.  The return leg is as long as
        the leg out, 339 mm, while it looks for the line. */
     check((0u == vehicle_sim_count("back"))
               && (2u == vehicle_sim_count("fwd339;"))
-              && (1u == vehicle_sim_count("fwd236;")),
+              && (1u == vehicle_sim_count("fwd154;")),
           "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
 
@@ -2482,7 +2486,7 @@ test_vehicle_manoeuvre_stop (void)
               && (0u == vehicle_sim_count("line not found")),
           "vehicle: STOP in a line search reported once");
 
-    vehicle_start(1000u);
+    vehicle_start(DRIVE_MS);
     vehicle_sim_barcode(NAV_UTURN);
     vehicle_sim_run(100u);
     vehicle_sim_bar_black(true);
@@ -2505,7 +2509,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_stop_on_next_turn();
     vehicle_sim_step();
     vehicle_sim_step();
-    check((1u == vehicle_sim_count("L45")) && (0u == vehicle_sim_count("fwd"))
+    check((1u == vehicle_sim_count("R45")) && (0u == vehicle_sim_count("fwd"))
               && (vehicle_is(VS_STOPPED, "stop command"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
           "vehicle: STOP in a bypass reported once");
@@ -2518,7 +2522,7 @@ test_vehicle_manoeuvre_stop (void)
     vehicle_sim_front_ambient(ULTRASONIC_VALID, NEAR_MM);
     vehicle_sim_step();
     vehicle_sim_front_ambient(ULTRASONIC_OUT_OF_RANGE, ULTRASONIC_NO_ECHO);
-    check((1u == vehicle_sim_count("fwd236;"))
+    check((1u == vehicle_sim_count("fwd154;"))
               && (1u == vehicle_sim_count("L45")) && (1u == vehicle_sim_count("R45"))
               && (vehicle_is(VS_STOPPED, "path blocked"))
               && (0u == vehicle_sim_count("LINE_SEARCH")),
@@ -2578,7 +2582,7 @@ test_vehicle_barcode_watchdog (void)
        barcode-sized bar. */
     vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
     vehicle_sim_run(200u);
-    vehicle_start(1000u);
+    vehicle_start(DRIVE_MS);
     vehicle_sim_barcode(NAV_LEFT);
     vehicle_sim_run(100u);
     vehicle_sim_bar_black(true);
@@ -2602,7 +2606,7 @@ test_vehicle_barcode_watchdog (void)
     /* A U-turn waits for the junction too. */
     vehicle_sim_press(PIN_BTN_STOP, 0u, 30u);
     vehicle_sim_run(200u);
-    vehicle_start(1000u);
+    vehicle_start(DRIVE_MS);
     vehicle_sim_barcode(NAV_UTURN);
     vehicle_sim_run(100u);
     check((vehicle_is(VS_LINE_FOLLOW, NULL))

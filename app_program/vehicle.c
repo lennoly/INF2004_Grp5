@@ -43,10 +43,14 @@
 #define TASK_STACK         (3072)
 #define LOOP_MS            (20u)
 #define MS_PER_S           (1000.0f)
-#define MOVE_TIMEOUT_MS    (10000u)
+#define MOVE_TIMEOUT_MS    (20000u) /* 360 deg spin at 50 mm/s: 9 s */
 #define MBF_MSGS           (4u)
 #define LINE_GAINS         (3u)
-#define REACQ_SPEED        (90.0f)
+/* Every move (turns, bypass, reverses, line search) runs at the cruise
+   speed set by speed= (dashboard), not only line following.  Hump speeds
+   and the settling cap stay fixed.  Cast: 50..300 mm/s, exact. */
+#define CRUISE             ((float32_t) g_st.cruise_mm_s)
+#define REACQ_SPEED        (CRUISE)
 #define QUARTER_TURN       (90.0f)
 #define EIGHTH_TURN        (45.0f)
 #define DIAGONAL_PER_SIDE  (1.41421356f) /* 45 deg leg per mm sideways */
@@ -60,13 +64,14 @@
 #define SPEED_MAX_CMD      (SPEED_CMD_MAX_MM_S)
 #define STOP_SETTLE_MS     (200u)
 #define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
-/* Line search: alternating sweeps, each REACQ_BASE_MS longer.  At 90 mm/s
-   per wheel on the 138 mm track the car turns about 75 deg/s, so 200 ms is
-   a 15 deg step: +15, -15, +30, -30, +45 deg (was 350 ms, out to 78 deg). */
+#define CALIB_SPEED_MM_S   (100.0f) /* [CALIBRATE] calibration spin (was 50) */
+/* Line search: alternating sweeps, each REACQ_BASE_MS longer.  At 50 mm/s
+   per wheel on the 138 mm track the car turns about 41 deg/s, so 360 ms is
+   a 15 deg step: +15, -15, +30, -30, +45 deg (200 ms at 90 mm/s before). */
 #define REACQ_SWEEPS       (5u)
-#define REACQ_BASE_MS      (200u)
+#define REACQ_BASE_MS      (360u)
 #define REJOIN_EXTRA_MM    (0.0f)  /* return leg past the original path   */
-#define PASS_EXTRA_MM      (90.0f) /* [CALIBRATE] straight leg, on top     */
+#define PASS_EXTRA_MM      (30.0f) /* [CALIBRATE] straight leg, on top (90) */
 #define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
@@ -166,6 +171,7 @@ static void            check_faults(void);
 static void            publish_status(void);
 static uint32_t        gain_field(float32_t gain);
 static bool            run_move(bool b_watch_front);
+static bool            junction_turn(float32_t side);
 static bool            turn_side(float32_t side, float32_t angle_deg);
 static bool            forward(float32_t dist_mm, float32_t speed);
 static bool            line_seen(ir_sensor_snapshot_t const * p_ir);
@@ -754,14 +760,23 @@ run_move (bool b_watch_front)
 static bool
 turn_side (float32_t side, float32_t angle_deg)
 {
-    if (side > 0.0f)
-    {
-        motion_turn_left(angle_deg);
-    }
-    else
-    {
-        motion_turn_right(angle_deg);
-    }
+    motion_pivot(side * angle_deg, CRUISE);
+
+    return (run_move(false));
+}
+
+/*!
+ * @brief Junction pivot towards a side at the cruise speed (the old
+ *        turn speed, 120 mm/s, swung the car past the line), and wait.
+ *
+ * @param[in] side SIDE_LEFT (+1) or SIDE_RIGHT (-1).
+ *
+ * @return true if the turn completed normally.
+ */
+static bool
+junction_turn (float32_t side)
+{
+    motion_pivot(side * NAV_TURN_DEG, CRUISE);
 
     return (run_move(false));
 }
@@ -853,7 +868,11 @@ reacquire_line (float32_t side)
     {
         /* Even sweeps go towards side, odd sweeps back the other way. */
         dir      = (0u == (sweep % 2u)) ? side : -side;
-        sweep_ms = REACQ_BASE_MS * (sweep + 1u);
+        /* Same 15 deg steps at any cruise speed: REACQ_BASE_MS is for
+           SPEED_CRUISE_MM_S.  Cast: the result is under 2^16. */
+        sweep_ms = (uint32_t) car_math_round(
+            ((float32_t) (REACQ_BASE_MS * (sweep + 1u)) * SPEED_CRUISE_MM_S)
+            / CRUISE);
         motion_set_velocity(-dir * REACQ_SPEED, dir * REACQ_SPEED);
 
         for (elapsed_ms = 0u;
@@ -908,14 +927,18 @@ execute_nav (barcode_decode_nav_t cmd)
     switch (cmd)
     {
         case NAV_LEFT:
-            b_ok = (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
-                   && (turn_side(SIDE_LEFT, QUARTER_TURN))
+            /* A short creep, then turn: the old 140 mm drive took the car
+               too far past the junction. */
+            b_ok = (forward(NAV_TURN_AHEAD_MM, CRUISE))
+                   && (junction_turn(SIDE_LEFT))
                    && (reacquire_line(SIDE_LEFT));
         break;
 
         case NAV_RIGHT:
-            b_ok = (forward(LINE_SENSOR_AHEAD_MM, SPEED_SLOW_MM_S))
-                   && (turn_side(SIDE_RIGHT, QUARTER_TURN))
+            /* A short creep, then turn: the old 140 mm drive took the car
+               too far past the junction. */
+            b_ok = (forward(NAV_TURN_AHEAD_MM, CRUISE))
+                   && (junction_turn(SIDE_RIGHT))
                    && (reacquire_line(SIDE_RIGHT));
         break;
 
@@ -928,7 +951,7 @@ execute_nav (barcode_decode_nav_t cmd)
             /* Same as the default: cross the junction. */
         default:
             b_ok = forward(LINE_SENSOR_AHEAD_MM + STRAIGHT_EXTRA_MM,
-                           SPEED_CRUISE_MM_S);
+                           CRUISE);
         break;
     }
 
@@ -966,7 +989,7 @@ pass_obstacle (float32_t pass_mm)
     bool b_ok = false;
 
     obstacle_monitor_enable(true);
-    motion_move_forward(pass_mm, SPEED_BYPASS_MM_S);
+    motion_move_forward(pass_mm, CRUISE);
     b_ok = run_move(true);
     obstacle_monitor_enable(false);
 
@@ -1029,12 +1052,12 @@ bypass (avoidance_plan_t const * p_plan)
     if (back > 0.0f)
     {
         /* Too close for the out leg to clear the near corner. */
-        motion_move_backward(back, SPEED_SLOW_MM_S);
+        motion_move_backward(back, CRUISE);
         b_ok = run_move(false);
     }
 
     b_ok = b_ok && (turn_side(side, EIGHTH_TURN))
-           && (forward(diagonal, SPEED_BYPASS_MM_S))
+           && (forward(diagonal, CRUISE))
            && (turn_side(-side, EIGHTH_TURN)) && (pass_obstacle(straight))
            && (turn_side(-side, EIGHTH_TURN))
            /* Back along the 45 deg leg until the IR row meets the line,
@@ -1066,7 +1089,7 @@ diagonal_to_line (float32_t dist_mm)
     int32_t              result = MOTION_WAIT_BUSY;
     bool                 b_seen = false;
 
-    motion_move_forward(dist_mm, SPEED_BYPASS_MM_S);
+    motion_move_forward(dist_mm, CRUISE);
 
     while ((MOTION_WAIT_BUSY == result) && (!b_seen) && (!gb_abort)
            && (waited <= MOVE_TIMEOUT_MS))
@@ -1112,6 +1135,9 @@ act_on_scan (avoidance_profile_t const * p_prof)
     }
 
     g_st.last_action = plan.action;
+    /* Before anything that waits: the obstacle event takes the action from
+       this snapshot, which a bypass would leave stale until it ends. */
+    publish_status();
     offset_mm        = car_math_round(plan.offset_mm);
 
     /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
@@ -1132,7 +1158,7 @@ act_on_scan (avoidance_profile_t const * p_prof)
             /* Back off; the state stays OBSTACLE, so it re-scans. */
             g_attempts++;
             g_too_close = *p_prof;
-            motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
+            motion_move_backward(REVERSE_MM, CRUISE);
             (void) run_move(false);
         break;
 
@@ -1189,7 +1215,7 @@ handle_obstacle (void)
     if (gb_after_impact)
     {
         gb_after_impact = false;
-        motion_move_backward(REVERSE_MM, SPEED_SLOW_MM_S);
+        motion_move_backward(REVERSE_MM, CRUISE);
         (void) run_move(false);
     }
 
@@ -1514,7 +1540,7 @@ calibrate (void)
     set_state(VS_CALIBRATE, "spin 360");
     ir_sensor_calib_begin();
     imu_mag_calib_begin();
-    motion_turn_left(FULL_TURN);
+    motion_pivot(FULL_TURN, CALIB_SPEED_MM_S);
     (void) run_move(false);
     b_ok = ir_sensor_calib_end();
     imu_mag_calib_end();

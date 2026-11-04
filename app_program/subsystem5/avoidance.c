@@ -490,6 +490,7 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     float32_t        pass       = 0.0f;
     bool             b_left_ok  = false;
     bool             b_right_ok = false;
+    bool             b_near     = false;
     bool             b_unsure   = false;
     bool             b_prefer_l = false;
 
@@ -503,15 +504,16 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
                  && ((float32_t) p_prof->clear_right_mm >= need);
 
     /* Near the centre, or seen narrower than any real obstacle, the seen
-       side cannot be trusted: shift wide, away from the way the box leans
-       (OBST_BLIND_LEFT's side if it is dead centre), so a wrong lean still
-       clears it.  Any side pass shifts at least OBST_MIN_OFFSET_MM. */
-    b_unsure   = (car_math_abs(p_prof->centre_mm) < OBST_CENTRE_UNSURE_MM)
-               || (p_prof->width_mm < OBST_PARTIAL_SCAN_MM);
-    b_prefer_l = b_unsure ? ((p_prof->centre_mm > 0.0f)
-                             || ((!(p_prof->centre_mm < 0.0f))
-                                 && (0 != OBST_BLIND_LEFT)))
-                          : (off_left <= off_right);
+       side cannot be trusted: shift wide.  Near the centre always to
+       OBST_BLIND_LEFT's side: one stray echo flipped the lean of a centred
+       box (+23 / -11 mm, 4 Nov), so a box a little left went left about
+       half the time.  A narrow box clearly off the line passes away from
+       its lean.  Any side pass shifts at least OBST_MIN_OFFSET_MM. */
+    b_near     = car_math_abs(p_prof->centre_mm) < OBST_CENTRE_UNSURE_MM;
+    b_unsure   = b_near || (p_prof->width_mm < OBST_PARTIAL_SCAN_MM);
+    b_prefer_l = b_near     ? (0 != OBST_BLIND_LEFT)
+                 : b_unsure ? (p_prof->centre_mm > 0.0f)
+                            : (off_left <= off_right);
     off_left   = b_unsure ? OBST_BLIND_OFFSET_MM : off_left;
     off_right  = b_unsure ? OBST_BLIND_OFFSET_MM : off_right;
     off_left   = (off_left > OBST_MIN_OFFSET_MM) ? off_left
