@@ -66,8 +66,8 @@ Other commands: `start`, `stop`, `calibrate`, `gains`, `help`, `timing`
 (task times, control jitter and CPU load), `nav=1..4` (turn as if a barcode
 was read: 1 left, 2 right, 3 straight, 4 U-turn), `map=1..4,index` (the
 barcode letter for that turn as its Code 39 index, A=10 .. Z=35; the
-**Demo barcode letters** boxes send these for you, and the car goes back to
-A B C D when reset).
+**Demo barcode letters** boxes send these for you, and a car reset clears
+them: there are no default letters).
 Tuning (`pid=`, `ff=`, `line=`, `speed=`, `map=`) is accepted only while the car is
 IDLE or STOPPED; while it drives, the reply says so.
 The car answers every command with an event (`cmd ... ok` or the reason it

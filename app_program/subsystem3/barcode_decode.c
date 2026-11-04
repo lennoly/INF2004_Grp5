@@ -49,13 +49,10 @@ static char const * const g_nav_names[] = {"NONE", "LEFT", "RIGHT", "STRAIGHT",
                                            "UTURN"};
 
 /* Letter per command, indexed by barcode_decode_nav_t (NAV_NONE unused).
-   Starts from car_config.h; the map= command changes it for the demo
-   (written by the telemetry task, read by the barcode task: one-byte
-   stores, atomic on this CPU). */
-static volatile char g_symbols[] = {'\0', BARCODE_LEFT_SYMBOL,
-                                    BARCODE_RIGHT_SYMBOL,
-                                    BARCODE_STRAIGHT_SYMBOL,
-                                    BARCODE_UTURN_SYMBOL};
+   '\0' = not set: no default, only the map= command sets one (written by
+   the telemetry task, read by the barcode task: one-byte stores, atomic
+   on this CPU).  A decoded letter is never '\0'. */
+static volatile char g_symbols[] = {'\0', '\0', '\0', '\0', '\0'};
 
 #define SYMBOL_SLOTS (sizeof(g_symbols) / sizeof(g_symbols[0]))
 
@@ -148,9 +145,8 @@ barcode_decode_frame (uint32_t const * p_widths, uint32_t count, char * p_out,
 }
 
 /*!
- * @brief Letter to command: car_config.h's BARCODE_*_SYMBOL (the brief:
- *        A = left, B = right, C = straight, D = U-turn) until map= sets
- *        another letter.
+ * @brief Letter to command, as set by map=; before that no letter is a
+ *        command.
  *
  * @param[in] symbol First decoded data character.
  *
@@ -196,15 +192,21 @@ barcode_decode_set_symbol (barcode_decode_nav_t command, char symbol)
  *
  * @param[in] command NAV_LEFT..NAV_UTURN.
  *
- * @return The letter, or '?' for another value.
+ * @return The letter, or '?' if not set yet or for another value.
  */
 char
 barcode_decode_symbol (barcode_decode_nav_t command)
 {
+    char symbol = '?';
+
     /* Cast: the command is a table index. */
-    return (((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS))
-                ? g_symbols[command]
-                : '?');
+    if ((command > NAV_NONE) && ((uint32_t) command < SYMBOL_SLOTS)
+        && ('\0' != g_symbols[command]))
+    {
+        symbol = g_symbols[command];
+    }
+
+    return (symbol);
 }
 
 /*!

@@ -19,8 +19,8 @@
  *   map=<1..4>,<0..42>           barcode letter for a command (same
  *                                numbers as nav=) as its Code 39 index,
  *                                0-9 then A=10 .. Z=35 (the dashboard
- *                                converts letters); back to car_config.h
- *                                at reset
+ *                                converts letters); no default letters,
+ *                                cleared at reset
  *
  * Numbers are plain decimals ("0.08", "-1.5", "12"), without exponents.
  * The tuning commands (speed=, pid=, ff=, line=, map=) are accepted only

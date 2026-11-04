@@ -384,13 +384,20 @@ measure_extent (avoidance_point_t const * p_points, uint32_t low, uint32_t high,
     p_out->left_edge_mm  = point_lateral(&p_points[low]);
     p_out->right_edge_mm = p_out->left_edge_mm;
 
+    /* Only valid echoes: merge_near() can join across a dropout, and a far
+       echo inside the cluster (70:422, 3 Nov) put an edge 73 mm out. */
     for (idx = low; idx <= high; idx++)
     {
-        lateral = point_lateral(&p_points[idx]);
-        p_out->left_edge_mm =
-            (lateral < p_out->left_edge_mm) ? lateral : p_out->left_edge_mm;
-        p_out->right_edge_mm =
-            (lateral > p_out->right_edge_mm) ? lateral : p_out->right_edge_mm;
+        if (point_is_valid(&p_points[idx]))
+        {
+            lateral = point_lateral(&p_points[idx]);
+            p_out->left_edge_mm = (lateral < p_out->left_edge_mm)
+                                      ? lateral
+                                      : p_out->left_edge_mm;
+            p_out->right_edge_mm = (lateral > p_out->right_edge_mm)
+                                       ? lateral
+                                       : p_out->right_edge_mm;
+        }
     }
 
     p_out->centre_mm = 0.5f * (p_out->left_edge_mm + p_out->right_edge_mm);
@@ -500,7 +507,7 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
        (OBST_BLIND_LEFT's side if it is dead centre), so a wrong lean still
        clears it.  Any side pass shifts at least OBST_MIN_OFFSET_MM. */
     b_unsure   = (car_math_abs(p_prof->centre_mm) < OBST_CENTRE_UNSURE_MM)
-               || (p_prof->width_mm < OBST_WIDTH_MIN_MM);
+               || (p_prof->width_mm < OBST_PARTIAL_SCAN_MM);
     b_prefer_l = b_unsure ? ((p_prof->centre_mm > 0.0f)
                              || ((!(p_prof->centre_mm < 0.0f))
                                  && (0 != OBST_BLIND_LEFT)))

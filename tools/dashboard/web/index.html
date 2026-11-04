@@ -128,11 +128,11 @@ canvas { width: 100%; height: 115px; display: block; }
       <h2>Demo barcode letters (car stopped)</h2>
       <div class="tune letters">
         <label>Left</label><label>Right</label><label>Straight</label><label>U-turn</label><span></span>
-        <input id="map1" maxlength="1" value="A"><input id="map2" maxlength="1" value="B">
-        <input id="map3" maxlength="1" value="C"><input id="map4" maxlength="1" value="D">
+        <input id="map1" maxlength="1" value="" placeholder="?"><input id="map2" maxlength="1" value="" placeholder="?">
+        <input id="map3" maxlength="1" value="" placeholder="?"><input id="map4" maxlength="1" value="" placeholder="?">
         <button id="set-map">Set</button>
       </div>
-      <p class="note">Back to A B C D after a car reset: press Set again.</p>
+      <p class="note">No default letters: a barcode does nothing until you press Set. A car reset clears them, so press Set again.</p>
     </section>
     <section>
       <h2>Tuning (car stopped)</h2>
@@ -209,7 +209,7 @@ canvas { width: 100%; height: 115px; display: block; }
         <dt>Pending turn</dt><dd id="v-pend">–</dd>
         <dt>Last turn</dt><dd id="v-bcturn">–</dd>
         <dt>Barcodes read</dt><dd id="v-nbc">–</dd>
-        <dt>Letters L R S U</dt><dd id="v-map">A B C D (default)</dd></dl></section>
+        <dt>Letters L R S U</dt><dd id="v-map">none set</dd></dl></section>
       <section><h2>IMU and terrain</h2><dl class="kv">
         <dt>Yaw / pitch / roll</dt><dd id="v-ypr">–</dd>
         <dt>Turn rate</dt><dd id="v-rate">–</dd>

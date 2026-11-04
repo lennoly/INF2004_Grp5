@@ -143,12 +143,8 @@
 #define BARCODE_WHITE_LEVEL         (0.08f)
 #define BARCODE_QUIET_MS            (250u)    /* white gap ending a frame   */
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
-/* Letter for each command; set on the day.  Must differ (a repeat is a
-   duplicate case and will not compile).  Other letters do nothing. */
-#define BARCODE_LEFT_SYMBOL         ('A')     /* [CALIBRATE]                */
-#define BARCODE_RIGHT_SYMBOL        ('B')     /* [CALIBRATE]                */
-#define BARCODE_STRAIGHT_SYMBOL     ('C')     /* [CALIBRATE]                */
-#define BARCODE_UTURN_SYMBOL        ('D')     /* [CALIBRATE]                */
+/* No default letter per command: none turns the car until map= sets it
+   (dashboard Demo barcode letters), and every reset clears them. */
 #define NAV_EXECUTE_AT_JUNCTION     (1)       /* 0 = act immediately        */
 #define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => act anyway  */
 /* Junctions seen by the barcode sensor: the junction line (18 mm) crosses */
@@ -243,19 +239,21 @@
 #define OBST_FINE_STEP_DEG          (5)
 #define OBST_DEPTH_MAX_MM           (150.0f)  /* [CALIBRATE] deepest box  */
 #define OBST_MAX_ATTEMPTS           (2u)
-/* Obstacles are 10-20 cm wide, up to 60 mm off the line (28 Oct). */
-#define OBST_WIDTH_MAX_MM           (200.0f)
-/* Seen narrower than this: the scan missed part of the box (a centred
-   150 mm box read 94 mm, one side only, 28 Oct), so its edges are not
-   trusted and the car passes wide by OBST_BLIND_OFFSET_MM. */
-#define OBST_WIDTH_MIN_MM           (100.0f)
+/* Pass rules only: the width and its estimate are never limited to these. */
+/* Box size assumed for a blind pass (no edge seen): the widest expected,  */
+/* 10-20 cm, up to 60 mm off the line (28 Oct).                            */
+#define OBST_BLIND_WIDTH_MM         (200.0f)
+/* Seen narrower than this: the scan may have missed part of the box (a
+   centred 150 mm box read 94 mm, one side only, 28 Oct), so its edges are
+   not trusted and the car passes wide by OBST_BLIND_OFFSET_MM. */
+#define OBST_PARTIAL_SCAN_MM        (100.0f)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
    pass this far to one side, enough for the widest obstacle on the line
    (100 + corridor 140 = 240).  The pass goes away from the lean, so a box
    off the line clears by more.  Ceiling: the widest box 60 mm off the line
    on the side passed leaves no gap (a blind or wrong-lean pass). */
 #define OBST_BLIND_OFFSET_MM                                            \
-    ((OBST_WIDTH_MAX_MM / 2.0f) + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
+    ((OBST_BLIND_WIDTH_MM / 2.0f) + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
 /* An edge counts as seen only with this many scan points past it, so a
    single dropout does not make one. */
 #define OBST_EDGE_POINTS            (2u)
@@ -265,10 +263,11 @@
    as seen and the cone as margin. */
 #define OBST_BEAM_HALF_DEG          (0.0f)    /* [CALIBRATE]               */
 /* Width estimate only (est= in the scan lines), not the pass: the same
-   pull-in at this cone.  6: clean scans (nothing behind the box) read a
-   150 mm box 169-195 mm wide at 186-198 mm, est 130-153, and a 230 mm box
-   286 mm, est 246 (3 Nov, 45 deg sweep).  15 was fitted to a scan with
-   other echoes beside the box. */
+   pull-in at this cone.  6 was fitted to a 230 mm box read 286 mm wide,
+   but a far echo inside the box set that edge; with only valid echoes it
+   reads 231 (est 191), and a 150 mm box reads 142 at 148 mm (est 111) and
+   166-200 at 211 mm (est 121-156) (3 Nov, 45 deg sweep).  Not refitted:
+   re-run 150/200/250 first. */
 #define OBST_WIDTH_BEAM_DEG         (6.0f)    /* [CALIBRATE]               */
 /* Seen centre this close to the car's centre line: the side cannot be
    trusted (a box 60 mm left read 10 mm right, or 20 mm left), so pass
