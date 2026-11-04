@@ -198,9 +198,7 @@ motion_move_backward (float32_t dist_mm, float32_t speed_mm_s)
 void
 motion_turn_left (float32_t angle_deg)
 {
-    float32_t arc = (CAR_MATH_PI * TRACK_WIDTH_MM * angle_deg) / FULL_TURN_DEG;
-
-    start_move(MOTION_TURN, arc, DIR_BACKWARD, DIR_FORWARD, SPEED_TURN_MM_S);
+    motion_pivot(angle_deg, SPEED_TURN_MM_S);
 }
 
 /*!
@@ -211,9 +209,30 @@ motion_turn_left (float32_t angle_deg)
 void
 motion_turn_right (float32_t angle_deg)
 {
-    float32_t arc = (CAR_MATH_PI * TRACK_WIDTH_MM * angle_deg) / FULL_TURN_DEG;
+    motion_pivot(-angle_deg, SPEED_TURN_MM_S);
+}
 
-    start_move(MOTION_TURN, arc, DIR_FORWARD, DIR_BACKWARD, SPEED_TURN_MM_S);
+/*!
+ * @brief Pivot on the spot at a chosen wheel speed.
+ *
+ * @param[in] angle_deg  Turn angle in degrees, positive left, negative
+ *                       right.
+ * @param[in] speed_mm_s Wheel speed in mm/s.
+ */
+void
+motion_pivot (float32_t angle_deg, float32_t speed_mm_s)
+{
+    float32_t arc = (CAR_MATH_PI * TRACK_WIDTH_MM * car_math_abs(angle_deg))
+                    / FULL_TURN_DEG;
+
+    if (angle_deg > 0.0f)
+    {
+        start_move(MOTION_TURN, arc, DIR_BACKWARD, DIR_FORWARD, speed_mm_s);
+    }
+    else
+    {
+        start_move(MOTION_TURN, arc, DIR_FORWARD, DIR_BACKWARD, speed_mm_s);
+    }
 }
 
 /*!

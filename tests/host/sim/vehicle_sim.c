@@ -335,6 +335,13 @@ void motion_turn_right(float32_t angle_deg)
     sim_move("R", angle_deg);
 }
 
+void motion_pivot(float32_t angle_deg, float32_t speed_mm_s)
+{
+    (void) speed_mm_s;
+    sim_move((angle_deg > 0.0f) ? "L" : "R",
+             (angle_deg > 0.0f) ? angle_deg : -angle_deg);
+}
+
 void motion_stop(void)
 {
     gs_move_left_ms = 0;

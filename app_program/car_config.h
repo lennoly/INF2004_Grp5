@@ -111,9 +111,11 @@
 #define SPEED_CRUISE_MM_S           (50.0f)   /* [CALIBRATE] 27 Oct: bends */
 #define SPEED_HUMP_UP_MM_S          (100.0f)  /* [CALIBRATE] climbing     */
 #define SPEED_HUMP_DOWN_MM_S        (75.0f)   /* [CALIBRATE] descending    */
-#define SPEED_SLOW_MM_S             (160.0f)  /* 100 stick-slipped (floor) */
-#define SPEED_TURN_MM_S             (120.0f)
-#define SPEED_BYPASS_MM_S           (300.0f)  /* [CALIBRATE] NFR2 max     */
+/* Everything but the humps at the cruise speed, so the car moves the same */
+/* way throughout (4 Nov; were 160, 120 and 300 mm/s).                     */
+#define SPEED_SLOW_MM_S             (50.0f)   /* reverses, settling        */
+#define SPEED_TURN_MM_S             (50.0f)   /* pivots, calibration spin  */
+#define SPEED_BYPASS_MM_S           (50.0f)   /* [CALIBRATE] obstacle pass */
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
 #define SPEED_CMD_MIN_MM_S          (50)
@@ -153,6 +155,12 @@
 #define NAV_JUNCTION_BAR_MIN_MM     (12.0f)   /* [CALIBRATE]                */
 #define NAV_JUNCTION_BAR_MAX_MM     (30.0f)   /* [CALIBRATE]                */
 #define NAV_LINE_JUNCTION           (0)       /* 1 = line junctions too   */
+/* LEFT / RIGHT: creep NAV_TURN_AHEAD_MM, then pivot, both at             */
+/* SPEED_CRUISE_MM_S (a 140 mm drive at 160 mm/s, then 120 mm/s, went past */
+/* the line; no creep at all worked, 4 Nov).  Short of 90 deg; the line    */
+/* search's first sweep finishes it on the line.                           */
+#define NAV_TURN_AHEAD_MM           (60.0f)   /* [CALIBRATE] 4 Nov: was 45   */
+#define NAV_TURN_DEG                (75.0f)   /* [CALIBRATE]                */
 /* After a junction turn or a line search: follow at SPEED_SLOW_MM_S for    */
 /* this distance so the steering lines the car up, then cruise.             */
 #define LINE_SETTLE_MM              (150.0f)
@@ -249,9 +257,9 @@
 #define OBST_PARTIAL_SCAN_MM        (100.0f)
 /* Neither edge seen (a flat face echoes at every servo angle, S5-U07):
    pass this far to one side, enough for the widest obstacle on the line
-   (100 + corridor 140 = 240).  The pass goes away from the lean, so a box
-   off the line clears by more.  Ceiling: the widest box 60 mm off the line
-   on the side passed leaves no gap (a blind or wrong-lean pass). */
+   (100 + corridor 140 = 240).  Blind and near-centre passes go to
+   OBST_BLIND_LEFT's side.  Ceiling: the widest box 60 mm off the line on
+   the side passed leaves no gap. */
 #define OBST_BLIND_OFFSET_MM                                            \
     ((OBST_BLIND_WIDTH_MM / 2.0f) + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
 /* An edge counts as seen only with this many scan points past it, so a
@@ -271,16 +279,18 @@
 #define OBST_WIDTH_BEAM_DEG         (6.0f)    /* [CALIBRATE]               */
 /* Seen centre this close to the car's centre line: the side cannot be
    trusted (a box 60 mm left read 10 mm right, or 20 mm left), so pass
-   wide by OBST_BLIND_OFFSET_MM, away from the way it leans. */
+   wide by OBST_BLIND_OFFSET_MM on OBST_BLIND_LEFT's side. */
 #define OBST_CENTRE_UNSURE_MM       (40.0f)   /* [CALIBRATE]               */
 /* Smallest sideways shift of a side pass: the seen edge can be 60-80 mm
    off, so a pass sized to it alone could clip the box (53 mm, 25 Oct). */
 #define OBST_MIN_OFFSET_MM          (150.0f)  /* [CALIBRATE]               */
-#define OBST_BLIND_LEFT             (1)       /* 0: blind pass on the right*/
+/* Side of a blind pass and of any box within OBST_CENTRE_UNSURE_MM of the */
+/* line: 0 = right (4 Nov: boxes on this course sit a little left).        */
+#define OBST_BLIND_LEFT             (0)       /* 1: pass on the left       */
 /* Diagonal bypass: the car's inner side on the 45 deg legs keeps this    */
 /* clearance from the box's near and far corners (deepest box,            */
 /* OBST_DEPTH_MAX_MM); the car backs off first if the box is too close.   */
-#define OBST_CORNER_MARGIN_MM       (30.0f)   /* [CALIBRATE]               */
+#define OBST_CORNER_MARGIN_MM       (15.0f)   /* [CALIBRATE] was 30        */
 #define OBST_SENSOR_AHEAD_MM        (70.0f)   /* sonar face to axle, measured */
 /* TEST_OBSTACLE build: MISSION with line only after the obstacle.  The   */
 /* car drives straight (no steering, line search or barcode turns) until   */

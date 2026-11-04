@@ -260,7 +260,6 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
 
         /* Cast: count is at most SCAN_MAX_POINTS (40). */
         g_last_count = (uint8_t) count;
-        g_scans++;
         EI(imask);
 
         /* Casts: tm_printf() takes the kernel's UB string type (the literal
@@ -289,6 +288,13 @@ obstacle_scan (avoidance_profile_t * p_prof, obstacle_stop_cb_t p_should_stop)
         }
 
         (void) tm_printf((UB const *) "\n");
+
+        /* Counted only after the prints: the telemetry task sends the
+           obstacle event when it sees a new scan, and by then the vehicle
+           task must have planned (act_on_scan()); counted before, the
+           event showed the previous bypass's side (4 Nov).  One byte,
+           this task its only writer. */
+        g_scans++;
     }
     else
     {

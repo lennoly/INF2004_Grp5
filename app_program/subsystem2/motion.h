@@ -63,6 +63,7 @@ void motion_move_backward(float32_t dist_mm, float32_t speed_mm_s);
 void motion_turn_left(float32_t angle_deg);
 void motion_turn_right(float32_t angle_deg);
 void motion_stop(void);
+void motion_pivot(float32_t angle_deg, float32_t speed_mm_s); /* + left */
 
 /* Continuous control for line following and searching.  A velocity
    command brakes if neither it nor motion_keep_alive() is repeated within
