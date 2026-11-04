@@ -699,20 +699,26 @@ test_barcode (void)
                   "(20%% noise, speed drift, both directions)\n",
                   decoded, total);
     check(decoded == total, "all synthetic frames decode");
-    check(NAV_LEFT == barcode_decode_to_command(BARCODE_LEFT_SYMBOL), "left");
-    check(NAV_RIGHT == barcode_decode_to_command(BARCODE_RIGHT_SYMBOL),
-          "right");
-    check(NAV_STRAIGHT == barcode_decode_to_command(BARCODE_STRAIGHT_SYMBOL),
-          "straight");
-    check(NAV_UTURN == barcode_decode_to_command(BARCODE_UTURN_SYMBOL),
-          "u-turn");
+    check((NAV_NONE == barcode_decode_to_command('A'))
+              && (NAV_NONE == barcode_decode_to_command('D'))
+              && ('?' == barcode_decode_symbol(NAV_LEFT))
+              && ('?' == barcode_decode_symbol(NAV_UTURN)),
+          "no default letters: nothing turns before map=");
+    barcode_decode_set_symbol(NAV_LEFT, 'Q');
+    barcode_decode_set_symbol(NAV_RIGHT, 'R');
+    barcode_decode_set_symbol(NAV_STRAIGHT, '7');
+    barcode_decode_set_symbol(NAV_UTURN, 'U');
+    check((NAV_LEFT == barcode_decode_to_command('Q'))
+              && (NAV_RIGHT == barcode_decode_to_command('R'))
+              && (NAV_STRAIGHT == barcode_decode_to_command('7'))
+              && (NAV_UTURN == barcode_decode_to_command('U')),
+          "map: the letters set give their commands");
     check(NAV_NONE == barcode_decode_to_command('*'), "* is no command");
     barcode_decode_set_symbol(NAV_LEFT, 'K');
     check((NAV_LEFT == barcode_decode_to_command('K'))
-              && (NAV_NONE == barcode_decode_to_command(BARCODE_LEFT_SYMBOL))
+              && (NAV_NONE == barcode_decode_to_command('Q'))
               && ('K' == barcode_decode_symbol(NAV_LEFT)),
           "map: demo letter K now turns left, the old one does nothing");
-    barcode_decode_set_symbol(NAV_LEFT, BARCODE_LEFT_SYMBOL);
 
     for (count = 0u; count < PHOTO_ELEMENTS; count++)
     {
@@ -1493,7 +1499,7 @@ test_obstacle (void)
 
         (void) avoidance_profile(points, 11u, &prof);
         plan = avoidance_plan(&prof, 0u);
-        check((prof.width_mm < OBST_WIDTH_MIN_MM)
+        check((prof.width_mm < OBST_PARTIAL_SCAN_MM)
                   && (AVOID_CONTINUE != plan.action)
                   && (plan.offset_mm >= (OBST_BLIND_OFFSET_MM - 0.5f)),
               "centred box seen half (94 mm): wide pass, not 150 mm");
@@ -1531,8 +1537,28 @@ test_obstacle (void)
               && (plan.offset_mm >= OBST_BLIND_OFFSET_MM),
           "wide box past both sweep ends: blind pass on OBST_BLIND_LEFT's side");
     check((OBST_BLIND_OFFSET_MM - (CAR_WIDTH_MM / 2.0f) - OBST_MARGIN_MM)
-              >= (OBST_WIDTH_MAX_MM / 2.0f),
+              >= (OBST_BLIND_WIDTH_MM / 2.0f),
           "blind pass clears a 200 mm box on the line with the margin");
+
+    /* 3 Nov (log 231341): a 150 mm box at 148 mm with far echoes inside
+       the cluster (70:426, 105:293, 110:293) read w=246; the valid
+       points alone span 65..115 deg, 143 mm. */
+    {
+        static int16_t const dist_dropout[19] = {
+            1053, 1054, 296, 1058, 167, 426, 157, 157, 170, 148,
+            148,  148,  293, 293,  170, 452, 958, 949, 943};
+
+        for (idx = 0u; idx < 19u; idx++)
+        {
+            /* Cast: 45..135 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (45 + (5 * (int32_t) idx));
+            points[idx].dist_mm   = dist_dropout[idx];
+        }
+
+        (void) avoidance_profile(points, 19u, &prof);
+        check(nearly(prof.width_mm, 143.0f, 2.0f),
+              "far echoes inside the box are not edges: w=143, not 246");
+    }
 
     /* S5-U07, 3 Nov (log 211709): a 150 mm box read w=195 and a 230 mm
        box w=286 on the 45 deg sweep; the estimate takes the cone off. */
@@ -1563,10 +1589,11 @@ test_obstacle (void)
         }
 
         (void) avoidance_profile(points, 19u, &prof);
+        /* w read 286 until the far echo at 120 deg (364 mm) stopped
+           counting as the left edge. */
         check(avoidance_width_known(&prof)
-                  && nearly(prof.width_mm, 286.0f, 2.0f)
-                  && nearly(avoidance_width_estimate(&prof), 230.0f, 20.0f),
-              "230 mm box, 211709: w=286, estimate within 20 mm of 230");
+                  && nearly(prof.width_mm, 231.0f, 2.0f),
+              "230 mm box, 211709: w=231 from the valid points");
         prof.b_found = false;
         check(nearly(avoidance_width_estimate(&prof), 0.0f, 0.5f),
               "width estimate: 0 with nothing found");
