@@ -70,6 +70,7 @@
    a 15 deg step: +15, -15, +30, -30, +45 deg (200 ms at 90 mm/s before). */
 #define REACQ_SWEEPS       (5u)
 #define REACQ_BASE_MS      (360u)
+#define REACQ_BASE_SPEED   (50.0f) /* the speed REACQ_BASE_MS is for */
 #define REJOIN_EXTRA_MM    (0.0f)  /* return leg past the original path   */
 #define PASS_EXTRA_MM      (50.0f) /* [CALIBRATE] straight leg, on top (was 30) */
 #define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
@@ -869,9 +870,9 @@ reacquire_line (float32_t side)
         /* Even sweeps go towards side, odd sweeps back the other way. */
         dir      = (0u == (sweep % 2u)) ? side : -side;
         /* Same 15 deg steps at any cruise speed: REACQ_BASE_MS is for
-           SPEED_CRUISE_MM_S.  Cast: the result is under 2^16. */
+           REACQ_BASE_SPEED.  Cast: the result is under 2^16. */
         sweep_ms = (uint32_t) car_math_round(
-            ((float32_t) (REACQ_BASE_MS * (sweep + 1u)) * SPEED_CRUISE_MM_S)
+            ((float32_t) (REACQ_BASE_MS * (sweep + 1u)) * REACQ_BASE_SPEED)
             / CRUISE);
         motion_set_velocity(-dir * REACQ_SPEED, dir * REACQ_SPEED);
 

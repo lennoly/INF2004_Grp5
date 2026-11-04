@@ -108,14 +108,14 @@
 #define SPEED_OFFSET_PCT            (2.3f)    /* static friction offset     */
 #define STRAIGHT_KP                 (2.0f)    /* (mm/s) per mm L-R mismatch */
 
-#define SPEED_CRUISE_MM_S           (50.0f)   /* [CALIBRATE] 27 Oct: bends */
+#define SPEED_CRUISE_MM_S           (75.0f)   /* [CALIBRATE] 4 Nov (was 50) */
 #define SPEED_HUMP_UP_MM_S          (100.0f)  /* [CALIBRATE] climbing     */
 #define SPEED_HUMP_DOWN_MM_S        (75.0f)   /* [CALIBRATE] descending    */
 /* Everything but the humps at the cruise speed, so the car moves the same */
-/* way throughout (4 Nov; were 160, 120 and 300 mm/s).                     */
-#define SPEED_SLOW_MM_S             (50.0f)   /* reverses, settling        */
-#define SPEED_TURN_MM_S             (50.0f)   /* pivots, calibration spin  */
-#define SPEED_BYPASS_MM_S           (50.0f)   /* [CALIBRATE] obstacle pass */
+/* way throughout (4 Nov: 75; were 160, 120 and 300 mm/s, then 50).       */
+#define SPEED_SLOW_MM_S             (75.0f)   /* settling cap              */
+#define SPEED_TURN_MM_S             (75.0f)   /* motion_turn_*()           */
+#define SPEED_BYPASS_MM_S           (75.0f)   /* [CALIBRATE] obstacle pass */
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
 #define SPEED_CMD_MIN_MM_S          (50)
