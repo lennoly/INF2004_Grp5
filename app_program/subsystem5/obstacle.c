@@ -50,15 +50,15 @@
 #define PAUSE_STEP_MS     (10u)
 #define PAUSE_STEPS       (20u) /* wait at most 200 ms for the monitor */
 
-/* Change Requirement 1: the close-echo and FAULT counts (0..3 each) share
+/* Change Requirement 1: the close-echo and FAULT counts (0..7 each) share
    one byte, written whole by monitor_update() and obstacle_monitor_enable()
    and read whole by obstacle_ahead(). */
-#define COUNT_BITS        (2u)
-#define COUNT_MASK        (0x03u)
+#define COUNT_BITS        (3u)   /* OBST_FAULT_LIMIT 4 needs 3 */
+#define COUNT_MASK        (0x07u)
 #define POINT_DIST_NONE   (0xFFFFu) /* stored scan point without an echo */
 
 #if (OBST_CONFIRM_READINGS > COUNT_MASK) || (OBST_FAULT_LIMIT > COUNT_MASK)
-#error "OBST_CONFIRM_READINGS and OBST_FAULT_LIMIT must fit in 2 bits"
+#error "OBST_CONFIRM_READINGS and OBST_FAULT_LIMIT must fit in COUNT_BITS"
 #endif
 
 /* Written by the monitor and vehicle tasks, read by the vehicle and

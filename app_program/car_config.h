@@ -238,7 +238,9 @@
 /* following: impacts are still counted and reported, but do not stop.     */
 #define OBST_ON_IMPACT              (1)
 #define OBST_CONFIRM_READINGS       (2u)      /* close front pings in a row */
-#define OBST_FAULT_LIMIT            (2u)      /* FAULT pings in a row: stop */
+/* 4 Nov: 2 stopped the car on short dropouts while pivoting (194058,    */
+/* 194455); 4 pings at ~70 ms: a dead sensor still stops in ~0.3 s.      */
+#define OBST_FAULT_LIMIT            (4u)      /* FAULT pings in a row: stop */
 #define OBST_STALE_MS               (300u)    /* no front reading: stop     */
 #define OBST_TOO_CLOSE_MM           (90)      /* reverse below this         */
 #define OBST_CLUSTER_DEPTH_MM       (150)
