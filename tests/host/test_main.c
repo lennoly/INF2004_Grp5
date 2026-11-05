@@ -2556,15 +2556,17 @@ static void
 test_vehicle_sonar_health (void)
 {
     vehicle_start(DRIVE_MS);
+    /* OBST_FAULT_LIMIT 4: three in a row are a dropout, the fourth stops. */
+    vehicle_sim_front_fault();
+    vehicle_sim_front_fault();
     vehicle_sim_front_fault();
     vehicle_sim_step();
     check(vehicle_is(VS_LINE_FOLLOW, NULL),
-          "vehicle: one FAULT ping is tolerated");
-    vehicle_sim_front_fault();
+          "vehicle: three FAULT pings in a row are tolerated");
     vehicle_sim_front_fault();
     vehicle_sim_step();
     check(vehicle_is(VS_STOPPED, "fault: sonar no echo"),
-          "vehicle: two FAULT pings in a row stop the car");
+          "vehicle: four FAULT pings in a row stop the car");
 
     vehicle_start(DRIVE_MS);
     vehicle_sim_monitor_starve(true);
