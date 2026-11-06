@@ -9,14 +9,13 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 |---|---|---|---|---|
 | 1 | **SYS-04** obstacle bypass + rejoin | MISSION on the course, obstacles in the allowed positions (left, centre, right). Box 20 cm or less | MISSION (wifi) | no collision, line picked up again every time |
 | 2 | **S5-U12** rerun, sonar failure stops the car | MISSION, line following, pull the sonar ECHO wire (then TRIG) | MISSION | `fault: sonar no echo` within about 0.3 s (limit now 4 pings); starts again after reconnecting |
-| 3 | **S5-U07** profile accuracy (FAIL so far) | `TEST_ULTRASONIC`, 8 cm and 15 cm boxes centred at 200 mm, 3 scans each, `python3 tools/scan_plot.py <log> --box X,Y,W` | TEST_ULTRASONIC | width and centre error recorded, width within the beam margin. A recorded FAIL with the numbers is acceptable for the report |
+| 3 | **S5-U07** profile accuracy (FAIL so far, 6 Nov logged) | Optional rerun: the 18.5 cm box with its face at **200 mm** (it was at 253 mm on 6 Nov, past the 280 mm cut-off), 3 presses | TEST_ULTRASONIC | width and centre error recorded. The 6 Nov FAIL row already counts for the report |
 
 ## Have the log, not written in yet
 
 | Test | Log | Result |
 |---|---|---|
 | **S5-U12** sonar failure stops the car | `logs/20261104_172213` (sonar fault while driving stopped the car) | PASS at the old limit of 2, with a note that it was a real loose connection; rerun at the new limit of 4 (see below) |
-| **S5-U07** | `logs/20261104_164356` (100 mm box read 114-155) | FAIL |
 
 ## Done
 
