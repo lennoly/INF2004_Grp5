@@ -130,7 +130,7 @@
 #define IR_DEFAULT_WHITE            (200u)    /* [CALIBRATE] raw ADC counts */
 #define IR_DEFAULT_BLACK            (2400u)   /* [CALIBRATE] TEST_IR 22 Oct */
 
-#define LINE_KP                     (45.0f)   /* (mm/s) per unit error      */
+#define LINE_KP                     (18.0f)   /* (mm/s) per unit error; 6 Nov: 45 -> 35 -> 18, jitter (200324) */
 #define LINE_KI                     (0.0f)
 #define LINE_KD                     (0.0f)
 #define LINE_LOST_LEVEL             (0.15f)   /* both below => off line     */
@@ -141,9 +141,18 @@
 
 /* 14 cm barcode (S3-U03): narrow bars peak at 190-810 permille driving at
    100 mm/s, white paper reads 0-21. */
-#define BARCODE_BLACK_LEVEL         (0.15f)   /* [CALIBRATE] hysteresis     */
-#define BARCODE_WHITE_LEVEL         (0.08f)
-#define BARCODE_QUIET_MS            (250u)    /* white gap ending a frame   */
+/* 6 Nov (TEST_IR 174231, sensor at running height): white 187-270 raw
+   (max 318), held on black 2300-2900; narrow bars passing at speed peaked
+   at 484 and 564 raw, 13 and 16 %, so at 15 % some were missed and the
+   rest read as 7-20 ms tips.  Was 0.15 / 0.08; 0.08 is 376 raw, 0.05 310. */
+#define BARCODE_BLACK_LEVEL         (0.08f)   /* [CALIBRATE] hysteresis     */
+#define BARCODE_WHITE_LEVEL         (0.05f)
+/* White gap ending a frame.  6 Nov (180900): wide spaces of about 20-25 mm
+   took 184-250+ ms at 100 mm/s, so 250 split the frame in two (7 + 3
+   elements); at the 75 mm/s cruise they take up to 330 ms.  500 ms is 37 mm
+   at 75.  Above 254 ms only the idle timer ends a frame (element widths
+   saturate at PACKED_WIDTH_OVER). */
+#define BARCODE_QUIET_MS            (500u)
 #define BARCODE_MIN_WIDE_RATIO      (1.6f)    /* wide/narrow sanity check   */
 /* No default letter per command: none turns the car until map= sets it
    (dashboard Demo barcode letters), and every reset clears them. */
@@ -265,9 +274,11 @@
    the side passed leaves no gap. */
 #define OBST_BLIND_OFFSET_MM                                            \
     ((OBST_BLIND_WIDTH_MM / 2.0f) + (CAR_WIDTH_MM / 2.0f) + OBST_MARGIN_MM)
-/* An edge counts as seen only with this many scan points past it, so a
-   single dropout does not make one. */
-#define OBST_EDGE_POINTS            (2u)
+/* An edge counts as seen only with this many scan points past it.  6 Nov:
+   1 (was 2).  On the 40 deg sweep the cone still echoes off a box's corner
+   35 deg out, on the second-last point, so a 10 cm box centred read cl=0
+   (140935).  Ceiling: one dropout on the end point now counts as free. */
+#define OBST_EDGE_POINTS            (1u)
 /* Sonar cone: each seen edge is pulled in by closest x tan(beam).  0: a
    flat face only echoes near square-on, so the seen box can sit 60-80 mm
    from the real one (25 Oct); 8 deg cut a pass to 53 mm.  Keep the edges

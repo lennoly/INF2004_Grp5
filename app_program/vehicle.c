@@ -65,6 +65,7 @@
 #define STOP_SETTLE_MS     (200u)
 #define CALIB_HOLD_MS      (2000u) /* START held => calibrate */
 #define CALIB_SPEED_MM_S   (100.0f) /* [CALIBRATE] calibration spin (was 50) */
+#define CALIB_TURN_DEG     (330.0f) /* [CALIBRATE] one real turn          */
 /* Line search: alternating sweeps, each REACQ_BASE_MS longer.  At 50 mm/s
    per wheel on the 138 mm track the car turns about 41 deg/s, so 360 ms is
    a 15 deg step: +15, -15, +30, -30, +45 deg (200 ms at 90 mm/s before). */
@@ -1541,7 +1542,9 @@ calibrate (void)
     set_state(VS_CALIBRATE, "spin 360");
     ir_sensor_calib_begin();
     imu_mag_calib_begin();
-    motion_pivot(FULL_TURN, CALIB_SPEED_MM_S);
+    /* Encoder pivots overshoot (wheel slip): 360 went past a full turn,
+       300 fell short (6 Nov). */
+    motion_pivot(CALIB_TURN_DEG, CALIB_SPEED_MM_S);
     (void) run_move(false);
     b_ok = ir_sensor_calib_end();
     imu_mag_calib_end();
