@@ -1,4 +1,4 @@
-# Tests still to do (4 Nov 2026)
+# Tests still to do (6 Nov 2026)
 
 Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 (S5-U09, S3-U03) are left out.
@@ -8,7 +8,8 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 | # | Test | What to do | Build | Pass when |
 |---|---|---|---|---|
 | 1 | **SYS-04** obstacle bypass + rejoin | MISSION on the course, obstacles in the allowed positions (left, centre, right). Box 20 cm or less | MISSION (wifi) | no collision, line picked up again every time |
-| 2 | **S5-U07** profile accuracy (FAIL so far) | `TEST_ULTRASONIC`, 8 cm and 15 cm boxes centred at 200 mm, 3 scans each, `python3 tools/scan_plot.py <log> --box X,Y,W` | TEST_ULTRASONIC | width and centre error recorded, width within the beam margin. A recorded FAIL with the numbers is acceptable for the report |
+| 2 | **S5-U12** rerun, sonar failure stops the car | MISSION, line following, pull the sonar ECHO wire (then TRIG) | MISSION | `fault: sonar no echo` within about 0.3 s (limit now 4 pings); starts again after reconnecting |
+| 3 | **S5-U07** profile accuracy (FAIL so far) | `TEST_ULTRASONIC`, 8 cm and 15 cm boxes centred at 200 mm, 3 scans each, `python3 tools/scan_plot.py <log> --box X,Y,W` | TEST_ULTRASONIC | width and centre error recorded, width within the beam margin. A recorded FAIL with the numbers is acceptable for the report |
 
 ## Have the log, not written in yet
 
@@ -51,6 +52,6 @@ Write these down while you test (phone notes are fine); I fill in the rows.
 
 ## Suggested order
 
-1. **SYS-04.** MISSION on the course with boxes left, centre and right (default side is now left).
+1. **SYS-04.** MISSION on the course with boxes left, centre and right. The car passes away from the side the box reads on (scan 40 deg each way).
 2. **S5-U12 rerun.** Quick: pull the ECHO wire while line following.
 3. **S5-U07.** Only if there is time.
