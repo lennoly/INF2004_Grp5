@@ -1366,9 +1366,9 @@ test_obstacle (void)
                   avoidance_action_name(plan.action), wide(plan.offset_mm));
     check(nearly(prof.width_mm, BOX_WIDTH_MM, WIDTH_TOLERANCE),
           "width estimate");
-    /* 10 mm right is within OBST_CENTRE_UNSURE_MM: the fixed side. */
+    /* No near-centre zone: even 10 mm right passes away from it. */
     check(AVOID_TURN_LEFT == plan.action,
-          "box 10 mm right, near the centre: pass left (fixed side)");
+          "box 10 mm right: pass left, away from it");
     check(nearly(plan.pass_mm,
                  (float32_t) prof.closest_mm + OBST_DEPTH_MAX_MM
                      + CAR_LENGTH_MM + OBST_MARGIN_MM,
