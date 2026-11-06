@@ -9,7 +9,6 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 |---|---|---|---|---|
 | 1 | **SYS-04** obstacle bypass + rejoin | MISSION on the course, obstacles in the allowed positions (left, centre, right). Box 20 cm or less | MISSION (wifi) | no collision, line picked up again every time |
 | 2 | **S5-U12** rerun, sonar failure stops the car | MISSION, line following, pull the sonar ECHO wire (then TRIG) | MISSION | `fault: sonar no echo` within about 0.3 s (limit now 4 pings); starts again after reconnecting |
-| 3 | **S5-U07** profile accuracy (FAIL so far, 6 Nov logged) | Optional rerun: the 18.5 cm box with its face at **200 mm** (it was at 253 mm on 6 Nov, past the 280 mm cut-off), 3 presses | TEST_ULTRASONIC | width and centre error recorded. The 6 Nov FAIL row already counts for the report |
 
 ## Have the log, not written in yet
 
@@ -24,7 +23,7 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 - **S2:** U01 to U06
 - **S3:** U01, U02
 - **S4:** U01 to U06
-- **S5:** U01, U02, U03 (191119: 6 of 6, left- and right-aligned boxes), U04, U05, U06, U08, U10, U11
+- **S5:** U01, U02, U03 (191119: 6 of 6, left- and right-aligned boxes), U04, U05, U06, U07 (6 Nov: 100 mm FAIL on width, 185 mm PARTIAL; centre accurate), U08, U10, U11
 - **System:** SYS-01 (181307, 185643), SYS-02 (LEFT, RIGHT, STRAIGHT, U-TURN: 184558), SYS-03, SYS-05
 
 ## What to record
@@ -53,4 +52,3 @@ Write these down while you test (phone notes are fine); I fill in the rows.
 
 1. **SYS-04.** MISSION on the course with boxes left, centre and right. The car passes away from the side the box reads on (scan 40 deg each way).
 2. **S5-U12 rerun.** Quick: pull the ECHO wire while line following.
-3. **S5-U07.** Only if there is time.
