@@ -213,10 +213,11 @@
    box on the right was seen 40 mm later than one on the left (31 Oct). */
 #define SERVO_TRIM_US               (-28)
 /* [CALIBRATE] The mount stopped the sensor at about 60 and 120 deg (bench,
-   22 Oct); fixed on 3 Nov to turn 45 deg each way.  Never command past
-   these, so the servo cannot push on it.                                  */
-#define SERVO_MIN_DEG               (45)      /* furthest right             */
-#define SERVO_MAX_DEG               (135)     /* furthest left              */
+   22 Oct); fixed on 3 Nov to turn 45 deg each way, scanned 40 each way
+   since 6 Nov (Kent's choice: a 20 mm-off 20 cm box at 200 mm still shows
+   both edges).  Never command past these, so the servo cannot push on it. */
+#define SERVO_MIN_DEG               (50)      /* furthest right             */
+#define SERVO_MAX_DEG               (130)     /* furthest left              */
 /* [CALIBRATE] 1 if servo 0 deg points the sensor left (mirrored mount).
    0: with 1 the sweep started on the car's right, not its left (seen on
    the car, 3 Nov), and a box 60 mm right read 32 mm left.                 */
