@@ -284,8 +284,9 @@
    trusted (a box 60 mm left read 10 mm right, or 20 mm left), so pass
    wide by OBST_BLIND_OFFSET_MM on OBST_BLIND_LEFT's side.  40 sent a box
    well right of the line (read +30 mm, 4 Nov 190538) right, into it; a
-   centred box read -11..+23 and clears on either side. */
-#define OBST_CENTRE_UNSURE_MM       (20.0f)   /* [CALIBRATE] was 40        */
+   centred box read -11..+23 and clears on either side.  0 (6 Nov, Kent):
+   always pass away from the side the box reads on, even -9 mm. */
+#define OBST_CENTRE_UNSURE_MM       (0.0f)    /* [CALIBRATE] 6 Nov: off; was 20, 40 */
 /* Smallest sideways shift of a side pass: the seen edge can be 60-80 mm
    off, so a pass sized to it alone could clip the box (53 mm, 25 Oct). */
 #define OBST_MIN_OFFSET_MM          (150.0f)  /* [CALIBRATE]               */
