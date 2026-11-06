@@ -1470,6 +1470,25 @@ test_obstacle (void)
               "box read +30 mm right (190538): pass left");
     }
 
+    /* 6 Nov 140935, 10 cm box centred, 40 deg sweep: corner echoes at
+       120..125 deg, the end point 130 free.  Both edges seen. */
+    {
+        static int16_t const corner[17] = {447, 293, 301, 224, 190, 190,
+                                           190, 180, 180, 180, 180, 202,
+                                           202, 190, 224, 224, 769};
+
+        for (idx = 0u; idx < 17u; idx++)
+        {
+            /* Cast: 50..130 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (50 + (5 * (int32_t) idx));
+            points[idx].dist_mm   = corner[idx];
+        }
+
+        (void) avoidance_profile(points, 17u, &prof);
+        check((0 != prof.clear_left_mm) && (0 != prof.clear_right_mm),
+              "corner echo next to the sweep end (140935): both edges seen");
+    }
+
     /* 25 Oct, 8 cm box 60 mm left.  A flat face read 10 mm right of
        centre: side unsure, wide blind pass.  Seen only at 110..115 deg:
        pass right, but never shift less than OBST_MIN_OFFSET_MM. */
@@ -1620,20 +1639,20 @@ test_obstacle (void)
               "width estimate: 0 with nothing found");
     }
 
-    /* Edge hysteresis: one point past the box is not an edge, two are;
-       a single dropout inside the box is not one either. */
+    /* Edges (OBST_EDGE_POINTS 1): the box on the end point is not an edge,
+       one point past it is; a single dropout inside the box is not one. */
     for (idx = 0u; idx < 11u; idx++)
     {
-        /* Cast: 65..115 deg fit int16_t. */
+        /* Cast: 50..100 deg fit int16_t. */
         points[idx].angle_deg = (int16_t) (SERVO_MIN_DEG + (5 * (int32_t) idx));
-        points[idx].dist_mm   = (idx < 10u) ? 150 : -1;
+        points[idx].dist_mm   = 150;
     }
 
     (void) avoidance_profile(points, 11u, &prof);
-    check(0 == prof.clear_left_mm, "edge: one point past the box is not seen");
-    points[9].dist_mm = -1;
+    check(0 == prof.clear_left_mm, "edge: box on the end point is not seen");
+    points[10].dist_mm = -1;
     (void) avoidance_profile(points, 11u, &prof);
-    check(0 != prof.clear_left_mm, "edge: two points past the box are seen");
+    check(0 != prof.clear_left_mm, "edge: one point past the box is seen");
     points[9].dist_mm  = 150;
     points[10].dist_mm = 150;
     points[5].dist_mm  = -1;
@@ -2338,11 +2357,11 @@ test_vehicle_buttons (void)
     vehicle_sim_clear_log();
     vehicle_sim_press(PIN_BTN_START, 50u, 2500u);
     vehicle_sim_run(2500u);
-    check(0u == vehicle_sim_count("L360"), "vehicle: no spin while held");
+    check(0u == vehicle_sim_count("L330"), "vehicle: no spin while held");
     vehicle_sim_run(1500u);
-    check((1u == vehicle_sim_count("L360"))
+    check((1u == vehicle_sim_count("L330"))
               && (vehicle_is(VS_IDLE, "calibrated")),
-          "vehicle: START held 2 s calibrates on release");
+          "vehicle: START held 2 s calibrates on release (330 = full turn)");
 
     vehicle_start(450u);
     vehicle_sim_press(PIN_BTN_START, 50u, 350u);

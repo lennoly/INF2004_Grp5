@@ -9,6 +9,7 @@ Full definitions and results are in each `TEST_LOG.md`. Dropped tests
 |---|---|---|---|---|
 | 1 | **SYS-04** obstacle bypass + rejoin | MISSION on the course, obstacles in the allowed positions (left, centre, right). Box 20 cm or less | MISSION (wifi) | no collision, line picked up again every time |
 | 2 | **S5-U12** rerun, sonar failure stops the car | MISSION, line following, pull the sonar ECHO wire (then TRIG) | MISSION | `fault: sonar no echo` within about 0.3 s (limit now 4 pings); starts again after reconnecting |
+| 3 | **SYS-01** rerun, full lap on the final build | MISSION, calibrate, one full lap at speed 75, line gain 35 (default since 6 Nov, was 45) | MISSION | full lap, no line loss or hand stop; also counts as the SYS-02/03 check on this build |
 
 ## Have the log, not written in yet
 
