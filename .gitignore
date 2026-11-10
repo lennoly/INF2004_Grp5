@@ -13,11 +13,11 @@ mqtt_config.h
 /tests/host/picocar_tests
 /tests/host/picocar_tests.exe
 
-# Firmware build output.
+# Firmware build output: built locally (README, "Build"), never committed.
+# WiFi builds also hold the WiFi password.
 *.uf2
-!firmware/*.uf2
-# WiFi builds hold the WiFi password (template/config): never commit them
-firmware/*_wifi.uf2
+/firmware/
+/build_all/
 *.elf
 *.bin
 *.map

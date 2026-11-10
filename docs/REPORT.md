@@ -1,8 +1,8 @@
 ---
 title: "Autonomous Robotic Car Challenge — Project Report"
 subtitle: "Embedded Systems Project · Raspberry Pi Pico W + Cytron Robo Pico · µT-Kernel 3.0"
-author: "Team: ________ (Buddy 1: ____ · Buddy 2: ____ · Buddy 3: ____ · Buddy 4: ____ · Buddy 5: ____)"
-date: "Week 10"
+author: "Group 5: Kent (2500343) · Levia (2503109) · Max (2501660) · Lennon (2503438) · Raees (2501955)"
+date: "10 November 2026"
 ---
 
 # 1. Introduction
@@ -20,9 +20,9 @@ The briefing's guidance — *"Start with interfaces, then build evidence"* — s
 | 3 | Execute Left / Right / Straight / U-turn | `vehicle.c::execute_nav()` using encoder turns | B3, B2 |
 | 4 | Detect humps | `terrain_hump_update()` pitch state machine in `terrain.c` | B4 |
 | 5 | Measure and report highest hump peak | height = Σ ds·sin(pitch); `max_peak_mm` in telemetry | B4, B1 |
-| 6 | Detect obstacles on or near the line | background sonar monitor task, 300 mm threshold | B5 |
-| 7 | Profile obstacle shape and position | coarse → fine servo scan + `avoidance_profile()` | B5 |
-| 8 | Navigate around obstacles without collision | `avoidance_plan()` + box-bypass manoeuvre | B5, B2 |
+| 6 | Detect obstacles on or near the line | background sonar monitor task, two readings under 200 mm | B5 |
+| 7 | Profile obstacle shape and position | 17-point servo scan (50°–130°) + `avoidance_profile()` | B5 |
+| 8 | Navigate around obstacles without collision | `avoidance_plan()` + diagonal (45°) bypass | B5, B2 |
 | 9 | Reacquire the original line | `seek_line()` + `reacquire_line()` | B5, B3 |
 | 10 | Report telemetry over WiFi | lwIP's MQTT 3.1.1 client, 5 Hz telemetry, heartbeat | B1 |
 
@@ -98,13 +98,16 @@ Efficiency choices:
 - Event-driven echo and encoder capture instead of polling.
 - Telemetry rate chosen so MQTT never saturates the TCP send buffer.
 
-Estimated CPU cost (to be confirmed on hardware with a GPIO toggle and logic analyser):
+CPU cost measured on the car with the `timing` command over a full 72 s lap (INT-06, 4 Nov, WiFi on):
 
-| Item | Estimate | CPU share |
+| Item | Longest time measured | Period |
 |---|---|---|
-| IR ISR | ~15 µs per sample | ≈ 1.5 % |
-| Motion loop | < 0.2 ms per cycle | < 1 % |
-| IMU step, dominated by polled I2C | ≈ 0.6 ms | ≈ 3 % |
+| IR sampler ISR | 66 µs | 1 ms |
+| Motion loop | 725 µs | 20 ms |
+| Vehicle loop | 667 µs | 20 ms |
+| IMU step (polled I2C) | 1372 µs | 20 ms |
+| Network (MQTT) | 991 µs | 200 ms telemetry |
+| Whole lap | CPU load 12 %, control jitter at most 1779 µs (limit 2000 µs) | |
 
 # 3. Hardware and Wiring
 
@@ -265,48 +268,55 @@ While adding live tuning we found and fixed a defect in the original motor test.
 
 **Simulation baseline.** A first-order motor model (5 mm/s per % duty, τ = 0.15 s) with the default gains reaches 180 mm/s with 0 % overshoot and under 5 % error within 2 s (host test `test_pid`).
 
-Record on the real car:
+**Result on the car** (S2-U02, 28 Oct, `TEST_MOTOR`). The open-loop sweep put the dead band between 10 % and 20 % duty, giving `ff=0.12,2.3`. The final gains, copied into `car_config.h`, are kp 0.104, ki 0.60, kd 0, kf 0.12, offset 2.3 %:
 
-| Gains (kp / ki / kd / kf) | Rise time 10–90 % | Overshoot | Settling (±5 %) | Steady error |
+| Step | Peak | Overshoot | Settled | Steady value |
 |---|---|---|---|---|
-| 0.08 / 0.60 / 0 / 0.10 (default) | ___ ms | ___ % | ___ ms | ___ mm/s |
-| iteration 2: ___ | ___ | ___ | ___ | ___ |
-| final (copied to `car_config.h`): ___ | ___ | ___ | ___ | ___ |
+| 0 → 160 mm/s | 258–261 mm/s at 120 ms | 61 % | ≈ 400 ms | 171–180 mm/s (≈ +10 %) |
+| 160 → 50 mm/s | 49–51 mm/s at 120 ms | none | ≈ 120 ms | 52–55 mm/s (+5 %) |
+| → 0 | | | 200 ms | 0 |
+
+No step oscillated. The overshoot on the first step comes from the feed-forward and offset acting together from standstill. The mission drives at 75 mm/s, where the response settles well within one line-following correction.
 
 ### Motion accuracy evaluation
 
 `APP_MODE=TEST_MOTION` runs: forward 500 mm, left 90°, right 90°, backward 500 mm, U-turn 180°. It prints the encoder distance and heading for each move. Measure the real result with a tape and protractor over 5 runs, then calibrate `WHEEL_DIAMETER_MM` from the distance error and `TRACK_WIDTH_MM` from the turn error.
 
-| Move | Commanded | Measured (mean ± sd, n=5) | Error |
+With the first values (wheel 65.0 mm, track 138 mm) the car drove about 450 mm for 500 mm (−10 %). After calibration (`WHEEL_DIAMETER_MM` 58.9, `TRACK_WIDTH_MM` 132), 28 Oct, S2-U03 and S2-U04:
+
+| Move | Commanded | Measured (n=5, tape / protractor) | Error |
 |---|---|---|---|
-| Forward | 500 mm | ___ | ___ |
-| Left turn | 90° | ___ | ___ |
-| Right turn | 90° | ___ | ___ |
-| Backward | 500 mm | ___ | ___ |
-| U-turn | 180° | ___ | ___ |
+| Forward | 500 mm | 500 mm (encoders 496–497) | ≈ 0 % |
+| Left turn | 90° | ≈ 91° | +1° |
+| Right turn | 90° | ≈ 91° | +1° |
+| Backward | 500 mm | 500 mm (encoders 495–496) | ≈ 0 % |
+| U-turn | 180° | ≈ 183° | +3° |
 
 ## 4.3 Buddy 3 — Barcode Decoding and IR Line Following
 
 **Calibration** (`ir_sensor.c`). Each channel tracks its minimum and maximum while the car spins 360° over the line (`calibrate` command, or START held for 2 s while idle). Readings are normalised to 0 = white and 1 = black, per channel. This makes the algorithm robust to lighting changes and to differences between sensors. Calibration is rejected if the contrast is below 200 counts.
 
-**Line position and following** (`line_follow.c`). The error is L − R, in the range [−1, 1]. A PID controller turns it into a differential wheel speed, and the base speed drops by up to 50 % on large errors for stability at varying speeds.
+**Line position and following** (`line_follow.c`). The error is L − R, in the range [−1, 1]. A PID controller turns it into a differential wheel speed (mm/s per unit of error), and the base speed drops by up to 50 % on large errors for stability at varying speeds.
 
 - **LOST** is declared only after 150 ms with both sensors on white.
 - **JUNCTION** is declared only after 10 mm of travel with both sensors on black.
 - These confirmations mean a single noisy sample cannot trigger an action.
 
-**Line PID tuning.** Build `MISSION`, press **Start** on the dashboard and watch the line-error plot; press **Stop**, set `line=<kp>,<ki>,<kd>` (tuning is accepted only while IDLE or STOPPED), and press **Start** again to compare runs. A good result is a line error that settles close to 0 on straights without sustained oscillation. Record the tuned values:
+**Line PID tuning.** Build `MISSION`, press **Start** on the dashboard and watch the line-error plot; press **Stop**, set `line=<kp>,<ki>,<kd>` (tuning is accepted only while IDLE or STOPPED), and press **Start** again to compare runs. A good result is a line error that settles close to 0 on straights without sustained oscillation.
 
-| Line gains (kp / ki / kd) | Speed | Line-error RMS on straight | Laps without losing the line |
-|---|---|---|---|
-| 160 / 0 / 12 (default) | 180 mm/s | ___ | ___ /5 |
-| final: ___ | ___ | ___ | ___ /5 |
+| Line gains (kp / ki / kd) | Speed | Result on the course |
+|---|---|---|
+| 45 / 0 / 0 | 50 mm/s | held the bends (27 Oct), but wove on straights |
+| 35 / 0 / 0 | 75 mm/s | visible weaving on straights |
+| **18 / 0 / 0 (final)** | 75 mm/s | smooth; full laps without leaving the line (SYS-01, 4 and 9 Nov) |
 
-**Barcode** (`barcode_decode.c`). The course barcode is **Code 39**. We decoded the provided specification photo by hand as `*A*` (start, A, stop) and used the photo's bar widths as a test vector. Bars and spaces are timed with 1 µs resolution by the 1 kHz sampler, using hysteresis (0.6 / 0.4). A frame ends after 250 ms of white.
+The two line sensors sit close together, so a small offset already gives a large error; a lower gain was needed than the first estimate. For the first 150 mm (at most 1.5 s) after a start, a turn or a line search, a separate settle gain (`LINE_SETTLE_KP`) applies. It was 40 and shook the car at every start; it is now 18, the same as the running gain, and the shake is gone (10 Nov).
+
+**Barcode** (`barcode_decode.c`). The course barcode is **Code 39**. We decoded the provided specification photo by hand as `*A*` (start, A, stop) and used the photo's bar widths as a test vector. Bars and spaces are timed by the 1 kHz sampler, using hysteresis on the normalised reading (black above 0.08, white below 0.05; the sensor sits high, so the contrast is small). A frame ends after 500 ms of white.
 
 Decoding classifies the **3 widest of each 9 elements as wide**. Code 39 guarantees exactly three wide elements per character, so this works regardless of speed and only assumes the speed is steady over one ≈40 mm character. A frame that fails forwards is reversed and decoded again, because the car may read the code from either end. Frames must start and end with `*`, which rejects line crossings and noise.
 
-**Navigation command interface.** Decoded characters map A→LEFT, B→RIGHT, C→STRAIGHT and D→U-TURN. Commands reach the vehicle task through a message buffer.
+**Navigation command interface.** Decoded characters map A→LEFT, B→RIGHT, C→STRAIGHT and D→U-TURN by default; the `map=` command changes the mapping at run time, so the course's own letters can be used without reflashing. Commands reach the vehicle task through a message buffer.
 
 The vehicle executes a command at the next junction:
 
@@ -322,7 +332,11 @@ A U-turn is executed immediately. If no junction appears within 400 mm, the comm
 - 1000/1000 synthetic frames of A–D decode correctly with ±20 % width noise, ±1 % per-element speed drift, in both directions.
 - Uniform widths and truncated frames are rejected.
 
-Hardware test: `APP_MODE=TEST_BARCODE` (drive or push the car over each barcode 10 times) and record the success rate: A ___/10, B ___/10, C ___/10, D ___/10 at 100 mm/s and ___/10 at 180 mm/s.
+**On the car.**
+
+- S3-U03 (30 Oct, line following over the barcodes): 16 of 20 read at 100 mm/s and 25 of 27 at 180 mm/s. Closed by team decision; broken frames could still give a wrong letter at that time.
+- SYS-02 (10 Nov, final build, 75 mm/s): LEFT, RIGHT, STRAIGHT and U-TURN 4 of 4, each barcode read on the first pass and executed at the next junction (videos).
+- At running height the narrow bars barely move the sensor, so frames depend on the wide bars standing out. Lowering the thresholds to 0.08 / 0.05 and lengthening the quiet gap to 500 ms made reads reliable at 75 mm/s; a decoder that guessed letters from the wide bars alone was tried and dropped, because several letters share the same wide bars.
 
 ## 4.4 Buddy 4 — IMU-Based Motion and Terrain Monitoring
 
@@ -361,12 +375,14 @@ Simulation: a raised-cosine hump 250 mm long, crossed at 150 mm/s and 50 Hz, wit
 | 60 mm | 60.0 mm | +0.0 % |
 | flat floor | no hump | correct |
 
-On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler and compare:
+On the course the track leaves room for only one wheel on the hump, so the car rolls rather than pitches. `terrain.c` therefore also measures height from roll, with a lever of `HUMP_ROLL_LEVER_MM` (100 mm). Results against a ruler:
 
-| Hump | Ruler height | Estimates (5 runs) | Mean error |
+| Hump | Ruler height | Estimates | Within ±5 mm |
 |---|---|---|---|
-| 1 | ___ mm | ___ | ___ |
-| 2 | ___ mm | ___ | ___ |
+| 1 cm, pushed by hand (S4-U03, 23 Oct) | 10 mm | 11, 11, 10, 12, 11 mm | 5 of 5 |
+| 2 cm, pushed by hand (S4-U03, 23 Oct) | 20 mm | 17, 18, 16, 15, 19 mm | 5 of 5 |
+| 1 cm, line following (SYS-03, 30–31 Oct) | 10 mm | 14.4, 12.3, 12.4 mm | 3 of 3 |
+| 1 cm, final build (SYS-03, 10 Nov) | 10 mm | 9.8 mm (log), 12.2 mm (filmed run) | 2 of 2 |
 
 ## 4.5 Buddy 5 — Adaptive Ultrasonic Scanning and Obstacle Profiling
 
@@ -374,75 +390,63 @@ On the course (`APP_MODE=TEST_IMU`, CSV output), measure each hump with a ruler 
 
 - The HC-SR04 echo width is timestamped by GPIO interrupts (no busy-waiting), with distance = µs × 0.1715 mm.
 - The datasheet's 60 ms minimum cycle is enforced, and each scan point takes the median of 3 readings.
-- A background task monitors the front distance at ≈14 Hz. Two readings in a row under 300 mm are needed to stop the car, so one spurious echo is ignored. Front and impact triggers are ignored while the IMU reports the car on a hump: the sonar sees the floor when the nose dips, and the landing jolt can look like an impact.
-- **Sensor health (Week 6 obstacle statechart, NFR9).** Each ping is VALID, OUT_OF_RANGE, FAULT or BUSY. ECHO must be low before a trigger, so a line stuck high is a FAULT rather than free space. A task waits at most 100 ms for the sensor (`US_SEM_TIMEOUT_MS`; BUSY, no ping sent). Two FAULT pings in a row, or no front reading for 300 ms, stop the car (STOPPED, `fault: sonar no echo` from the shared fault mask / `sonar stale` from the age of the front reading), because obstacles could no longer be seen. The monitor and the scans hand the sensor over through a busy flag, so a front reading is never taken while the servo is moving. The A9 no-target check in `TEST_ULTRASONIC` takes 20 pings, as the Week 6 method asks.
-- **Servo range.** The sensor mount (fixed by the build) lets the sensor turn only about ±25°: on the bench (22 Oct) it stopped between 60° and 65° and between 115° and 120°. `servo.c` never commands past `SERVO_MIN_DEG`/`SERVO_MAX_DEG` (65°/115°, [CALIBRATE]), so the servo cannot push the sensor against the car.
-- **Stage 1 (coarse):** readings at 65°, 90° and 115°. The write-up's 30°–150° are given as an example of "a small number of scan angles"; they cannot be reached on this car.
-- **Stage 2 (fine):** if anything is under 300 mm, the sensor rescans ±20° around the detected region in 5° steps, inside the same limits.
-- **Coverage.** From where the car stops (about 280 mm) the scan sees about ±130 mm sideways: enough to find an obstacle on the line and its edges, but the free space beyond that is assumed (A10), not measured.
+- A background task monitors the front distance about every 70 ms. Two readings in a row under 200 mm (`OBST_DETECT_MM`) are needed to stop the car, so one spurious echo is ignored. Front and impact triggers are ignored while the IMU reports the car on a hump: the sonar sees the floor when the nose dips, and the landing jolt can look like an impact.
+- **Floor echoes.** The sensor is mounted low and cannot tilt up, so the floor echoes at about 300–380 mm. Echoes at 280 mm (`OBST_FLOOR_MM`) or further count as no echo in a profile.
+- **Sensor health (Week 6 obstacle statechart, NFR9).** Each ping is VALID, OUT_OF_RANGE, FAULT or BUSY. ECHO must be low before a trigger, so a line stuck high is a FAULT rather than free space. A task waits at most 100 ms for the sensor (`US_SEM_TIMEOUT_MS`; BUSY, no ping sent). Four FAULT pings in a row (about 0.3 s; two stopped the car on short dropouts while pivoting), or no front reading for 300 ms, stop the car (`fault: sonar no echo` / `sonar stale`). The monitor and the scans hand the sensor over through a busy flag, so a front reading is never taken while the servo is moving.
+- **Servo range.** The first mount let the sensor turn only about ±25°; it was rebuilt on 3 Nov to turn ±45°. `servo.c` never commands past `SERVO_MIN_DEG`/`SERVO_MAX_DEG` (50°/130°, ±40°), so the servo cannot push the sensor against the car.
+- **Scan.** Stage 1 is the front monitor itself. A separate coarse pass at 65/90/115° missed an 8 cm box between those angles on 25 Oct and was dropped. Stage 2 is a full sweep from 130° to 50° in 5° steps (17 points). Stage 3 is `avoidance_profile()` on those points. The write-up's 30°–150° are an example of "a small number of scan angles"; they cannot be reached on this car.
 
 **Obstacle profile generator** (`avoidance.c`). Each reading is placed sideways at lateral = d·cos(a), positive to the right of the car.
 
 - The obstacle is the closest echo **inside the car's corridor**, grown into a cluster of neighbouring echoes within 150 mm of it.
 - An early version chose the closest echo anywhere, so a nearby side wall hid the real obstacle. The unit test caught this.
-- Outputs: closest point and angle, left and right edges, width, lateral centre, and left/right clearance (the gap to any other object at a similar range).
+- An edge counts as seen only with a clear scan point past it. A box whose edges are not both seen, or that reads narrower than 100 mm (part of it missed), is passed "blind": wide enough for the widest expected box (200 mm), on the left.
+- Outputs: closest point and angle, left and right edges, width (and a beam-corrected estimate), lateral centre, and left/right clearance.
 
 **Avoidance algorithm.** Possible actions are CONTINUE, STOP, TURN_LEFT, TURN_RIGHT and REVERSE.
 
 - CONTINUE if the obstacle lies entirely outside the corridor.
-- REVERSE 120 mm and re-scan if it is closer than 90 mm (at most 2 attempts, then STOP).
-- Otherwise, pass on the feasible side (clearance ≥ car width + 60 mm) that needs the **smaller sideways offset**. This minimises deviation from the original route, as the write-up requires.
+- REVERSE and re-scan if it is closer than 90 mm (at most 2 attempts, then STOP).
+- Otherwise pass on the side away from where the box reads, by the smaller sideways offset that clears it (at least 150 mm, since a seen edge can be 60–80 mm off). This keeps the deviation from the original route small, as the write-up requires.
 
-**Bypass and recovery algorithm** (`vehicle.c`):
+**Bypass and recovery** (`vehicle.c`). The bypass is diagonal, which needs half the turning of a box-shaped one:
 
-1. Turn 90° towards the chosen side and sidestep by the planned offset.
-2. Turn back to parallel and drive past the obstacle. The sensor cannot turn far enough to watch it go by, so `avoidance_plan()` sets the pass distance: closest echo + deepest expected obstacle (`OBST_DEPTH_MAX_MM`, 250 mm, [CALIBRATE]) + car length + 60 mm. The centred front sonar watches ahead during the pass; an obstacle confirmed there stops the car (STOPPED, `path blocked`).
-3. Turn back towards the line and drive until either IR sensor sees it.
-4. Advance by the sensor-to-axle offset, turn to the original heading, and sweep until centred.
-5. Hand control back to line following.
+1. Turn 45° towards the chosen side and drive until the car is offset by the planned amount. If the box is too close for this leg to clear its near corner, back off first.
+2. Turn back to parallel and drive past the obstacle, for the closest echo + the deepest expected box (`OBST_DEPTH_MAX_MM`, 150 mm) + clearance for the car's corner + 50 mm. The front sonar watches ahead during the pass; an obstacle confirmed there stops the car (`path blocked`).
+3. Turn 45° back towards the line and drive until either IR sensor sees it, then turn to the original heading and sweep until centred.
+4. Hand control back to line following.
 
-Every step is abortable, including the scan (STOP is checked every 20 ms while the servo settles and after every ping, so it acts within about one ping, 0.1 s), and failures fall back to LINE_SEARCH. After an IMU impact the car first reverses 120 mm, because the HC-SR04 gets no echo closer than 20 mm and the scan would otherwise report a clear path.
+Every move runs at 75 mm/s. Every step is abortable, including the scan (STOP is checked every 20 ms while the servo settles and after every ping, so it acts within about one ping, 0.1 s), and failures fall back to LINE_SEARCH. After an IMU impact the car first reverses, because the HC-SR04 gets no echo closer than 20 mm and the scan would otherwise report a clear path.
 
-**Worst-case obstacle time.** Worked out from the constants in `obstacle.c`, `avoidance.c`, `vehicle.c` and `car_config.h`, not measured yet. Bypass legs run at `SPEED_SLOW` (160 mm/s) and turns at `SPEED_TURN` (120 mm/s).
+**Worst-case obstacle time.** Worked out from the constants; the 17-point scan took about 4.7 s on the car (INT-04, 30 Oct).
 
 | Step | How it is worked out | Worst | Typical |
 |---|---|---|---|
 | Stop and settle | `STOP_SETTLE_MS` | 0.2 s | 0.2 s |
-| Scan | each point: servo move (5° per 20 ms) + 120 ms settle + 3 pings × 60 ms. Coarse 65/90/115° ≈ 1.2 s, fine ±20° in 5° steps (11 points) ≈ 3.7 s, recentre ≈ 0.2 s | 5.1 s | 5.1 s |
-| Too close: reverse and re-scan | 120 mm at 160 mm/s ≈ 0.95 s + settle + scan; at most `OBST_MAX_ATTEMPTS` (2), then STOP | 2 × 6.25 s | 0 |
-| 4 × 90° turns | ≈ 1.2 s each | 4.8 s | 4.8 s |
-| Sidestep | object edge + 80 mm half corridor + 60 mm margin, ≤ ≈ 270 mm | 1.7 s | 1.0 s |
-| Pass | closest + 250 mm depth + 200 mm car + 60 mm margin, ≤ ≈ 810 mm | 5.1 s | 3.5 s |
-| Seek the line | sidestep + 200 mm | 3.0 s | 1.5 s |
-| Advance to the axle | `LINE_SENSOR_AHEAD_MM` 140 mm | 0.9 s | 0.9 s |
-| Re-acquire sweeps | 5 sweeps of 350 × (n + 1) ms | 5.25 s | 0.5 s |
-| **Total** | | **≈ 39 s** | **≈ 17 s** |
+| Scan | 17 points: servo move + 120 ms settle + 3 pings × 60 ms; recentre | 5 s | 4.7 s |
+| Too close: reverse and re-scan | at most 2 attempts, then STOP | 2 × 7 s | 0 |
+| Out and back legs | 2 × 45° turns + diagonal legs of offset × 1.41 at 75 mm/s | 9 s | 6 s |
+| Pass | closest + 150 mm depth + corner clearance + 50 mm at 75 mm/s | 7 s | 5 s |
+| Re-acquire | turn to heading + sweeps | 5 s | 1 s |
+| **Total** | | **≈ 40 s** | **≈ 17 s** |
 
-Each move also has a 10 s timeout (`MOVE_TIMEOUT_MS`), so a stuck leg ends in STOP rather than hanging, and the 250 ms watchdog is fed throughout the scan. The team should compare the 39 s worst case with the course time limit and record measured times in step 3 of the hardware test below.
+Each move also has a 10 s timeout (`MOVE_TIMEOUT_MS`), so a stuck leg ends in STOP rather than hanging, and the 250 ms watchdog is fed throughout the scan.
 
-**Servo direction.** The code assumes 0° points to the car's right. `SERVO_INVERT` in `car_config.h` corrects a mirrored mount; `TEST_ULTRASONIC` prints which side the closest echo is on, so a box offset to the right must read RIGHT.
+**Servo direction.** The code assumes 0° points to the car's right; `SERVO_INVERT` corrects a mirrored mount. On 3 Nov the side was settled on video with the box placed from behind the car: `SERVO_INVERT` 0 is correct.
 
-**Verification.**
+**Results on the car.**
 
-- Synthetic scan of a 100 mm box at +20 mm lateral and 250 mm range: estimated width 89 mm, centre 22 mm, decision TURN_LEFT.
-- The same box with a wall 200 mm to the left: TURN_RIGHT.
-- Too close: REVERSE, then STOP.
-- Box outside the corridor: CONTINUE.
+| Test | Result |
+|---|---|
+| S5-U03, bypass with the box left- and right-aligned on the line (4 Nov) | side correct 6 of 6, line rejoined 6 of 6 |
+| SYS-04, final build (9 Nov): box right of, centred on and left of the line | all three bypassed without touching, line picked up again (videos) |
+| S5-U07, profile accuracy (6 Nov) | centre within 2 mm on the 100 mm box; width over-read (≥ 218 mm for 100 mm, ≥ 199–219 mm for 185 mm) |
+| S5-U08, STOP during a scan | stops within one servo step |
+| S5-U10, humps | no obstacle stop from the sonar or the IMU over 1 cm and 2 cm humps (5 runs) |
+| S5-U11, watchdog | 3 scans, bypasses and calibration spins with no watchdog reset |
+| S5-U12, sonar wire pulled | the car stopped every time; see section 9 |
 
-**Hardware test procedure** (`APP_MODE=TEST_ULTRASONIC`, then `MISSION`). Save the serial console to a file and run `python3 tools/scan_plot.py <log> --box X,Y,W` for one figure per scan and the error table.
-
-1. **Servo direction (A9).** Put a box 250 mm ahead and 60 mm to the right. The console must say `closest echo on the RIGHT`; otherwise set `SERVO_INVERT` to 1 in `car_config.h`.
-2. **Profile accuracy (A9).** Take three scans per position and record the mean (true / estimated, mm).
-
-| Box position (tape) | Closest | Left edge | Right edge | Width |
-|---|---|---|---|---|
-| centred, 150 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
-| centred, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
-| 60 mm right, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
-| 60 mm left, 250 mm | ___ / ___ | ___ / ___ | ___ / ___ | ___ / ___ |
-
-3. **Avoidance and recovery (A10).** With the obstacle on the line, do 10 runs in `MISSION`: bypass completed ___/10, line re-acquired ___/10, largest sideways deviation ___ mm.
-4. **Safety.** Tap STOP during a scan: the car stops within one servo step. Bump a box: the car reverses 120 mm, then scans. Drive over the hump: no obstacle stop, and the front range stays above 300 mm on the approach (A12). A full scan, bypass and calibration run without a watchdog reset.
+The width over-read is the sonar's beam: at about 200 mm the cone still echoes off a box from well past its edges, so a small box looks 100–120 mm wider. The bypass treats this as margin; the centre, which sets the side, is accurate.
 
 # 5. Integration — Vehicle Controller
 
@@ -460,9 +464,9 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 
 # 6. Verification and Evidence
 
-**Build verification.** All eight application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_ULTRASONIC, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
+**Build verification.** All eleven application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_WHEELS, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_CRASH, TEST_ULTRASONIC, TEST_OBSTACLE, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
 
-**Host unit tests** (`make -C tests/host`): **231/231 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
+**Host unit tests** (`make -C tests/host`): **325/325 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
 
 | Module | What is proven |
 |---|---|
@@ -474,12 +478,28 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 | avoidance | width/centre estimates, side choice with a wall, reverse/stop/continue |
 | mqtt_lwip | against a fake lwIP (`tests/host/lwip/`): no attempt without a network, a 2 s window before a new attempt, `online` (retained) and the `cmd` subscription on connect, a message kept while the client is full, commands only from the `cmd` topic, reconnects counted |
 | mqtt_bridge | ring capacity, drop-when-offline, command path |
-| vehicle + obstacle | the real `vehicle.c`, `obstacle.c` and `servo.c` in a simulation on a fake µT-Kernel (`tests/host/sim/`, `tk/`, `tm/`) with simulated time, buttons, motion, IR, IMU and sonar: START on release and 2 s hold to calibrate, STOP never moves the car, a 6 ms STOP press between polls is latched, speed limited to 300 mm/s; one close echo ignored and two stop the car; coarse then fine scan and the box-shaped bypass back to the line; reverse before the scan after an impact; triggers ignored on a hump; a STOP or `stop` ends a scan at the next servo step; a STOP in a line search, U-turn or bypass gives one `STOPPED (stop command)`; stale barcodes discarded at START; the watchdog armed only while the car can move, and the longest time without a feed while armed 101 ms (one ping); two FAULT pings in a row, or 300 ms without a front reading, stop the car; a STOP during a scan ends it while the servo moves or after the current ping, with no further move; the servo never goes past the mount's limits; the pass distance is closest + deepest box + car length + margin, and an obstacle ahead during the pass gives STOPPED (path blocked). Each of these fixes was broken on purpose once to confirm a check fails |
+| vehicle + obstacle | the real `vehicle.c`, `obstacle.c` and `servo.c` in a simulation on a fake µT-Kernel (`tests/host/sim/`, `tk/`, `tm/`) with simulated time, buttons, motion, IR, IMU and sonar: START on release and 2 s hold to calibrate, STOP never moves the car, a 6 ms STOP press between polls is latched, speed limited to 300 mm/s; one close echo ignored and two stop the car; the full scan and the diagonal bypass back to the line; reverse before the scan after an impact; triggers ignored on a hump; a STOP or `stop` ends a scan at the next servo step; a STOP in a line search, U-turn or bypass gives one `STOPPED (stop command)`; stale barcodes discarded at START; the watchdog armed only while the car can move, and the longest time without a feed while armed 101 ms (one ping); four FAULT pings in a row, or 300 ms without a front reading, stop the car; a STOP during a scan ends it while the servo moves or after the current ping, with no further move; the servo never goes past the mount's limits; the pass distance is closest + deepest box + car length + margin, and an obstacle ahead during the pass gives STOPPED (path blocked). Each of these fixes was broken on purpose once to confirm a check fails |
 | command | every command and its limits, spaces and case, rejection of bad counts, negative gains and trailing text; serial line assembly (CRLF, backspace, control bytes, overflow recovery); 3-decimal formatter (including NaN); live line gains surviving re-initialisation |
 
 **Dashboard.** Tested end to end against a Mosquitto broker with `sim_car.py`, which checked commands, acks, rejected commands, rate changes and CSV logs. The serial path was tested against an emulated USB console on a pseudo-terminal. That test also confirmed the 16-byte write pacing and that the dashboard requests the gains when the port opens.
 
-**Hardware tests.** Each buddy's `APP_MODE` test program prints CSV for the tables in section 4. Run them in this order: motor → motion → IR → barcode → IMU → ultrasonic → telemetry → mission. That order matches the briefing's "repeatable subsystem tests, then integrate early".
+**Hardware tests.** Each buddy's `APP_MODE` test program prints CSV for the tables in section 4. Run them in this order: motor → motion → IR → barcode → IMU → ultrasonic → telemetry → mission. That order matches the briefing's "repeatable subsystem tests, then integrate early". Every run is recorded in `testing/*/TEST_LOG.md` with its commit, tester, log folder and result.
+
+**System and integration results** on the final hardware:
+
+| Test | What | Result |
+|---|---|---|
+| SYS-01 | full lap of the course | PASS: 4 and 9 Nov, no line left; 72 s lap (video) |
+| SYS-02 | barcode turns LEFT, RIGHT, STRAIGHT, U-TURN at junctions | PASS: 4 of 4, each read on the first pass (10 Nov, videos) |
+| SYS-03 | hump detected and its height reported | PASS: 10 mm hump read 9.8 / 12.2 mm (10 Nov, video) |
+| SYS-04 | obstacle bypassed and line reacquired | PASS: box right, centred and left (9 Nov, videos) |
+| SYS-05 | telemetry over WiFi during runs | PASS: 4 sessions of 9–23 min, connected throughout |
+| INT-02 | STOP from the dashboard | PASS: 9–12 ms on the car to the motors stopped |
+| INT-06 / INT-11 | timing over a full lap | PASS: jitter 1779 µs (limit 2000), load 12 % |
+| INT-07 | encoder counts under full load, 5 min | PASS: no torn or lost counts |
+| INT-09 | Change Requirement 1 RAM saving | PASS: application RAM 6128 → 2359 B (−62 %) |
+| INT-10 | faults (encoder, motor stall, IMU, sonar, WiFi loss) | PASS: each stops the car or, for WiFi, keeps it driving and reports the loss |
+| S1-U03 to U06 | WiFi link 10 min, broker and hotspot outages, no cable | PASS: 4.75 Hz telemetry, recovery 43–62 s |
 
 The review-and-test cycle found and fixed eight defects before any hardware run:
 
@@ -500,7 +520,7 @@ The BARR-C conformance pass and the independent review of it found seven more; t
 - **Motion safety.** Every move has a stall timeout and every manoeuvre can be aborted.
 - **Watchdog.** The RP2040 watchdog (`WATCHDOG_TIMEOUT_MS`, 250 ms, the Week 6 value) guards motion: `set_state()` arms it in every state that can move the car and stops it in IDLE and STOPPED, the only states in which the WiFi chip may be restarted (that restart stalls the cyw43 task, which runs above the vehicle task). The vehicle task feeds it in every wait, about every 0.1 s at most (the longest gap is one sonar ping, 101 ms in the host simulation), so a stalled task stops the car within 250 ms (A14 asks for 500 ms). The motor outputs go off with the reset, and the first state after boot reports `watchdog reset` as its reason. `usermain()` stops the watchdog first thing at start-up.
 - **Line recovery.** A lost line gets an expanding sweep search before the car gives up with a reason.
-- **Collision.** An IMU impact triggers a stop, a 120 mm reverse, a scan and avoidance.
+- **Collision.** An IMU impact triggers a stop, a reverse, a scan and avoidance.
 - **Communication.** Reconnection uses back-off, the last-will marks the car offline, a heartbeat sequence number reveals lost messages, and telemetry is simply dropped (and counted) when offline, so control is never delayed by the network.
 - **Real-time.** Control runs at higher priority than communication, and interrupt handlers are short.
 
@@ -575,16 +595,17 @@ Pure algorithm modules contain no RTOS calls, which is why they can be unit-test
 
 # 9. Limitations and Future Work
 
-- No hardware measurements yet. Tables marked ___ are to be completed in the lab, and all gains and geometry in `car_config.h` marked [CALIBRATE] need tuning on the real car.
+- **Barcode at running height.** The barcode sensor sits high enough that narrow bars barely change its reading. Reads at 75 mm/s are reliable on the course (SYS-02 4 of 4), but faster runs and worn codes miss more frames.
+- **Obstacle width.** The sonar beam makes small boxes read 100–120 mm too wide (S5-U07). The bypass uses this as margin and the centre is accurate, so the side choice is unaffected.
+- **Sonar fault shown as an IMU fault.** The IMU (GP4/5) and the sonar (GP6/7) share a connector area; pulling a sonar wire at the board also disturbs the IMU's I2C link, so the car stops on `fault: IMU` first (S5-U12, 10 Nov). It always stops; the sonar's own fault was shown on 30 Oct and 4 Nov. A rerun unplugging at the sensor end is planned.
 - Encoders have no direction channel, so direction is inferred from the commanded sign. A wheel pushed backwards by an external force is counted as forward.
-- Ultrasonic beam width (±7.5°) makes obstacles look wider. We accept this as a safety margin; a beam-width correction could reduce the detour.
-- The sensor mount limits the scan to about ±25°. Free space beside the obstacle beyond about ±130 mm is assumed (A10), and the obstacle's depth is not measured: the pass assumes at most `OBST_DEPTH_MAX_MM` (250 mm). Measure the course's obstacles and set it; a deeper obstacle would be clipped when the car turns back to the line.
-- A low-mounted sonar can still see a hump's face before the car tilts (assumption A12). Log the front range while approaching the course hump; if it drops under 300 mm, aim the sensor higher.
+- - The scan covers ±40°. Free space beyond it is assumed (A10), and the obstacle's depth is not measured: the pass assumes at most `OBST_DEPTH_MAX_MM` (150 mm, the course's boxes). A deeper obstacle would be clipped when the car turns back to the line.
+- A low-mounted sonar can still see a hump's face before the car tilts (assumption A12). Log the front range while approaching the course hump; on the course it stayed above the 200 mm trigger (S5-U10).
 - Tuned gains are held in RAM only and must be copied into `car_config.h`. Saving them to flash would need the template's core-parking protocol, which it does not provide.
 - MQTT commands are not authenticated beyond the broker login. Anyone who can publish to the broker can stop or start the car, so use a private network or set `MQTT_USERNAME`/`MQTT_PASSWORD` with a Mosquitto password file.
 - The firmware needs the qualified single-core kernel profile. Status snapshots are copied with interrupts disabled, which is atomic only on one core (assumption A13), so `app_main.c` stops an `SMP=1` build with a compile error. Dual-core operation would need spinlock-protected copies.
 
-# 10. Week 10 Demonstration Plan
+# 10. Demonstration Plan
 
 1. Show the boot log: each subsystem prints `[init] … OK`.
 2. Run calibration and show the IR contrast.
@@ -610,7 +631,7 @@ gmake -C template/build_make -j8 CONSOLE=uart WIFI=cyw43 WIFI_JOIN=1 \
 
 `gmake` is GNU make 4; on Linux plain `make` is the same. macOS's own `make` (3.81) picks the wrong build rule for the USB console, so install GNU make there.
 
-To flash, hold BOOTSEL, plug in the USB cable, and copy the `.uf2` file (built in `template/build_make/`, or a prebuilt one from `firmware/`) to the RPI-RP2 drive. The console runs at 115200 baud on the USB port (`CONSOLE=usb_cdc`) or on GP0/GP1. Type `help` on it for the command list.
+To flash, hold BOOTSEL, plug in the USB cable, and copy the `.uf2` file (built in `template/build_make/`, firmware is built locally and is not kept in the repository) to the RPI-RP2 drive. The console runs at 115200 baud on the USB port (`CONSOLE=usb_cdc`) or on GP0/GP1. Type `help` on it for the command list.
 
 Dashboard (see `tools/dashboard/README.md`):
 

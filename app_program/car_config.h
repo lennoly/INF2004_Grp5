@@ -173,7 +173,7 @@
 /* After a junction turn or a line search: follow at SPEED_SLOW_MM_S for    */
 /* this distance so the steering lines the car up, then cruise.             */
 #define LINE_SETTLE_MM              (150.0f)
-#define LINE_SETTLE_KP              (40.0f)   /* steering (mm/s) meanwhile  */
+#define LINE_SETTLE_KP              (18.0f)   /* steering (mm/s) meanwhile; 10 Nov: was 40, shook at every start (185006), now = LINE_KP */
 #define LINE_SETTLE_MAX_MS          (1500u)   /* ...but never longer        */
 
 /* ------------------------------------------------------------------------ */
