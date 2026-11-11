@@ -18,7 +18,7 @@ On the 11 Nov build (lift stop, side vote, sonar noise filter, impacts off), USB
 - **S2:** U01 to U06
 - **S3:** U01, U02
 - **S4:** U01 to U06 (U05, impacts, is no longer a requirement)
-- **S5:** U01, U02, U03 (191119: 6 of 6, left- and right-aligned boxes), U04, U05, U06, U07 (6 Nov: 100 mm FAIL on width, 185 mm PARTIAL; centre accurate), U08, U10, U11, U12 (PASS on the 30 Oct run: ECHO and TRIG unplugged before START gave `fault: sonar no echo` within 0.2 s; the runs that showed `fault: IMU` had the wrong wire unplugged, see the 11 Nov row)
+- **S5:** U01, U02, U03 (191119: 6 of 6, left- and right-aligned boxes), U04, U05, U06, U07 (6 Nov: 100 mm FAIL on width, 185 mm PARTIAL; centre accurate), U08, U10, U11, U12 (PASS on the 30 Oct run: ECHO and TRIG unplugged before START gave `fault: sonar no echo` within 0.2 s)
 - **System:** SYS-01 (181307, 185643; 9 Nov final build, video), SYS-02 (LEFT, RIGHT, STRAIGHT, U-TURN: 184558; 10 Nov final build, videos), SYS-03 (10 Nov: 10 mm hump read 9.8 / 12.2 mm, video), SYS-04 (9 Nov: box left, centre and right, videos), SYS-05
 
 ## What to record
