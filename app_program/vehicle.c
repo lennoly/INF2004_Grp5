@@ -157,6 +157,7 @@ static bool          gb_start_armed       = false;
 static bool          gb_after_impact      = false;
 static bool          gb_path_blocked      = false; /* front watch hit */
 static uint32_t      g_lift_run           = 0u;    /* terrain_lift_run() */
+static float32_t     g_floor_odo          = 0.0f;  /* floor last seen here */
 
 /* Names indexed by vehicle_state_t. */
 static char const * const g_state_names[] = {
@@ -614,7 +615,10 @@ check_faults (void)
                              && (VS_STOPPED != g_st.state);
     bool         b_stale   = obstacle_front_stale();
     bool         b_lifted  = false;
+    bool         b_floor   = false;
     imu_status_t imu;
+    ir_sensor_snapshot_t ir_snap;
+    motion_status_t      motion;
 
     /* Lifted or overturned ends the run (the demo's end signal).  Only on
        good IMU data; a dead IMU stops the car through its fault bit. */
@@ -624,6 +628,16 @@ check_faults (void)
                                         imu.roll_deg, imu.az_mg)
                      : 0u;
     b_lifted   = (g_lift_run >= LIFT_CONFIRM_STEPS);
+
+    /* A level lift: no floor under any IR sensor while the wheels turn. */
+    ir_sensor_read(&ir_snap);
+    motion_get_status(&motion);
+    b_floor = (ir_snap.norm[IR_LEFT] < LIFT_NO_FLOOR_LEVEL)
+              || (ir_snap.norm[IR_RIGHT] < LIFT_NO_FLOOR_LEVEL)
+              || (!ir_sensor_barcode_is_black());
+    g_floor_odo = (b_floor || (!b_running)) ? motion.odo_mm : g_floor_odo;
+    b_lifted    = b_lifted || (car_math_abs(motion.odo_mm - g_floor_odo)
+                               > LIFT_NO_FLOOR_MM);
 
     if (b_running && ((0u != mask) || b_stale || b_lifted) && (!gb_abort))
     {
@@ -636,10 +650,11 @@ check_faults (void)
             /* Casts: tm_printf() takes the kernel's UB string type (ASCII);
                angles and mg are small, so they fit INT. */
             (void) tm_printf((UB const *) "[vehicle] lifted: pitch=%d roll=%d "
-                                          "az=%d mg\n",
+                                          "az=%d mg floor=%d\n",
                              (INT) car_math_round(imu.pitch_deg),
                              (INT) car_math_round(imu.roll_deg),
-                             (INT) car_math_round(imu.az_mg));
+                             (INT) car_math_round(imu.az_mg),
+                             b_floor ? 1 : 0);
         }
         else if (0u != (mask & (1u << FAULT_MOTOR_STALL)))
         {

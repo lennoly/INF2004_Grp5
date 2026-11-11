@@ -28,6 +28,12 @@
    nearest real echo, US_MIN_MM, is 117 us.  Ignored, so the real pulse
    after one is still timed. */
 #define GLITCH_US     (50u)
+/* With nothing in range this module holds ECHO high well past the next
+   ping (11 Nov: "ECHO stuck high" FAULTs stopped the car at starts and on
+   bends; the first sensor's pulse was 46 ms).  ECHO still high from a pulse
+   that was seen to start is that pulse, OUT_OF_RANGE, for this long; only
+   after it, or with no pulse start seen (wire off: pulled up), a FAULT. */
+#define ECHO_LONG_US  (1000000u)
 
 /* Kernel objects and echo capture, shared with the echo interrupt and the
    calling tasks: volatile (Rule 1.8.c). */
@@ -241,6 +247,7 @@ ping_locked (ultrasonic_ping_t * p_out)
     ER       ercd    = E_OK;
     int32_t  dist_mm = ULTRASONIC_NO_ECHO;
     uint32_t since   = hal_time_us() - g_last_ping_us;
+    uint32_t rise_us = g_rise_us; /* one read: the ISR clears it */
     char const * p_why = "";
 
     /* Respect the minimum cycle time since the previous ping. */
@@ -291,6 +298,17 @@ ping_locked (ultrasonic_ping_t * p_out)
             /* No echo pulse at all: FAULT. */
             p_why = "no ECHO pulse (sensor did not answer)";
         }
+    }
+
+    else if ((0u != rise_us) && ((hal_time_us() - rise_us) < ECHO_LONG_US))
+    {
+        /* The last ping's pulse has not ended: nothing in range. */
+        p_out->result   = ULTRASONIC_OUT_OF_RANGE;
+        p_out->width_us = WIDTH_MAX_US;
+    }
+    else
+    {
+        /* ECHO high with no pulse of ours: FAULT, "ECHO stuck high". */
     }
 
     /* The first FAULT after a good ping, with its cause: tells a sensor

@@ -219,6 +219,13 @@
 #define LIFT_TILT_DEG               (30.0f)
 #define LIFT_AZ_MG                  (300.0f)
 #define LIFT_CONFIRM_STEPS          (3u)
+/* A level lift barely moves the accelerometer (11 Nov, 141046: tilts
+   stopped the car, lifting it straight up did not).  In the air all three
+   IR sensors read 1.0, as on black, and the wheels keep turning: no floor
+   for LIFT_NO_FLOOR_MM of wheel travel is a lift too.  The only place all
+   three are black on the track is a junction line, at most 30 mm. */
+#define LIFT_NO_FLOOR_LEVEL         (0.9f)    /* line sensors above this   */
+#define LIFT_NO_FLOOR_MM            (40.0f)   /* [CALIBRATE] 0.5 s at 75   */
 #define ACCEL_EVENT_MM_S2           (250.0f)
 
 /* ------------------------------------------------------------------------ */
@@ -317,7 +324,7 @@
 #define OBST_CENTRE_UNSURE_MM       (0.0f)    /* [CALIBRATE] 6 Nov: off; was 20, 40 */
 /* Smallest sideways shift of a side pass: the seen edge can be 60-80 mm
    off, so a pass sized to it alone could clip the box (53 mm, 25 Oct). */
-#define OBST_MIN_OFFSET_MM          (150.0f)  /* [CALIBRATE]               */
+#define OBST_MIN_OFFSET_MM          (240.0f)  /* [CALIBRATE] 11 Nov: was 150; the side of a 90 mm box cannot be told (141912), 240 clears it on either side */
 /* Side of a blind pass and of any box within OBST_CENTRE_UNSURE_MM of the */
 /* line: 1 = left (4 Nov, Kent's choice; was right).                      */
 #define OBST_BLIND_LEFT             (1)       /* 0: pass on the right      */

@@ -67,10 +67,10 @@ GP6/7, servo GP12. Full table: [docs/WIRING.md](docs/WIRING.md).
 | Hump | starts at 6° pitch or 3° roll; height from pitch/roll × distance travelled |
 | Obstacle | stop at 2 readings under 200 mm; echoes at 280 mm or more are floor; scan 50°–130° in 5° steps |
 | Side choice | box echoes right of straight ahead minus those left of it: 2 or more either way and the car passes on the other side (`OBST_LEAN_POINTS`); closer than that, the seen edges decide, and a centred or blind box passes on the left |
-| Bypass | 45° out, straight past (box assumed ≤ 150 mm deep), 45° back to the line |
-| Lift / overturn | pitch or roll past 30°, or vertical acceleration 300 mg away from 1 g, for 3 steps (60 ms): `STOPPED (lifted / overturned)` (`LIFT_*`, not yet tuned on the car) |
+| Bypass | 45° out, straight past (box assumed ≤ 150 mm deep), 45° back to the line; every pass shifts at least 240 mm sideways (`OBST_MIN_OFFSET_MM`, was 150) |
+| Lift / overturn | pitch or roll past 30°, or vertical acceleration 300 mg away from 1 g, for 3 steps (60 ms); or no floor under all three IR sensors for 40 mm of wheel travel (a level lift): `STOPPED (lifted / overturned)` (`LIFT_*`) |
 | Impacts | counted in the telemetry only; they no longer start the obstacle routine (`OBST_ON_IMPACT` 0) |
-| Safety | watchdog 250 ms while moving; sonar: 4 bad pings or 300 ms without a reading stops the car; ECHO pulses under 50 µs are ignored as noise |
+| Safety | watchdog 250 ms while moving; sonar: 4 bad pings or 300 ms without a reading stops the car; ECHO pulses under 50 µs are ignored as noise, and an ECHO pulse still high at the next ping is "out of range", not a fault, for up to 1 s |
 
 Live tuning only works while IDLE or STOPPED, and resets on reboot: copy good
 values into `car_config.h` and rebuild.
@@ -98,8 +98,8 @@ but have not run on the car: see section 7.
 | Barcode reads | S3-U03 | PASS by team decision: 16/20 at 100 mm/s, 25/27 at 180 mm/s |
 | Hump, IMU events, IMU unplug | S4-U02 to U04, U06 | PASS |
 | Impact detection | S4-U05 | PASS, but no longer a requirement (11 Nov) |
-| Lift / overturn stop | S4-U07 | host only; **not yet run on the car** |
-| Obstacle side choice | S5-U03 | PASS: 6 of 6 correct side, line rejoined 6 of 6 (before the side vote; rerun) |
+| Lift / overturn stop | S4-U07 | PARTIAL (11 Nov): tilts front, back and both sides stopped it 16 of 16; a level lift did not, fix (no floor under the IR sensors) **not yet run**; turning over not tried |
+| Obstacle side choice | S5-U03 | 4 Nov: 6 of 6 correct side, line rejoined 6 of 6. 11 Nov, 90 mm box: side wrong in several of 10 scans (Kent); passes now wide enough for either side, **not yet rerun** |
 | STOP during a scan, humps not seen as obstacles, watchdog | S5-U08, U10, U11 | PASS |
 | Fault stops (encoder, motor stall, IMU, WiFi loss) | INT-10 | PASS |
 | Sonar wire unplugged | S5-U12 | PASS: `fault: sonar no echo` within 0.2 s of START, ECHO and TRIG, 2 runs each (30 Oct) |
@@ -109,15 +109,15 @@ but have not run on the car: see section 7.
 ## 6. Known limits
 
 - **Barcode:** with the sensor at its old height narrow bars barely register (reliable at 75 mm/s only). Kent's fix is to mount it close to the ground; a barcode sheet that is not flat can then scrape it. The black/white levels (0.08 / 0.05) were set for the high mount: check them with TEST_IR after lowering it.
-- **Obstacle width and side:** the HC-SR04's beam (about ±15°) makes a 10–20 cm box at 200 mm echo across almost the whole ±40° sweep, so its edges are rarely seen and the width reads 100–120 mm too wide (S5-U07 FAIL on width). The side was right about 3 times in 4 (Kent). Since 11 Nov the side comes from which half of the sweep holds more echoes, not from the edges; not yet rerun on the car.
-- **Sonar dropouts:** `fault: sonar no echo` now and then on bends and at starts. The module runs from 3.3 V, below its 5 V rating, so it may miss a trigger when the motors pull the supply down; a loose wire does the same. The console now prints the cause of every dropout (`[sonar] FAULT ping: ...`).
-- **Lift detection:** thresholds come from the logs, not from a lift test. A slow, level lift may not reach them.
+- **Obstacle width and side:** the HC-SR04's beam (about ±15°) makes a 10–20 cm box at 200 mm echo across almost the whole ±40° sweep, so its edges are rarely seen and the width reads 100–120 mm too wide (S5-U07 FAIL on width). The side was right about 3 times in 4 (Kent). Since 11 Nov the side comes from which half of the sweep holds more echoes, but a 90 mm box moved 45 mm left or right still reads the same (11 Nov, 10 scans): the sensor cannot tell. So every pass now shifts at least 240 mm, which clears a box that size on either side; the car needs about 320 mm of free floor beside the line.
+- **Sonar dropouts:** `fault: sonar no echo` at starts and on bends came from the module holding ECHO high when nothing is in range (11 Nov console: `ECHO stuck high`); that now reads as out of range. Not yet rerun. The module also misses single triggers (it runs from 3.3 V, below its 5 V rating); those do not stop the car.
+- **Lift detection:** the IMU's Z axis points down, so large tilts read low (28° shown at about 45° real) and the tilt stop comes from the acceleration limit. Small angles and hump heights are unaffected. A level lift is caught by the IR sensors, about 0.5 s after the wheels leave the floor.
 - **Obstacle depth** is not measured: a box deeper than 150 mm would be clipped on the way back to the line.
 - Tuned values live in RAM only.
 
 ## 7. Left to do
 
-- Flash the 11 Nov build and run: S4-U07 (lift and overturn, tune `LIFT_*`), S5-U03 again (side vote), one full lap with the USB console logged (any `[sonar] FAULT ping` lines).
+- Flash the latest 11 Nov build and run: a level lift and turning the car over (S4-U07), three bypasses of the 90 mm box (left, centre, right: does it clear), and one full lap with the USB console logged (no `lifted` stop at junctions or humps, no `fault: sonar no echo`).
 - Upload the 9 silent videos (unlisted YouTube); put the links in `videos/README.md` and the matching result rows.
 - Dropped, do not run: S5-U09, S3-U03 reruns.
 
