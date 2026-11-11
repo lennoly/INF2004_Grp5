@@ -377,12 +377,9 @@ class State:
         self.n_console = 0
         self.samples = deque()               # (number, t, values)
         self.n_samples = 0
-        # Latest of each for the barcode / obstacle / shock panels.
+        # Latest of each for the barcode / obstacle panels.
         self.last_barcode = None
         self.last_obstacle = None
-        self.impacts = 0
-        self.impact_mg = None
-        self.last_impact_time = None
 
     def handle(self, kind, payload):
         with self.lock:
@@ -400,10 +397,6 @@ class State:
                     self.last_barcode = payload
                 elif t == "obstacle":
                     self.last_obstacle = payload
-                elif t == "impact":
-                    self.impacts = payload.get("n", self.impacts + 1)
-                    self.impact_mg = payload.get("mg")
-                    self.last_impact_time = time.time()
                 self._add_event(describe_event(payload))
             elif kind == "status":
                 self.car_status = payload
@@ -453,9 +446,6 @@ class State:
                 "tel": self.tel, "hb": self.hb, "gains": self.gains,
                 "n_tel": self.n_tel, "age_s": age,
                 "barcode": self.last_barcode, "obstacle": self.last_obstacle,
-                "impacts": self.impacts, "impact_mg": self.impact_mg,
-                "impact_age_s": (round(time.time() - self.last_impact_time, 1)
-                                 if self.last_impact_time else None),
                 "events": [e for n, e in self.events if n > seen[0]],
                 "console": [c for n, c in self.console if n > seen[1]],
                 "samples": [[t] + v for n, t, v in self.samples
@@ -480,10 +470,6 @@ def describe_event(e):
         return "OBSTACLE d=%s w%s%s L=%s R=%s -> %s" % (
             e.get("dist"), "=" if e.get("width_known", True) else ">=",
             e.get("width"), e.get("cl"), e.get("cr"), e.get("act"))
-    if t == "impact":
-        mg = e.get("mg")
-        return "IMPACT #%s%s" % (e.get("n"), "" if mg is None else
-                                 "  %d mg" % mg)
     if t == "cmd":
         ok = "ok" if e.get("ok") else "FAILED: %s" % e.get("err", "")
         return "cmd '%s' %s" % (e.get("cmd"), ok)

@@ -53,7 +53,8 @@ static command_spec_t const g_specs[] = {{"start", COMMAND_START, 0u},
                                          {"timing", COMMAND_TIMING, 0u},
                                          {"nav", COMMAND_NAV, 1u},
                                          {"map", COMMAND_MAP, 2u},
-                                         {"detect", COMMAND_DETECT, 1u}};
+                                         {"detect", COMMAND_DETECT, 1u},
+                                         {"bypass", COMMAND_BYPASS, 2u}};
 
 #define SPEC_COUNT (sizeof(g_specs) / sizeof(g_specs[0]))
 
@@ -170,7 +171,8 @@ command_allowed (command_id_t kind, bool b_stationary)
 {
     bool b_tuning = (COMMAND_SPEED == kind) || (COMMAND_PID == kind)
                     || (COMMAND_FF == kind) || (COMMAND_LINE == kind)
-                    || (COMMAND_MAP == kind) || (COMMAND_DETECT == kind);
+                    || (COMMAND_MAP == kind) || (COMMAND_DETECT == kind)
+                    || (COMMAND_BYPASS == kind);
 
     return ((!b_tuning) || b_stationary);
 }
@@ -690,6 +692,24 @@ validate (command_t const * p_cmd)
             b_ok = (p_cmd->arg[0] >= (float32_t) COMMAND_DETECT_MIN_MM)
                    && (p_cmd->arg[0] <= (float32_t) COMMAND_DETECT_MAX_MM);
             gp_error = b_ok ? gp_error : "detect: 100..279 mm";
+        break;
+
+        case COMMAND_BYPASS:
+            /* Casts: the limits are small integers, exact in float32_t;
+               only < and > on floats (Rule 5.4.b.iv).  0: automatic. */
+            b_ok = (((p_cmd->arg[0] > -0.5f) && (p_cmd->arg[0] < 0.5f))
+                    || ((p_cmd->arg[0]
+                         >= (float32_t) COMMAND_BYPASS_SIDE_MIN_MM)
+                        && (p_cmd->arg[0]
+                            <= (float32_t) COMMAND_BYPASS_SIDE_MAX_MM)))
+                   && (((p_cmd->arg[1] > -0.5f) && (p_cmd->arg[1] < 0.5f))
+                       || ((p_cmd->arg[1]
+                            >= (float32_t) COMMAND_BYPASS_STRAIGHT_MIN_MM)
+                           && (p_cmd->arg[1]
+                               <= (float32_t) COMMAND_BYPASS_STRAIGHT_MAX_MM)));
+            gp_error = b_ok ? gp_error
+                            : "bypass: sideways 0 or 100..400, straight 0 or "
+                              "50..800 mm";
         break;
 
         default:

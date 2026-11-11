@@ -51,8 +51,7 @@ typedef enum
     EVT_DECELERATING,
     EVT_TURNING,
     EVT_CLIMBING,
-    EVT_DESCENDING,
-    EVT_IMPACT
+    EVT_DESCENDING
 } terrain_event_t;
 
 void terrain_hump_init(terrain_hump_t * p_hump);
@@ -60,18 +59,10 @@ void terrain_hump_update(terrain_hump_t * p_hump, float32_t pitch_deg,
                          float32_t roll_deg, float32_t ds_mm);
 terrain_event_t terrain_classify(float32_t speed_mm_s, float32_t accel_mm_s2,
                                  float32_t            turn_rate_dps,
-                                 terrain_hump_state_t hump, bool b_impact);
+                                 terrain_hump_state_t hump);
 char const *    terrain_event_name(terrain_event_t event);
-float32_t       terrain_travel_sign(float32_t pwm_pct, float32_t speed_mm_s,
-                                    float32_t last_sign);
-float32_t       terrain_impact_jerk(float32_t delta_fwd_mg,
-                                    float32_t delta_side_mg,
-                                    float32_t delta_up_mg,
-                                    float32_t travel_sign);
 uint32_t        terrain_lift_run(uint32_t run, float32_t pitch_deg,
                                  float32_t roll_deg, float32_t az_mg);
-uint32_t        terrain_impact_blank(uint32_t  blank_ms,
-                                     float32_t duty_change_pct);
 
 #endif /* TERRAIN_H */
 

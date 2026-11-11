@@ -26,7 +26,6 @@
 #define APP_MODE_TEST_ULTRASONIC    (6)  /* Buddy 5: scan + profile + plan */
 #define APP_MODE_TEST_TELEMETRY     (7)  /* Buddy 1: MQTT telemetry        */
 #define APP_MODE_TEST_WHEELS        (8)  /* Buddy 2: raw motor pin check   */
-#define APP_MODE_TEST_CRASH         (9)  /* Buddy 4: drive into a wall     */
 #define APP_MODE_TEST_OBSTACLE      (10) /* Buddy 5: MISSION, straight     */
 
 #ifndef APP_MODE
@@ -197,16 +196,6 @@
 #define HUMP_ROLL_LEVER_MM          (100.0f)
 /* A 1 cm hump leans past the trigger for about 25 mm, a hand jolt 15. */
 #define HUMP_ROLL_MIN_MM            (20.0f)   /* rolled this far: not a jolt */
-/* [CALIBRATE] Driving, only the jolt against the direction of travel
-   counts (TEST_CRASH): by size alone, wall hits (1014-2885 mg) overlapped
-   motor starts (up to 1453 forward, 1797 reversing).  Parked: any jolt.  */
-#define IMPACT_JERK_MG              (800.0f)  /* sample-to-sample change    */
-#define IMPACT_DRIVE_PCT            (5.0f)    /* duty above this: driving   */
-/* Braking (up to 1011 mg) and the rock after a reverse start (1074) also
-   jolt against travel: ignore jolts just after the car's own duty jumps. */
-#define IMPACT_DUTY_STEP_PCT        (15.0f)   /* mean duty change per step  */
-#define IMPACT_BLANK_MS             (300u)    /* then ignore jolts this long*/
-#define IMPACT_HOLDOFF_MS           (500u)
 /* Encoders and compass must both turn: straight pushes read up to 12 deg/s
    on the encoders and 9 on the compass, a hand turn 12-39 and 26-81.     */
 #define TURN_RATE_EVENT_DPS         (10.0f)
@@ -260,10 +249,6 @@
    up): the profile treats echoes this far or further as no echo.  The
    front sensor still watches the pass for real objects. */
 #define OBST_FLOOR_MM               (280)     /* [CALIBRATE]               */
-/* 1: an IMU impact also starts the obstacle routine.  0 (11 Nov): IMU    */
-/* collision detection is dropped from the requirements; impacts are     */
-/* still counted in the telemetry but never change what the car does.    */
-#define OBST_ON_IMPACT              (0)
 #define OBST_CONFIRM_READINGS       (2u)      /* close front pings in a row */
 /* 4 Nov: 2 stopped the car on short dropouts while pivoting (194058,    */
 /* 194455); 4 pings at ~70 ms: a dead sensor still stops in ~0.3 s.      */

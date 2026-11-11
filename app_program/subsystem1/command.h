@@ -47,6 +47,11 @@
 #define COMMAND_SYMBOL_MAX  (42) /* last Code 39 index ('%') */
 #define COMMAND_DETECT_MIN_MM (100) /* above OBST_TOO_CLOSE_MM        */
 #define COMMAND_DETECT_MAX_MM (279) /* below OBST_FLOOR_MM            */
+/* bypass=<sideways>,<straight>: 0 leaves that leg to the planner. */
+#define COMMAND_BYPASS_SIDE_MIN_MM     (100)
+#define COMMAND_BYPASS_SIDE_MAX_MM     (400)
+#define COMMAND_BYPASS_STRAIGHT_MIN_MM (50)
+#define COMMAND_BYPASS_STRAIGHT_MAX_MM (800)
 
 typedef enum
 {
@@ -64,6 +69,7 @@ typedef enum
     COMMAND_NAV,
     COMMAND_MAP,
     COMMAND_DETECT,
+    COMMAND_BYPASS,
     COMMAND_INVALID
 } command_id_t;
 

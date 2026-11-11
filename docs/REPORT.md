@@ -42,7 +42,7 @@ The software follows the suggested three-layer architecture (sensor, control, co
 | 5 | `motion` | 50 Hz (cyclic handler) | two speed PIDs, distance/turn moves, odometry |
 | 6 | `vehicle` | 50 Hz | mission state machine, line-following loop |
 | 7 | `barcode` | 100 Hz | frames + decodes barcode edge stream |
-| 8 | `imu` | 50 Hz | tilt, hump, impact, turn-rate, motion events |
+| 8 | `imu` | 50 Hz | tilt, hump, turn-rate, motion events |
 | 9 | `sonar` | ~14 Hz | front-distance monitor |
 | 10 | `telemetry` | 20 ms loop | commands (USB, UART, MQTT), binary telemetry frames (off–20 Hz), 1 Hz heartbeat, events |
 | 10 | `blink` (template) | 2 Hz | liveness LED on GP16 |
@@ -163,7 +163,7 @@ ranges, units and bit widths, is in `docs/DATA_REPRESENTATION.md`;
 |---|---|---|---|---|
 | `picocar/<id>/telemetry` | car → laptop | 0 / no | 5 Hz (`rate=`: off, or 50–5000 ms) | telemetry, 43 B |
 | `picocar/<id>/heartbeat` | car → laptop | 0 / no | 1 Hz | heartbeat, 26 B |
-| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | state, barcode, hump, obstacle, impact, reply, gains, timing (2–24 B) |
+| `picocar/<id>/event` | car → laptop | 0 / no | when something happens | state, barcode, hump, obstacle, reply, gains, timing (2–24 B) |
 | `picocar/<id>/status` | car → laptop | 0 / **retained** | on connect; last will | status, 2 B: online / offline |
 | `picocar/<id>/cmd` | laptop → car | 0 / no | on demand | command, 4–11 B |
 
@@ -184,7 +184,7 @@ raised).
 
 **Events**: `state` (`st`, `why`: a 5-bit code of the reason), `barcode`
 (`code`, `cmd`), `hump` (`n`, `peak_mm`, `max_mm`), `obstacle` (`found`,
-`dist`, `ang`, `width`, `centre`, `cl`, `cr`, `act`), `impact` (`n`), `cmd`
+`dist`, `ang`, `width`, `centre`, `cl`, `cr`, `act`), `cmd`
 (the reply: `id`, `cmd`, `ok`, `err`), `gains` (`pid`, `ff`, `line`, `speed`,
 `rate`) and `timing` (window, load, jitter, periods and each section's
 maximum; the averages are printed on the console).
@@ -351,7 +351,7 @@ At start-up, 100 samples taken while the car is still give the accelerometer bia
 
 - Pitch = atan2(ax, √(ay²+az²)), with the car's own acceleration (d(speed)/dt from the encoders) removed from ax first, so that braking is not mistaken for a slope.
 - Turn rate is reported from the encoders ((vR − vL)/track) and from the magnetometer heading derivative.
-- An impact is a jerk (sample-to-sample change of the acceleration vector) above 700 mg, with a 500 ms hold-off. Until 11 Nov an impact during line following triggered an obstacle scan; the professor then removed IMU collision detection from the requirements, so impacts are now only counted in the telemetry (`OBST_ON_IMPACT` 0).
+- IMU collision (impact) detection was removed on 11 Nov, when the professor dropped it from the requirements: the code, the `TEST_CRASH` build and the dashboard's shock display are gone. Its test results (S4-U05) stay in the test log.
 - Lifted or overturned (11 Nov requirement, the demo's end-of-run signal): pitch or roll past 30°, or the vertical acceleration more than 300 mg from 1 g, for three 20 ms steps in a row, or no floor under all three IR sensors for 40 mm of wheel travel (a level lift, which the accelerometer barely feels), stops the motors with `STOPPED (lifted / overturned)` (`terrain_lift_run()`, checked by the vehicle task in `check_faults()`).
 
 **Hump-detection algorithm** (`terrain.c`). Double-integrating acceleration drifts quadratically, so height is instead the path integral **h = Σ ds·sin(pitch)**, with ds from the encoders (arc length). Integration only runs during a hump, which bounds drift.
@@ -362,7 +362,7 @@ At start-up, 100 samples taken while the car is still give the accelerometer bia
 - Humps must be at least 5 mm high, and the tracker abandons a "hump" longer than 1.5 m (a ramp or drift).
 - The run maximum `max_peak_mm` is reported in telemetry and as a `hump` event.
 
-**Motion classification.** Events are STATIONARY, CRUISING, ACCELERATING, DECELERATING, TURNING, CLIMBING, DESCENDING and IMPACT, in that priority order.
+**Motion classification.** Events are STATIONARY, CRUISING, ACCELERATING, DECELERATING, TURNING, CLIMBING and DESCENDING; a hump outranks a turn, a turn outranks acceleration, and acceleration outranks speed.
 
 ### Terrain analysis report
 
@@ -465,9 +465,9 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 
 # 6. Verification and Evidence
 
-**Build verification.** All eleven application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_WHEELS, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_CRASH, TEST_ULTRASONIC, TEST_OBSTACLE, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
+**Build verification.** All ten application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_WHEELS, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_ULTRASONIC, TEST_OBSTACLE, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
 
-**Host unit tests** (`make -C tests/host`): **326/326 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
+**Host unit tests** (`make -C tests/host`): **313/313 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
 
 | Module | What is proven |
 |---|---|

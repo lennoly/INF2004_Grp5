@@ -128,6 +128,12 @@ static volatile bool gb_stop_latched = false;
    word, single core (A13): volatile (Rule 1.8.c). */
 static volatile uint32_t g_stop_cmd_us = 0u;
 
+/* bypass= command (a command task writes, this task reads; 16-bit stores
+   are atomic here): the sideways shift and the straight leg of every
+   obstacle pass, 0 = as planned.  Back to 0 at a restart. */
+static volatile uint16_t g_bypass_side_mm     = 0u;
+static volatile uint16_t g_bypass_straight_mm = 0u;
+
 /* Vehicle-task private state. */
 static line_follow_t g_lf;
 static float32_t     g_prev_odo           = 0.0f;
@@ -144,7 +150,6 @@ static uint32_t      g_settle_start_ms    = 0u;
 static float32_t     g_front_ignore_until = 0.0f;
 static uint32_t      g_attempts           = 0u;
 static avoidance_profile_t g_too_close; /* scan that asked for a reverse */
-static uint32_t      g_seen_impacts       = 0u;
 static uint32_t      g_run_start_ms       = 0u;
 static uint32_t      g_start_down_ms      = 0u;
 static bool          gb_abort             = false;
@@ -154,7 +159,6 @@ static bool          gb_calib             = false;
 static bool          gb_btn_start_prev    = false;
 static bool          gb_btn_stop_prev     = false;
 static bool          gb_start_armed       = false;
-static bool          gb_after_impact      = false;
 static bool          gb_path_blocked      = false; /* front watch hit */
 static uint32_t      g_lift_run           = 0u;    /* terrain_lift_run() */
 static float32_t     g_floor_odo          = 0.0f;  /* floor last seen here */
@@ -333,6 +337,22 @@ vehicle_get_status (vehicle_status_t * p_out)
 }
 
 /*!
+ * @brief Fix the legs of every obstacle pass (bypass= command, only while
+ *        IDLE or STOPPED).
+ *
+ * @param[in] side_mm     Sideways shift of the 45 deg leg out, mm; 0 = the
+ *                        planner's.
+ * @param[in] straight_mm Straight leg beside the obstacle, mm; 0 = computed.
+ */
+void
+vehicle_set_bypass (uint32_t side_mm, uint32_t straight_mm)
+{
+    /* Casts: command_check() limits both to 800 mm. */
+    g_bypass_side_mm     = (uint16_t) side_mm;
+    g_bypass_straight_mm = (uint16_t) straight_mm;
+}
+
+/*!
  * @brief Printable name of a vehicle state.
  *
  * @param[in] state Vehicle state.
@@ -379,17 +399,7 @@ now_ms (void)
 static void
 set_state (vehicle_state_t state, char const * p_reason)
 {
-    UINT         imask = 0u;
-    imu_status_t imu;
-
-    if ((VS_OBSTACLE == g_st.state) && (VS_OBSTACLE != state))
-    {
-        /* Jolts from the car's own scan, reverse and bypass moves are not
-           collisions: forget them, or the next line step would stop again
-           at once. */
-        imu_get_status(&imu);
-        g_seen_impacts = imu.impacts;
-    }
+    UINT imask = 0u;
 
     DI(imask);
     g_st.state = state;
@@ -1074,10 +1084,14 @@ bypass (avoidance_plan_t const * p_plan)
 {
     float32_t side =
         (AVOID_TURN_LEFT == p_plan->action) ? SIDE_LEFT : SIDE_RIGHT;
-    float32_t diagonal = p_plan->offset_mm * DIAGONAL_PER_SIDE;
+    /* Cast: at most 400 mm, exact in float32_t. */
+    float32_t offset   = (g_bypass_side_mm > 0u)
+                             ? (float32_t) g_bypass_side_mm
+                             : p_plan->offset_mm;
+    float32_t diagonal = offset * DIAGONAL_PER_SIDE;
     float32_t inner    = (COS_45 * CAR_WIDTH_MM)
                       + (DIAGONAL_PER_SIDE * OBST_CORNER_MARGIN_MM);
-    float32_t edge     = p_plan->offset_mm - (CAR_WIDTH_MM / 2.0f)
+    float32_t edge     = offset - (CAR_WIDTH_MM / 2.0f)
                      - OBST_MARGIN_MM;
     float32_t near     = (p_plan->pass_mm - OBST_DEPTH_MAX_MM - CAR_LENGTH_MM
                       - OBST_MARGIN_MM)
@@ -1088,9 +1102,12 @@ bypass (avoidance_plan_t const * p_plan)
 
     back     = (back > 0.0f) ? back : 0.0f;
     straight = ((near + back + OBST_DEPTH_MAX_MM + edge + inner)
-                - p_plan->offset_mm)
-               - p_plan->offset_mm;
+                - offset)
+               - offset;
     straight = ((straight > 0.0f) ? straight : 0.0f) + PASS_EXTRA_MM;
+    /* Cast: at most 800 mm, exact in float32_t. */
+    straight = (g_bypass_straight_mm > 0u) ? (float32_t) g_bypass_straight_mm
+                                           : straight;
     obstacle_monitor_enable(false);
 
     if (back > 0.0f)
@@ -1242,9 +1259,9 @@ act_on_scan (avoidance_profile_t const * p_prof)
 }
 
 /*!
- * @brief Obstacle state (Buddy 5 with Buddy 2): stop, back off after an
- *        impact, scan, then plan and act.  A STOP during the reverse or the
- *        scan skips the rest; handle_requests() then stops the car.
+ * @brief Obstacle state (Buddy 5 with Buddy 2): stop, scan, then plan and
+ *        act.  A STOP during the scan skips the rest; handle_requests()
+ *        then stops the car.
  */
 static void
 handle_obstacle (void)
@@ -1253,15 +1270,6 @@ handle_obstacle (void)
 
     motion_stop();
     wait_polled(STOP_SETTLE_MS);
-
-    /* After an impact the obstacle can be closer than US_MIN_MM, where the
-       sonar gets no echo and the scan would report a clear path. */
-    if (gb_after_impact)
-    {
-        gb_after_impact = false;
-        motion_move_backward(REVERSE_MM, CRUISE);
-        (void) run_move(false);
-    }
 
     if (!gb_abort)
     {
@@ -1397,11 +1405,9 @@ nav_reason (barcode_decode_nav_t pending)
 
 /*!
  * @brief Whether an obstacle is ahead (front sonar, confirmed by
- *        OBST_CONFIRM_READINGS readings) or the car was hit (IMU impact).
- *        Both triggers are ignored while the IMU reports the car on a hump:
- *        the sonar sees the floor when the nose dips, and the landing jolt
- *        can look like an impact.  Updates the published front distance
- *        and records whether an impact was the reason.
+ *        OBST_CONFIRM_READINGS readings).  Ignored while the IMU reports
+ *        the car on a hump: the sonar sees the floor when the nose dips.
+ *        Updates the published front distance.
  *
  * @param[in] odo_mm Current odometer reading.
  *
@@ -1412,24 +1418,12 @@ obstacle_due (float32_t odo_mm)
 {
     imu_status_t imu;
     bool         b_hump  = false;
-    bool         b_ahead = false;
-    bool         b_hit   = false;
 
     g_st.front_mm = obstacle_front_mm();
     imu_get_status(&imu);
     b_hump = (HUMP_FLAT != imu.hump.state);
-    b_ahead =
-        (!b_hump) && (obstacle_ahead()) && (odo_mm > g_front_ignore_until);
-    b_hit = (0 != OBST_ON_IMPACT) && (!b_hump)
-            && (imu.impacts > g_seen_impacts);
 
-    /* Always follow the IMU's impact counter: an impact on a hump is
-       dropped, not kept for later, and a smaller count is the reset at the
-       start of a run (imu_reset_run()), not an impact. */
-    g_seen_impacts  = imu.impacts;
-    gb_after_impact = b_hit;
-
-    return (b_ahead || b_hit);
+    return ((!b_hump) && (obstacle_ahead()) && (odo_mm > g_front_ignore_until));
 }
 
 /*!
@@ -1539,7 +1533,6 @@ handle_line_search (void)
 static void
 start_run (void)
 {
-    imu_status_t    imu;
     barcode_event_t stale;
     uint32_t        discarded = 0u;
 
@@ -1558,8 +1551,6 @@ start_run (void)
     }
 
     imu_reset_run();
-    imu_get_status(&imu);
-    g_seen_impacts = imu.impacts;
     line_follow_init(&g_lf);
     g_st.pending_nav      = NAV_NONE;
     g_nav_request         = NAV_NONE; /* a nav= sent while idle is dropped */

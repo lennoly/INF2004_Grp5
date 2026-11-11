@@ -30,13 +30,14 @@ pip install -r requirements.txt
   line error with the left/right IR sensors.
 * **Values:** motion (speed, target, PWM, encoder ticks, odometer, heading),
   line and barcode (IR bars, last barcode, pending turn), IMU and humps
-  (yaw/pitch/roll, terrain event, speed and task, bumps, shock count),
+  (yaw/pitch/roll, terrain event, speed and task, bumps),
   barcode (letter read, what the car does with it, pending turn, the demo
   letters), obstacles (front distance, last action, last scan's distance,
   size, centre and clearances), link heartbeat (WiFi state, sent/dropped, re-joins, chip resets).
 * **Terrain profile:** bump height and pitch over the last 2 m driven.
-* **SHOCK pill:** red in the header for 5 s after each impact, with its
-  strength in mg.
+* **Bypass (Tune):** the sideways shift and the straight leg of every
+  obstacle pass in mm (`bypass=<sideways>,<straight>`); blank or 0 leaves
+  that leg to the car. Only while IDLE or STOPPED, until the next restart.
 * **Distances** (front and last scan) show the sonar reading and, in
   brackets, the distance from the wheel axle (+70 mm, `OBST_SENSOR_AHEAD_MM`).
 * **Barcode turns** show whether they ran at the junction or after 400 mm

@@ -110,8 +110,6 @@
 #define JUNK_MM         (70647)  /* what an empty scan printed (cl=)    */
 #define NO_ECHO_POINTS  (5u)
 #define LEAN_SAMPLES    (8u)     /* 24 mm: a 1 cm one-wheel hump        */
-/* 300 ms ignore window: 14 steady 20 ms steps leave 20 ms. */
-#define BLANK_STEADY_STEPS ((IMPACT_BLANK_MS / IMU_PERIOD_MS) - 1u)
 
 /* Obstacle scan. */
 #define SCAN_FIRST_DEG  (10)
@@ -984,28 +982,6 @@ simulate_hump (float32_t height, float32_t length, float32_t noise_deg,
 }
 
 /*!
- * @brief Impact ignore time left after a duty jump and then count steps
- *        of steady duty.
- *
- * @param[in] count IMU steps after the jump.
- *
- * @return Time left, ms.
- */
-static uint32_t
-blank_steps (uint32_t count)
-{
-    uint32_t blank_ms = terrain_impact_blank(0u, 50.0f);
-    uint32_t step     = 0u;
-
-    for (step = 0u; step < count; step++)
-    {
-        blank_ms = terrain_impact_blank(blank_ms, 0.0f);
-    }
-
-    return (blank_ms);
-}
-
-/*!
  * @brief Drive one wheel over a raised-cosine hump (the other stays on
  *        the floor): the car rolls by atan(z / lever) and dips its nose
  *        by atan(z / 2 caster), with noisy readings.
@@ -1246,56 +1222,22 @@ test_terrain (void)
                   == terrain_lift_run(LIFT_CONFIRM_STEPS, 0.0f, 179.0f,
                                       -1000.0f)),
           "tilted past the limit, pulled up, or upside down: lifted");
-    check(EVT_IMPACT == terrain_classify(0.0f, 0.0f, 0.0f, HUMP_FLAT, true),
-          "impact");
     check(EVT_TURNING
-              == terrain_classify(150.0f, 0.0f, 90.0f, HUMP_FLAT, false),
+              == terrain_classify(150.0f, 0.0f, 90.0f, HUMP_FLAT),
           "turn");
     check(EVT_STATIONARY
-              == terrain_classify(5.0f, 0.0f, 0.0f, HUMP_FLAT, false),
+              == terrain_classify(5.0f, 0.0f, 0.0f, HUMP_FLAT),
           "still");
     check(EVT_STATIONARY
-              == terrain_classify(0.0f, 0.0f, 0.0f, HUMP_CLIMBING, false),
+              == terrain_classify(0.0f, 0.0f, 0.0f, HUMP_CLIMBING),
           "stopped with a hump open: still");
     check(EVT_CLIMBING
-              == terrain_classify(150.0f, 0.0f, 0.0f, HUMP_CLIMBING, false),
+              == terrain_classify(150.0f, 0.0f, 0.0f, HUMP_CLIMBING),
           "rolling up a hump: climbing");
     check(EVT_TURNING
-              == terrain_classify(0.0f, 0.0f, 90.0f, HUMP_DESCENDING, false),
+              == terrain_classify(0.0f, 0.0f, 90.0f, HUMP_DESCENDING),
           "pivoting with a hump open: turning");
 
-    /* Impacts: TEST_CRASH jolts (mg) on the car's forward axis. */
-    check(nearly(terrain_impact_jerk(-1014.0f, 300.0f, 200.0f, 1.0f),
-                 1014.0f, 0.1f),
-          "wall hit driving forward: counts");
-    check(nearly(terrain_impact_jerk(1453.0f, 300.0f, 200.0f, 1.0f), 0.0f,
-                 0.1f),
-          "forward motor start: ignored");
-    check(nearly(terrain_impact_jerk(-1797.0f, 300.0f, 200.0f, -1.0f),
-                 0.0f, 0.1f),
-          "reverse motor start: ignored");
-    check(nearly(terrain_impact_jerk(1200.0f, 0.0f, 0.0f, -1.0f), 1200.0f,
-                 0.1f),
-          "hit while reversing: counts");
-    check(nearly(terrain_impact_jerk(300.0f, 400.0f, 0.0f, 0.0f), 500.0f,
-                 0.1f),
-          "parked: any jolt counts");
-    check(nearly(terrain_travel_sign(70.0f, 0.0f, 0.0f), 1.0f, 0.0f)
-              && nearly(terrain_travel_sign(-50.0f, 0.0f, 1.0f), -1.0f, 0.0f),
-          "driving: direction from the duty");
-    check(nearly(terrain_travel_sign(0.0f, 400.0f, 1.0f), 1.0f, 0.0f)
-              && nearly(terrain_travel_sign(0.0f, 5.0f, 1.0f), 0.0f, 0.0f),
-          "motors off: coasting keeps the direction, stopped is parked");
-    check(IMPACT_BLANK_MS == terrain_impact_blank(0u, -50.0f),
-          "braking from 50 % duty: impacts ignored");
-    check(IMPACT_BLANK_MS == terrain_impact_blank(0u, 70.0f),
-          "motor start: impacts ignored");
-    check(0u == terrain_impact_blank(0u, 5.0f),
-          "steering correction: impacts still count");
-    check(blank_steps(BLANK_STEADY_STEPS) > 0u,
-          "just after the jump: still ignored");
-    check(0u == blank_steps(BLANK_STEADY_STEPS + 1u),
-          "300 ms of steady duty: impacts count again");
 }
 
 /*!
@@ -2164,6 +2106,15 @@ test_command (void)
     check((!command_parse("detect=99", &cmd))
               && (!command_parse("detect=280", &cmd)),
           "detect: 100..279 only");
+    check((command_parse("bypass=300,250", &cmd)) && (COMMAND_BYPASS == cmd.kind)
+              && (nearly(cmd.arg[1], 250.0f, GAIN_TOLERANCE))
+              && (command_parse("bypass=0,0", &cmd))
+              && (!command_allowed(COMMAND_BYPASS, false)),
+          "bypass: sideways and straight mm, 0 = automatic, only while stopped");
+    check((!command_parse("bypass=50,250", &cmd))
+              && (!command_parse("bypass=300,900", &cmd))
+              && (!command_parse("bypass=300", &cmd)),
+          "bypass: 100..400 and 50..800 only, two values");
     check(!command_parse("pid=1,2", &cmd), "pid needs 3 values");
     check(!command_parse("pid=1,2,3,4", &cmd), "too many values");
     check(!command_parse("pid=-1,0,0", &cmd), "negative gain rejected");
@@ -2422,7 +2373,7 @@ test_vehicle_buttons (void)
 }
 
 /*!
- * @brief Vehicle task: obstacle triggers, scan, bypass, impact reverse and
+ * @brief Vehicle task: obstacle triggers, scan, bypass and
  *        the hump guard.
  */
 static void
@@ -2477,36 +2428,15 @@ test_vehicle_obstacle (void)
           "vehicle: diagonal leg and the rest of the pass");
     vehicle_sim_box(false);
 
-    vehicle_sim_impact();
-    vehicle_sim_step();
-#if OBST_ON_IMPACT
-    check(vehicle_is(VS_OBSTACLE, NULL), "vehicle: impact stops the car");
-    vehicle_sim_clear_log();
-    vehicle_sim_step();
-    check(vehicle_sim_log_starts("back120;u"),
-          "vehicle: impact: reverse 120 mm, then scan");
-    check(vehicle_is(VS_LINE_FOLLOW, "path clear"),
-          "vehicle: nothing found: continue");
-#else
-    /* car_config.h OBST_ON_IMPACT 0 (line-following tuning): impacts are
-       counted and reported but do not start the obstacle routine. */
-    check(vehicle_is(VS_LINE_FOLLOW, NULL),
-          "vehicle: impact ignored while OBST_ON_IMPACT is 0");
-#endif
-
     vehicle_sim_run(DRIVE_MS);
     vehicle_sim_hump(HUMP_DESCENDING);
     vehicle_sim_clear_log();
     vehicle_close_echo();
-    vehicle_sim_impact();
     vehicle_sim_run(40u);
     check(0u == vehicle_sim_count("-> OBSTACLE"),
-          "vehicle: on a hump, sonar and impact are ignored");
+          "vehicle: on a hump, the sonar is ignored");
     vehicle_sim_hump(HUMP_FLAT);
     vehicle_sim_front(FAR_MM);
-    vehicle_sim_run(200u);
-    check(0u == vehicle_sim_count("-> OBSTACLE"),
-          "vehicle: an impact on the hump is not replayed");
 }
 
 /*!
@@ -2716,7 +2646,7 @@ test_vehicle_barcode_watchdog (void)
     check((WATCHDOG_TIMEOUT_MS == vehicle_sim_watchdog_timeout_ms())
               && (gap < (WATCHDOG_TIMEOUT_MS / 2u)),
           "vehicle: watchdog fed within half its timeout");
-    (void) printf("vehicle: buttons, scan, bypass, impact, hump, stop and "
+    (void) printf("vehicle: buttons, scan, bypass, hump, stop and "
                   "barcode scenarios; longest watchdog gap %" PRIu32 " ms\n",
                   gap);
 }

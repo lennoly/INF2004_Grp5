@@ -1,7 +1,7 @@
 /** @file imu.h
  *
  * @brief Buddy 4 - LSM303D accelerometer and magnetometer
- *        processing task: tilt, humps, impacts, turn rate and events.
+ *        processing task: tilt, humps, turn rate and events.
  */
 
 #ifndef IMU_H
@@ -27,7 +27,6 @@ typedef struct
     float32_t       accel_mm_s2;  /* longitudinal, from encoders    */
     terrain_hump_t  hump;
     terrain_event_t event;
-    uint32_t        impacts;
 } imu_status_t;
 
 int32_t imu_init(void);
@@ -35,7 +34,6 @@ void    imu_get_status(imu_status_t * p_out);
 void    imu_mag_calib_begin(void);
 void    imu_mag_calib_end(void);
 void    imu_reset_run(void);
-float32_t imu_take_peak_jerk(void);
 
 #endif /* IMU_H */
 

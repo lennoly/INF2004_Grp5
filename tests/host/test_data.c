@@ -178,7 +178,6 @@ test_imu (void)
     in.hump.height_mm   = -12.34f;
     in.hump.peak_mm     = 40.04f;
     in.hump.max_peak_mm = 300.0f; /* saturates at 204.7 */
-    in.impacts          = 3u;
     in.i2c_errors       = 9u;
     in.pitch_deg        = 12.34f;
     in.roll_deg         = -90.0f;
@@ -192,7 +191,7 @@ test_imu (void)
     packed_imu_pack(&in, 257u, &packed);
     packed_imu_unpack(&packed, &out);
     gp_check(out.b_ok && (EVT_CLIMBING == out.event) && (HUMP_CLIMBING == out.hump.state)
-                 && (255u == out.hump.humps) && (3u == out.impacts)
+                 && (255u == out.hump.humps)
                  && (9u == out.i2c_errors) && (1u == packed_imu_seq(&packed)),
              "imu: flags, enumerations, saturating counters, 8-bit sequence");
     gp_check(near(out.pitch_deg, 12.3f, TOL_TENTH) && near(out.roll_deg, -90.0f, TOL_TENTH)
@@ -334,8 +333,6 @@ test_frame_lengths (void)
     gp_check(5u == frames_hump(buf, sizeof(buf), 2u, 40.0f, 41.0f), "frame: hump 5 B");
     gp_check(11u == frames_obstacle(buf, sizeof(buf), &prof, AVOID_TURN_LEFT),
              "frame: obstacle 11 B");
-    gp_check(4u == frames_impact(buf, sizeof(buf), 1u, 1234.0f),
-             "frame: impact with strength 4 B");
     gp_check(4u == frames_reply(buf, sizeof(buf), 7u, COMMAND_SPEED, FRAMES_OK),
              "frame: reply 4 B");
     gp_check(24u == frames_gains(buf, sizeof(buf), &gains), "frame: gains 24 B");
@@ -412,6 +409,13 @@ test_command_frames (void)
     cmd.arg[0] = 300.0f;
     len        = frames_command(buf, sizeof(buf), &cmd);
     gp_check(!frames_parse_command(buf, len, &out), "command: detect=300 rejected");
+    cmd.kind   = COMMAND_BYPASS;
+    cmd.arg[0] = 300.0f;
+    cmd.arg[1] = 0.0f;
+    len        = frames_command(buf, sizeof(buf), &cmd);
+    gp_check(frames_parse_command(buf, len, &out) && (COMMAND_BYPASS == out.kind)
+                 && near(out.arg[0], 300.0f, TOL_UNIT) && near(out.arg[1], 0.0f, TOL_UNIT),
+             "command: bypass=300,0 round trip");
     cmd.kind   = COMMAND_NAV;
     cmd.arg[0] = 6.0f;
     len        = frames_command(buf, sizeof(buf), &cmd);
