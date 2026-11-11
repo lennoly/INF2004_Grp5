@@ -83,7 +83,7 @@ Ranges are the valid range of the quantity; *bits* is the stored width.
 | `b_ok` | last read succeeded | – | 1 |
 | `event` | 8 motion classes | – | 3 |
 | `hump_state` | 3 states | – | 2 |
-| `humps`, `impacts`, `i2c_errors` | 0 … 255 (saturating) | 1 | 8 each |
+| `humps`, `i2c_errors` | 0 … 255 (saturating) | 1 | 8 each |
 | `seq` | wraps; +1 per good sample (freshness, risk R1) | 1 | 8 |
 | `pitch`, `roll` | ±90° (field ±102.3) | 0.1° | 11 each |
 | `heading` | 0 … 359.9° | 0.1° | 12 |
@@ -266,7 +266,7 @@ the same field names as the old JSON.
 | Barcode (4) | symbol 6, command 3 |
 | Hump (5) | count 8, peak 0.1 mm 11, maximum 11 |
 | Obstacle (6) | found 1, closest 12, angle 8, width 12, centre 13 (signed), clear left 12, clear right 12, action 3 |
-| Impact (7) | count 8, strength mg 12 (peak jerk of the last two 100 ms event checks, saturating at 4095) |
+| (7) | unused since 11 Nov (was the impact event; IMU collision detection was removed); the number is kept so the later types do not move |
 | Reply (8) | request id 16, command 4, error 4 (0 ok, 1 invalid, 2 bad frame, 3 driving, 4 unavailable) |
 | Gains (9) | speed PID 3 × 20, kf 20, offset 17, line PID 3 × 20 (all 0.001 steps), cruise 9, rate ms 13 |
 | Timing (10) | window ms 16, load % 7, jitter µs 16, periods 16, max µs 9 × 16 |

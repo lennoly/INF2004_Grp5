@@ -76,7 +76,8 @@ values into `car_config.h` and rebuild.
 
 ## 5. Tested features
 
-All on the real car unless marked host. Details and logs in `testing/`.
+All on the real car unless marked host. Details and logs in `testing/`; the
+9 SYS videos (unlisted YouTube) are listed in [videos/README.md](videos/README.md).
 The car results are from the 10 Nov build unless a row says 11 Nov. Not yet
 run on the car: the `bypass=` command, the build with the impact code
 removed, and the sonar ECHO fix over a full lap (section 7).
@@ -118,7 +119,6 @@ removed, and the sonar ECHO fix over a full lap (section 7).
 
 - Flash the latest build and check on the car: `bypass=` from the dashboard (e.g. 300 and 250, then 0 and 0), one full lap with the USB console logged (no `lifted` stop at junctions or humps, no `fault: sonar no echo`), and the dashboard against the new firmware (flash and dashboard must both be the new ones).
 - Optional: turn the car over once (S4-U07).
-- Upload the 9 silent videos (unlisted YouTube); put the links in `videos/README.md` and the matching result rows.
 - Dropped, do not run: S5-U09, S3-U03 reruns.
 
 ## 8. Before a demo
