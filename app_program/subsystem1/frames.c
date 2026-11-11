@@ -41,7 +41,7 @@
 #define RATE_BITS     (13u) /* 0..5000 ms                              */
 #define NAV_ARG_BITS  (3u)  /* nav= 1..4                               */
 #define DETECT_BITS   (9u)  /* detect= 100..279 mm                     */
-#define JERK_BITS     (12u) /* impact strength, mg, saturating at 4095 */
+#define BYPASS_BITS   (10u) /* bypass= 0..800 mm, each value           */
 #define WIN_BITS      (16u) /* ms                                      */
 #define LOAD_BITS     (7u)  /* %                                       */
 #define US_BITS       (16u) /* us, saturating                          */
@@ -255,29 +255,6 @@ frames_obstacle (uint8_t * p_buf, uint32_t size,
 }
 
 /*!
- * @brief Impact event (2 bytes).
- *
- * @param[out] p_buf   Frame buffer.
- * @param[in]  size    Buffer size.
- * @param[in]  impacts Impacts counted this run.
- * @param[in]  jerk_mg Strength: the largest jerk around the impact, mg.
- *
- * @return Frame length, or 0 if it did not fit.
- */
-uint32_t
-frames_impact (uint8_t * p_buf, uint32_t size, uint32_t impacts,
-               float32_t jerk_mg)
-{
-    bitpack_writer_t writer;
-
-    put_header(&writer, p_buf, size, FRAME_IMPACT);
-    put_count(&writer, impacts, PACKED_COUNT_BITS);
-    put_value_u(&writer, jerk_mg, UNIT, JERK_BITS);
-
-    return (finish(&writer));
-}
-
-/*!
  * @brief Command reply (4 bytes).
  *
  * @param[out] p_buf  Frame buffer.
@@ -424,6 +401,11 @@ frames_command (uint8_t * p_buf, uint32_t size, command_t const * p_cmd)
             put_value_u(&writer, p_cmd->arg[0], UNIT, DETECT_BITS);
         break;
 
+        case COMMAND_BYPASS:
+            put_value_u(&writer, p_cmd->arg[0], UNIT, BYPASS_BITS);
+            put_value_u(&writer, p_cmd->arg[1], UNIT, BYPASS_BITS);
+        break;
+
         case COMMAND_NAV:
             put_value_u(&writer, p_cmd->arg[0], UNIT, NAV_ARG_BITS);
         break;
@@ -496,6 +478,12 @@ frames_parse_command (uint8_t const * p_buf, uint32_t len, command_t * p_cmd)
         case COMMAND_DETECT:
             /* Cast: below 2^9, exact in float32_t. */
             p_cmd->arg[0] = (float32_t) bitpack_get_u(&reader, DETECT_BITS);
+        break;
+
+        case COMMAND_BYPASS:
+            /* Casts: below 2^10, exact in float32_t. */
+            p_cmd->arg[0] = (float32_t) bitpack_get_u(&reader, BYPASS_BITS);
+            p_cmd->arg[1] = (float32_t) bitpack_get_u(&reader, BYPASS_BITS);
         break;
 
         case COMMAND_NAV:

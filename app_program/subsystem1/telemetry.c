@@ -75,12 +75,6 @@ static uint32_t g_seen_state   = NO_STATE_SEEN;
 static uint32_t g_seen_barcode = 0u;
 static uint32_t g_seen_humps   = 0u;
 static uint32_t g_seen_scans   = 0u;
-static uint32_t g_seen_impacts = 0u;
-/* Peak jerk of the last two event checks (imu_take_peak_jerk()): the
-   impact's own jolt can land just before or after the check that sees the
-   new count.  Taken only here; events are off in the TEST_IMU / TEST_CRASH
-   builds, which read it themselves. */
-static float32_t g_jerk_prev_mg = 0.0f;
 
 static char const g_hex_chars[] = "0123456789abcdef";
 
@@ -371,6 +365,16 @@ execute (command_t const * p_cmd)
                              (INT) car_math_round(p_cmd->arg[0]));
         break;
 
+        case COMMAND_BYPASS:
+            /* Casts: command_check() only accepts 0 or 50..800 mm. */
+            vehicle_set_bypass((uint32_t) car_math_round(p_cmd->arg[0]),
+                               (uint32_t) car_math_round(p_cmd->arg[1]));
+            (void) tm_printf((UB const *) "# bypass sideways=%d straight=%d mm "
+                                          "(0 = automatic)\n",
+                             (INT) car_math_round(p_cmd->arg[0]),
+                             (INT) car_math_round(p_cmd->arg[1]));
+        break;
+
         case COMMAND_MAP:
             /* Casts: command_check() only accepts 1..4 and 0..42. */
             barcode_decode_set_symbol(
@@ -548,10 +552,6 @@ check_events (void)
     barcode_stats_t  bc_stats;
     imu_status_t     imu;
 
-    float32_t jerk_mg = imu_take_peak_jerk();
-    float32_t shock_mg = (jerk_mg > g_jerk_prev_mg) ? jerk_mg : g_jerk_prev_mg;
-
-    g_jerk_prev_mg = jerk_mg;
     vehicle_get_status(&veh);
     barcode_get_stats(&bc_stats);
     imu_get_status(&imu);
@@ -582,19 +582,6 @@ check_events (void)
     }
 
     emit_obstacle(&veh);
-
-    if (imu.impacts < g_seen_impacts)
-    {
-        g_seen_impacts = imu.impacts; /* counter cleared for a new run */
-    }
-
-    if (imu.impacts > g_seen_impacts)
-    {
-        g_seen_impacts = imu.impacts;
-        g_frame_len    = frames_impact(g_frame, sizeof(g_frame), imu.impacts,
-                                       shock_mg);
-        emit(TOPIC_EVENT, true);
-    }
 }
 
 /*!
@@ -683,7 +670,10 @@ emit_help (void)
                      "Code 39 index (A=10 .. Z=35)\n"
                      "#   detect=<mm>         obstacle stop distance "
                      "(100..279), until restart\n"
-                     "#   speed=, pid=, ff=, line=, map=, detect= only while "
+                     "#   bypass=<side>,<fwd> obstacle pass: sideways shift "
+                     "(100..400) and straight leg (50..800) in mm, 0 = "
+                     "automatic, until restart\n"
+                     "#   speed=, pid=, ff=, line=, map=, detect=, bypass= only while "
                      "IDLE "
                      "or STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "

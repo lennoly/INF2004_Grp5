@@ -7,7 +7,7 @@
  * Topics (see the MQTT section of the report):
  *   telemetry  5 Hz  full snapshot
  *   heartbeat  1 Hz  uptime, link statistics, health
- *   event      on change: state, barcode, hump, obstacle, impact, cmd ack
+ *   event      on change: state, barcode, hump, obstacle, cmd ack
  *   status     retained "online" / last-will "offline"
  *   cmd        (subscribed) commands, see command.h:
  *              start | stop | calibrate | gains | help | speed=<mm/s>

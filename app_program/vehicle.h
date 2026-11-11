@@ -58,6 +58,7 @@ bool         vehicle_set_line_gains(float32_t gain_p, float32_t gain_i,
                                     float32_t gain_d);
 void         vehicle_get_status(vehicle_status_t * p_out);
 char const * vehicle_state_name(vehicle_state_t state);
+void         vehicle_set_bypass(uint32_t side_mm, uint32_t straight_mm);
 
 #endif /* VEHICLE_H */
 

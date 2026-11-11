@@ -48,7 +48,7 @@ gmake -C template/build_make -j8 APP_MODE=MISSION CONSOLE=usb_cdc
 
 `APP_MODE` is one of `MISSION` (the full car) or a single-subsystem test:
 `TEST_MOTOR`, `TEST_MOTION`, `TEST_WHEELS`, `TEST_IR`, `TEST_BARCODE`,
-`TEST_IMU`, `TEST_CRASH`, `TEST_ULTRASONIC`, `TEST_OBSTACLE`, `TEST_TELEMETRY`.
+`TEST_IMU`, `TEST_ULTRASONIC`, `TEST_OBSTACLE`, `TEST_TELEMETRY`.
 The output is `template/build_make/*.uf2`.
 
 ### WiFi build
@@ -93,7 +93,7 @@ is logged to `logs/<date_time>/`. More: [`tools/dashboard/README.md`](tools/dash
 ## Tests and coding standard (BARR-C:2018)
 
 ```bash
-make -C tests/host                        # 326 unit and simulation tests
+make -C tests/host                        # 313 unit and simulation tests
 sh tools/barr_format.sh --check           # layout
 python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
 ```

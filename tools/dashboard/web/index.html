@@ -104,7 +104,6 @@ canvas { width: 100%; height: 115px; display: block; }
   <span class="pill" id="p-state">state –</span>
   <span class="pill" id="p-rate">0 msg/s</span>
   <span class="pill" id="p-faults" hidden>faults</span>
-  <span class="pill bad" id="p-shock" hidden>SHOCK</span>
   <span class="note" id="where"></span>
 </header>
 
@@ -148,6 +147,9 @@ canvas { width: 100%; height: 115px; display: block; }
       <div class="tune"><label>Cruise</label>
         <input id="speed0" placeholder="mm/s"><span></span><span></span>
         <button data-tune="speed">Set</button></div>
+      <div class="tune"><label>Bypass</label>
+        <input id="bypass0" placeholder="sideways mm"><input id="bypass1" placeholder="straight mm"><span></span>
+        <button data-tune="bypass">Set</button></div>
     </section>
     <section>
       <h2>Command</h2>
@@ -216,8 +218,7 @@ canvas { width: 100%; height: 115px; display: block; }
         <dt>Bump now</dt><dd id="v-h">–</dd>
         <dt>Last bump</dt><dd id="v-pk">–</dd>
         <dt>Highest bump</dt><dd id="v-max" class="big">–</dd>
-        <dt>Bumps</dt><dd id="v-n">–</dd>
-        <dt>Shocks</dt><dd id="v-shocks">–</dd></dl></section>
+        <dt>Bumps</dt><dd id="v-n">–</dd></dl></section>
       <section><h2>Obstacles</h2><dl class="kv">
         <dt>Front</dt><dd id="v-front" class="big">–</dd>
         <dt>Last action</dt><dd id="v-act">–</dd>
@@ -267,7 +268,7 @@ document.querySelectorAll("[data-cmd]").forEach(b =>
   b.addEventListener("click", () => send(b.dataset.cmd)));
 document.querySelectorAll("[data-tune]").forEach(b =>
   b.addEventListener("click", () => {
-    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1 }[k];
+    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1, bypass: 2 }[k];
     const vals = [];
     for (let i = 0; i < n; i++) vals.push($(k + i).value.trim() || "0");
     send(k + "=" + vals.join(","));
@@ -303,8 +304,8 @@ function addRows(listId, rows, hot) {
   while (box.childNodes.length > MAX_ROWS) box.lastChild.remove();
 }
 
-// Key actions: turns, line follow / search, obstacles, barcodes, humps,
-// impacts and junctions; the rest (commands, gains, link) stays in Events.
+// Key actions: turns, line follow / search, obstacles, barcodes, humps
+// and junctions; the rest (commands, gains, link) stays in Events.
 function keyAction(row) {
   const m = row.match(/^(\S+)\s+(.*)$/);
   if (!m) return null;
@@ -317,7 +318,7 @@ function keyAction(row) {
                    OBSTACLE: "Obstacle (" + why + ")", STOPPED: "STOPPED (" + why + ")" }[st];
     return text ? t + "  " + text : null;
   }
-  return /^(BARCODE|OBSTACLE|IMPACT|HUMP)/.test(e) ? row : null;
+  return /^(BARCODE|OBSTACLE|HUMP)/.test(e) ? row : null;
 }
 
 // ---------- updates from the dashboard server ----------
@@ -369,11 +370,6 @@ function update(m) {
   setText("v-h", fmt(h.h, 1, " mm")); setText("v-pk", fmt(h.pk, 1, " mm"));
   setText("v-max", fmt(h.max, 1, " mm")); setText("v-n", fmt(h.n));
   setText("v-terrain", (o.ev || "–") + "  ·  " + fmt(spd, 0, " mm/s") + "  ·  " + st);
-  const mg = (m.impact_mg === null || m.impact_mg === undefined) ? "" : "  " + m.impact_mg + " mg";
-  setText("v-shocks", fmt(m.impacts) + (m.impacts ? "  (last" + (mg || " –") + ")" : ""));
-  const shock = m.impact_age_s !== null && m.impact_age_s < 5;
-  $("p-shock").hidden = !shock;
-  if (shock) setText("p-shock", "SHOCK #" + m.impacts + mg);
 
   // Obstacles: front range, then the last scan.
   // Sonar distances, and from the wheel axle (sonar face + SONAR_AHEAD_MM).
@@ -406,7 +402,7 @@ function update(m) {
       put("speed0", g.speed);
     }
   }
-  if (m.events.length) addRows("events", m.events, /IMPACT|STOPPED|FAILED|OBSTACLE|offline/);
+  if (m.events.length) addRows("events", m.events, /STOPPED|FAILED|OBSTACLE|offline/);
   for (const e of m.events) {
     const tm = e.match(/state -> NAV_TURN \((\w+)(, no junction)?\)/);
     if (tm) setText("v-bcturn", tm[1] + (tm[2] ? " after 400 mm (no junction)" : tm[1] === "UTURN" ? " at once" : " at the junction"));
@@ -416,7 +412,7 @@ function update(m) {
     if (o.ls === "JUNC") acts.push(new Date().toTimeString().slice(0, 8) + "  Junction");
     lastLs = o.ls;
   }
-  if (acts.length) addRows("actions", acts, /IMPACT|STOPPED|OBSTACLE|TURN/);
+  if (acts.length) addRows("actions", acts, /STOPPED|OBSTACLE|TURN/);
   if (m.console.length) {
     addRows("console", m.console);
     for (const c of m.console) {

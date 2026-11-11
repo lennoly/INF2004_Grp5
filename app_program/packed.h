@@ -97,7 +97,6 @@ typedef struct
     uint32_t event      : 3; /* terrain_event_t, 8 values             */
     uint32_t hump_state : 2; /* terrain_hump_state_t, 3 values        */
     uint32_t humps      : 8; /* saturating                            */
-    uint32_t impacts    : 8; /* saturating; vehicle detects increases */
     uint32_t i2c_errors : 8; /* saturating                            */
     uint32_t pitch      : 11; /* PACKED_TILT_BITS                     */
     uint32_t roll       : 11;

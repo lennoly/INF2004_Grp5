@@ -139,7 +139,6 @@ packed_imu_pack (imu_status_t const * p_in, uint32_t seq, packed_imu_t * p_out)
     p_out->event      = (uint32_t) p_in->event & bitpack_max_u(3u);
     p_out->hump_state = (uint32_t) p_in->hump.state & bitpack_max_u(2u);
     p_out->humps      = sat_count(p_in->hump.humps);
-    p_out->impacts    = sat_count(p_in->impacts);
     p_out->i2c_errors = sat_count(p_in->i2c_errors);
     p_out->pitch      = s_field(p_in->pitch_deg, TENTHS, PACKED_TILT_BITS);
     p_out->roll       = s_field(p_in->roll_deg, TENTHS, PACKED_TILT_BITS);
@@ -171,7 +170,6 @@ packed_imu_unpack (packed_imu_t const * p_in, imu_status_t * p_out)
     p_out->event            = (terrain_event_t) p_in->event;
     p_out->hump.state       = (terrain_hump_state_t) p_in->hump_state;
     p_out->hump.humps       = p_in->humps;
-    p_out->impacts          = p_in->impacts;
     p_out->i2c_errors       = p_in->i2c_errors;
     p_out->pitch_deg        = s_value(p_in->pitch, PACKED_TILT_BITS, TENTHS);
     p_out->roll_deg         = s_value(p_in->roll, PACKED_TILT_BITS, TENTHS);

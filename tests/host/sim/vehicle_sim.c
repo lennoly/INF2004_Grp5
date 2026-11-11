@@ -51,7 +51,6 @@ static bool                 gs_b_box;
 static float32_t            gs_ir = SIM_ON_LINE;
 static bool                 gsb_bar_black = false;
 static terrain_hump_state_t gs_hump = HUMP_FLAT;
-static uint32_t             gs_impacts;
 static int32_t              gs_move_left_ms;
 static float32_t            gs_odo;
 static float32_t            gs_vel;
@@ -408,13 +407,11 @@ bool barcode_get_event(barcode_event_t * p_event, int32_t timeout_ms)
 void imu_get_status(imu_status_t * p_out)
 {
     (void) memset(p_out, 0, sizeof(*p_out));
-    p_out->impacts    = gs_impacts;
     p_out->hump.state = gs_hump;
 }
 
 void imu_reset_run(void)
 {
-    gs_impacts = 0u;
 }
 
 void imu_mag_calib_begin(void)
@@ -587,11 +584,6 @@ bool ir_sensor_barcode_is_black(void)
 void vehicle_sim_hump(terrain_hump_state_t state)
 {
     gs_hump = state;
-}
-
-void vehicle_sim_impact(void)
-{
-    gs_impacts++;
 }
 
 void vehicle_sim_barcode(barcode_decode_nav_t cmd)

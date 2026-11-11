@@ -15,7 +15,7 @@ change.  The field tables are documented in docs/DATA_REPRESENTATION.md.
 
 VERSION = 1
 
-TELEMETRY, HEARTBEAT, STATE, BARCODE, HUMP, OBSTACLE, IMPACT, REPLY, \
+TELEMETRY, HEARTBEAT, STATE, BARCODE, HUMP, OBSTACLE, _UNUSED_7, REPLY, \
     GAINS, TIMING, STATUS, COMMAND = range(1, 13)
 
 STATES = ["IDLE", "CALIBRATE", "LINE_FOLLOW", "NAV_TURN", "LINE_SEARCH",
@@ -23,7 +23,7 @@ STATES = ["IDLE", "CALIBRATE", "LINE_FOLLOW", "NAV_TURN", "LINE_SEARCH",
 LINES = ["ON", "LOST", "JUNC"]
 NAVS = ["NONE", "LEFT", "RIGHT", "STRAIGHT", "UTURN"]
 EVENTS = ["STATIONARY", "CRUISING", "ACCELERATING", "DECELERATING",
-          "TURNING", "CLIMBING", "DESCENDING", "IMPACT"]
+          "TURNING", "CLIMBING", "DESCENDING"]
 ACTIONS = ["CONTINUE", "STOP", "TURN_LEFT", "TURN_RIGHT", "REVERSE"]
 LINKS = ["DISABLED", "WAIT_NET", "CONNECTING", "CONNECTED", "BACKOFF"]
 WIFI_TEXTS = ["-", "joined", "joined, waiting for an IP address", "joining",
@@ -48,10 +48,10 @@ REASONS = ["other", "boot", "start", "stop command", "spin 360", "calibrated",
            "STRAIGHT, no junction", "lifted / overturned"]
 FAULTS = ["motor_stall", "encoder", "imu", "no_echo", "wifi_loss"]
 COMMANDS = ["start", "stop", "calibrate", "gains", "help", "speed", "pid",
-            "ff", "line", "rate", "timing", "nav", "map", "detect"]
+            "ff", "line", "rate", "timing", "nav", "map", "detect", "bypass"]
 ARG_COUNT = {"start": 0, "stop": 0, "calibrate": 0, "gains": 0, "help": 0,
              "speed": 1, "pid": 3, "ff": 2, "line": 3, "rate": 1,
-             "timing": 0, "nav": 1, "map": 2, "detect": 1}
+             "timing": 0, "nav": 1, "map": 2, "detect": 1, "bypass": 2}
 ERRORS = ["", "invalid command or value", "not a version-1 command frame",
           "only while IDLE or STOPPED", "not available in this build"]
 TIMING_NAMES = ["motion", "vehicle", "barcode", "imu", "hump", "ir_isr",
@@ -217,13 +217,6 @@ def _obstacle(rd):
     return "event", o
 
 
-def _impact(rd):
-    o = {"type": "impact", "n": rd.u(8)}
-    if rd.pos + 12 <= rd.bits:                # strength (older firmware: none)
-        o["mg"] = rd.u(12)
-    return "event", o
-
-
 def _reply(rd):
     req_id, kind, err = rd.u(16), rd.u(4), rd.u(4)
     o = {"type": "cmd", "id": req_id, "cmd": _name(COMMANDS, kind),
@@ -263,6 +256,8 @@ def _command(rd):
         args = [rd.u(13)]
     elif name == "detect":
         args = [rd.u(9)]
+    elif name == "bypass":
+        args = [rd.u(10), rd.u(10)]
     elif name == "nav":
         args = [rd.u(3)]
     elif name == "map":
@@ -278,7 +273,7 @@ def _command(rd):
 
 _DECODERS = {TELEMETRY: _telemetry, HEARTBEAT: _heartbeat, STATE: _state,
              BARCODE: _barcode, HUMP: _hump, OBSTACLE: _obstacle,
-             IMPACT: _impact, REPLY: _reply, GAINS: _gains, TIMING: _timing,
+             REPLY: _reply, GAINS: _gains, TIMING: _timing,
              STATUS: _status, COMMAND: _command}
 
 
@@ -316,6 +311,11 @@ def parse_text(text):
         raise ValueError("rate: 0 (off) or 50..5000 ms")
     if name == "detect" and not 100 <= args[0] <= 279:
         raise ValueError("detect: 100..279 mm")
+    if name == "bypass" and not (
+            (round(args[0]) == 0 or 100 <= args[0] <= 400)
+            and (round(args[1]) == 0 or 50 <= args[1] <= 800)):
+        raise ValueError("bypass: sideways 0 or 100..400, "
+                         "straight 0 or 50..800 mm")
     if name == "nav" and not 1 <= round(args[0]) <= 4:
         raise ValueError("nav: 1 left, 2 right, 3 straight, 4 U-turn")
     if name == "map" and not (1 <= round(args[0]) <= 4
@@ -334,6 +334,9 @@ def command_frame(name, args=(), req_id=0):
         wr.u(args[0], 13)
     elif name == "detect":
         wr.u(args[0], 9)
+    elif name == "bypass":
+        wr.u(round(args[0]), 10)
+        wr.u(round(args[1]), 10)
     elif name == "nav":
         wr.u(round(args[0]), 3)
     elif name == "map":
@@ -446,10 +449,6 @@ def encode_event(e):
         wr.u(e.get("cl", 0), 12)
         wr.u(e.get("cr", 0), 12)
         wr.u(_index(ACTIONS, e.get("act")), 3)
-    elif t == "impact":
-        wr = Writer(IMPACT)
-        wr.u(e.get("n", 0), 8)
-        wr.u(e.get("mg", 0), 12)
     elif t == "cmd":
         wr = Writer(REPLY)
         wr.u(e.get("id", 0) & 0xFFFF, 16)
