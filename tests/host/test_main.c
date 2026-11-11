@@ -1232,6 +1232,20 @@ test_terrain (void)
           "24 mm lean (1 cm one-wheel hump): one hump");
     check(lift_on_hump_holds_peak(), "lifted on a hump: peak held");
     check(lifted_stays_flat(), "tilted with the wheels still: no hump");
+    /* Lifted or overturned (ends a run): LIFT_CONFIRM_STEPS samples in a
+       row; a hump (20 deg, 1 g) and one jolt are not a lift. */
+    check((0u == terrain_lift_run(2u, 20.0f, -20.0f, 1000.0f))
+              && (1u == terrain_lift_run(0u, 0.0f, 0.0f, 1500.0f))
+              && (0u == terrain_lift_run(1u, 0.0f, 0.0f, 1000.0f)),
+          "hump tilt or one jolt: not lifted");
+    check((LIFT_CONFIRM_STEPS
+           == terrain_lift_run(LIFT_CONFIRM_STEPS - 1u, 35.0f, 0.0f, 900.0f))
+              && (1u == terrain_lift_run(0u, 0.0f, -40.0f, 1000.0f))
+              && (1u == terrain_lift_run(0u, 0.0f, 0.0f, 600.0f))
+              && (LIFT_CONFIRM_STEPS
+                  == terrain_lift_run(LIFT_CONFIRM_STEPS, 0.0f, 179.0f,
+                                      -1000.0f)),
+          "tilted past the limit, pulled up, or upside down: lifted");
     check(EVT_IMPACT == terrain_classify(0.0f, 0.0f, 0.0f, HUMP_FLAT, true),
           "impact");
     check(EVT_TURNING
@@ -1442,14 +1456,41 @@ test_obstacle (void)
 
         for (idx = 0u; idx < 11u; idx++)
         {
-            /* Cast: 65..115 deg fit int16_t. */
-            points[idx].angle_deg = (int16_t) (SERVO_MIN_DEG + (5 * (int32_t) idx));
+            /* Cast: 65..115 deg fit int16_t.  The angles of the scan
+               itself (the sweep began at 65 deg then), not SERVO_MIN_DEG:
+               the side vote counts echoes either side of 90. */
+            points[idx].angle_deg = (int16_t) (65 + (5 * (int32_t) idx));
             points[idx].dist_mm   = split[idx];
         }
 
         (void) avoidance_profile(points, 11u, &prof);
         check(AVOID_TURN_RIGHT == avoidance_plan(&prof, 0u).action,
               "box split by floor echoes: one box, pass right");
+    }
+
+    /* Side vote (OBST_LEAN_POINTS).  A box on the left echoes from 70 deg to
+       the sweep's left end; two stray echoes at its right end (221 mm, as
+       on 6 Nov) hide the right edge too.  Neither edge seen used to mean a
+       blind pass on the fixed left side, the box's side; 6 echoes right of
+       ahead against 8 left now pass it on the right, wide. */
+    {
+        static int16_t const stray[17] = {221, 221, 420, 430, 205, 200,
+                                          196, 193, 190, 190, 192, 195,
+                                          199, 204, 210, 217, 224};
+
+        for (idx = 0u; idx < 17u; idx++)
+        {
+            /* Cast: 50..130 deg fit int16_t. */
+            points[idx].angle_deg = (int16_t) (50 + (5 * (int32_t) idx));
+            points[idx].dist_mm   = stray[idx];
+        }
+
+        (void) avoidance_profile(points, 17u, &prof);
+        plan = avoidance_plan(&prof, 0u);
+        check((0 == prof.clear_left_mm) && (0 == prof.clear_right_mm)
+                  && (AVOID_TURN_RIGHT == plan.action)
+                  && (nearly(plan.offset_mm, OBST_BLIND_OFFSET_MM, 0.5f)),
+              "box on the left, stray echoes on the right: pass right, wide");
     }
 
     /* 4 Nov 190538, box well right of the line: 80-85 deg and its right

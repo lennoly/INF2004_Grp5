@@ -40,12 +40,12 @@ WHY_TEXTS = ["-", "connected", "closed by broker or network (TCP reset)",
 REASONS = ["other", "boot", "start", "stop command", "spin 360", "calibrated",
            "IR contrast too low", "line lost", "line reacquired",
            "line not found / end", "nav done", "nav: line not found",
-           "obstacle ahead / impact", "path clear", "obstacle bypassed",
+           "obstacle ahead", "path clear", "obstacle bypassed",
            "bypass: line not found", "path blocked", "LEFT", "RIGHT",
            "STRAIGHT", "UTURN", "fault: motor stall", "fault: encoder",
            "fault: IMU", "fault: sonar no echo", "sonar stale",
            "watchdog reset", "LEFT, no junction", "RIGHT, no junction",
-           "STRAIGHT, no junction"]
+           "STRAIGHT, no junction", "lifted / overturned"]
 FAULTS = ["motor_stall", "encoder", "imu", "no_echo", "wifi_loss"]
 COMMANDS = ["start", "stop", "calibrate", "gains", "help", "speed", "pid",
             "ff", "line", "rate", "timing", "nav", "map", "detect"]

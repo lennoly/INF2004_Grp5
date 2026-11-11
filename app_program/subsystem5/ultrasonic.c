@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <tk/tkernel.h>
+#include <tm/tmonitor.h>
 #include "car_types.h"
 #include "car_config.h"
 #include "hal.h"
@@ -23,6 +24,10 @@
 #define WIDTH_MAX_US  (0xFFFFu) /* echo width field saturates here */
 #define FLG_ECHO      (1u << 0)
 #define MAX_SAMPLES   (7u)
+/* Shorter ECHO pulses are noise (motor or TRIG coupling), not echoes: the
+   nearest real echo, US_MIN_MM, is 117 us.  Ignored, so the real pulse
+   after one is still timed. */
+#define GLITCH_US     (50u)
 
 /* Kernel objects and echo capture, shared with the echo interrupt and the
    calling tasks: volatile (Rule 1.8.c). */
@@ -33,6 +38,9 @@ static volatile uint32_t g_rise_us      = 0u;
    (11 m, far past the 4 m range, still OUT_OF_RANGE). */
 static volatile uint16_t g_width_us     = 0u;
 static volatile uint32_t g_last_ping_us = 0u;
+
+/* Last ping was a FAULT (only under the sensor semaphore). */
+static bool gb_was_fault = false;
 
 static void               ping_locked(ultrasonic_ping_t * p_out);
 static ultrasonic_class_t echo_class(int32_t dist_mm);
@@ -233,6 +241,7 @@ ping_locked (ultrasonic_ping_t * p_out)
     ER       ercd    = E_OK;
     int32_t  dist_mm = ULTRASONIC_NO_ECHO;
     uint32_t since   = hal_time_us() - g_last_ping_us;
+    char const * p_why = "";
 
     /* Respect the minimum cycle time since the previous ping. */
     if (since < PING_GAP_US)
@@ -241,6 +250,7 @@ ping_locked (ultrasonic_ping_t * p_out)
     }
 
     p_out->result = ULTRASONIC_FAULT;
+    p_why         = "ECHO stuck high";
 
     /* ECHO must be low before a trigger.  A line stuck high would
        otherwise time out like a no-target pulse and read as free space. */
@@ -268,6 +278,7 @@ ping_locked (ultrasonic_ping_t * p_out)
             p_out->dist_mm  = (ULTRASONIC_VALID == p_out->result)
                                   ? dist_mm
                                   : ULTRASONIC_NO_ECHO;
+            p_why           = "pulse too short";
         }
         else if (0u != g_rise_us)
         {
@@ -278,8 +289,19 @@ ping_locked (ultrasonic_ping_t * p_out)
         else
         {
             /* No echo pulse at all: FAULT. */
+            p_why = "no ECHO pulse (sensor did not answer)";
         }
     }
+
+    /* The first FAULT after a good ping, with its cause: tells a sensor
+       that stopped answering (supply, TRIG wire) from an ECHO wire.
+       Cast: tm_printf() takes the kernel's UB string type; ASCII. */
+    if ((ULTRASONIC_FAULT == p_out->result) && (!gb_was_fault))
+    {
+        (void) tm_printf((UB const *) "[sonar] FAULT ping: %s\n", p_why);
+    }
+
+    gb_was_fault = (ULTRASONIC_FAULT == p_out->result);
 }
 
 /*!
@@ -332,12 +354,16 @@ echo_edge_isr (uint32_t pin, uint32_t events, uint32_t t_us)
 
     if ((0u != (events & HAL_GPIO_EDGE_FALL)) && (0u != g_rise_us))
     {
-        /* Cast: saturated to the 16-bit field first. */
-        g_width_us = ((t_us - g_rise_us) > WIDTH_MAX_US)
-                         ? (uint16_t) WIDTH_MAX_US
-                         : (uint16_t) (t_us - g_rise_us);
-        g_rise_us  = 0u;
-        (void) tk_set_flg(gh_echo_flag, FLG_ECHO);
+        if ((t_us - g_rise_us) >= GLITCH_US)
+        {
+            /* Cast: saturated to the 16-bit field first. */
+            g_width_us = ((t_us - g_rise_us) > WIDTH_MAX_US)
+                             ? (uint16_t) WIDTH_MAX_US
+                             : (uint16_t) (t_us - g_rise_us);
+            (void) tk_set_flg(gh_echo_flag, FLG_ECHO);
+        }
+
+        g_rise_us = 0u;
     }
 }
 

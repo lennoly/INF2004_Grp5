@@ -228,7 +228,7 @@ class Car:
             self.event({"type": "obstacle", "found": 1, "dist": self.front,
                         "ang": 90, "width": 110, "centre": 15, "cl": 1000,
                         "cr": 420, "act": self.act})
-            self.set_state("OBSTACLE", "obstacle ahead / impact")
+            self.set_state("OBSTACLE", "obstacle ahead")
 
     _last_bc = -1
 

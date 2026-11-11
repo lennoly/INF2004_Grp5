@@ -14,6 +14,7 @@
 #define RETURN_FRACTION    (0.35f)   /* must come back below 35 % peak   */
 #define STATIONARY_MM_S    (15.0f)   /* slower than this = standing still */
 #define PREROLL_MIN_DEG    (1.0f)    /* consistent tilt worth tracking   */
+#define ONE_G_MG           (1000.0f) /* vertical acceleration when level */
 
 /* Names indexed by terrain_event_t. */
 static char const * const g_event_names[] = {
@@ -295,6 +296,31 @@ terrain_impact_blank (uint32_t blank_ms, float32_t duty_change_pct)
     }
 
     return (left);
+}
+
+/*!
+ * @brief Samples in a row in which the car reads lifted or overturned: tilted
+ *        past LIFT_TILT_DEG either way, or the vertical acceleration more
+ *        than LIFT_AZ_MG from 1 g (pulled up or dropped; upside down is
+ *        -1 g).  The caller stops the car at LIFT_CONFIRM_STEPS.
+ *
+ * @param[in] run       Result of the previous sample.
+ * @param[in] pitch_deg Pitch.
+ * @param[in] roll_deg  Roll.
+ * @param[in] az_mg     Filtered vertical acceleration, 1000 when level.
+ *
+ * @return run + 1 (at most LIFT_CONFIRM_STEPS) while off the floor, else 0.
+ */
+uint32_t
+terrain_lift_run (uint32_t run, float32_t pitch_deg, float32_t roll_deg,
+                  float32_t az_mg)
+{
+    bool b_off = (car_math_abs(pitch_deg) > LIFT_TILT_DEG)
+                 || (car_math_abs(roll_deg) > LIFT_TILT_DEG)
+                 || (car_math_abs(az_mg - ONE_G_MG) > LIFT_AZ_MG);
+    uint32_t next = (run < LIFT_CONFIRM_STEPS) ? (run + 1u) : run;
+
+    return (b_off ? next : 0u);
 }
 
 /*!

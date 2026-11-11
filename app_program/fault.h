@@ -12,7 +12,7 @@
  *   FAULT_MOTOR_STALL  motion task  (a move ended by its stall timeout)
  *   FAULT_ENCODER      motion task  (drive applied, no encoder edges)
  *   FAULT_IMU          imu task     (three failed reads in a row)
- *   FAULT_NO_ECHO      sonar task   (two FAULT pings in a row)
+ *   FAULT_NO_ECHO      sonar task   (OBST_FAULT_LIMIT FAULT pings in a row)
  *   FAULT_WIFI_LOSS    cyw43 task   (Wi-Fi link down after it was up)
  *
  * Because the vehicle samples the bits every 20 ms, a fault that sets and

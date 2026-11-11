@@ -351,7 +351,8 @@ At start-up, 100 samples taken while the car is still give the accelerometer bia
 
 - Pitch = atan2(ax, √(ay²+az²)), with the car's own acceleration (d(speed)/dt from the encoders) removed from ax first, so that braking is not mistaken for a slope.
 - Turn rate is reported from the encoders ((vR − vL)/track) and from the magnetometer heading derivative.
-- An impact is a jerk (sample-to-sample change of the acceleration vector) above 700 mg, with a 500 ms hold-off. An impact during line following triggers an obstacle scan.
+- An impact is a jerk (sample-to-sample change of the acceleration vector) above 700 mg, with a 500 ms hold-off. Until 11 Nov an impact during line following triggered an obstacle scan; the professor then removed IMU collision detection from the requirements, so impacts are now only counted in the telemetry (`OBST_ON_IMPACT` 0).
+- Lifted or overturned (11 Nov requirement, the demo's end-of-run signal): pitch or roll past 30°, or the vertical acceleration more than 300 mg from 1 g, for three 20 ms steps in a row stops the motors with `STOPPED (lifted / overturned)` (`terrain_lift_run()`, checked by the vehicle task in `check_faults()`).
 
 **Hump-detection algorithm** (`terrain.c`). Double-integrating acceleration drifts quadratically, so height is instead the path integral **h = Σ ds·sin(pitch)**, with ds from the encoders (arc length). Integration only runs during a hump, which bounds drift.
 
@@ -444,7 +445,7 @@ Each move also has a 10 s timeout (`MOVE_TIMEOUT_MS`), so a stuck leg ends in ST
 | S5-U08, STOP during a scan | stops within one servo step |
 | S5-U10, humps | no obstacle stop from the sonar or the IMU over 1 cm and 2 cm humps (5 runs) |
 | S5-U11, watchdog | 3 scans, bypasses and calibration spins with no watchdog reset |
-| S5-U12, sonar wire pulled | the car stopped every time; see section 9 |
+| S5-U12, sonar wire unplugged | `fault: sonar no echo` within 0.2 s of START, ECHO and TRIG, 2 runs each (30 Oct) |
 
 The width over-read is the sonar's beam: at about 200 mm the cone still echoes off a box from well past its edges, so a small box looks 100–120 mm wider. The bypass treats this as margin; the centre, which sets the side, is accurate.
 
@@ -466,7 +467,7 @@ A new run discards barcodes decoded while the car stood still (pushed by hand, o
 
 **Build verification.** All eleven application modes (MISSION, TEST_MOTOR, TEST_MOTION, TEST_WHEELS, TEST_IR, TEST_BARCODE, TEST_IMU, TEST_CRASH, TEST_ULTRASONIC, TEST_OBSTACLE, TEST_TELEMETRY), the UART-console build and the WiFi+MQTT build compile against the template and Pico SDK 2.2.0 with **zero warnings** (last checked with arm-none-eabi-gcc 15.3.1). Application files are compiled as strict C99 (`-std=c99 -Wpedantic`) with `-Wall -Wextra -Wsign-conversion -Wfloat-equal -Wdouble-promotion -Wshadow` (section 8). We also checked in the linked image that both template hooks (`cyw43_utk_app_poll`, `tm_usb_rx_byte`) resolve to the application's strong symbols. The disassembly shows the USB service loop calling our `tm_usb_rx_byte`.
 
-**Host unit tests** (`make -C tests/host`): **325/325 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
+**Host unit tests** (`make -C tests/host`): **326/326 pass**, including 64 checks of the packed data and binary frames (`tests/host/test_data.c`). The host build uses the same C99 and warning flags as the firmware, plus `-Werror`.
 
 | Module | What is proven |
 |---|---|
@@ -520,7 +521,7 @@ The BARR-C conformance pass and the independent review of it found seven more; t
 - **Motion safety.** Every move has a stall timeout and every manoeuvre can be aborted.
 - **Watchdog.** The RP2040 watchdog (`WATCHDOG_TIMEOUT_MS`, 250 ms, the Week 6 value) guards motion: `set_state()` arms it in every state that can move the car and stops it in IDLE and STOPPED, the only states in which the WiFi chip may be restarted (that restart stalls the cyw43 task, which runs above the vehicle task). The vehicle task feeds it in every wait, about every 0.1 s at most (the longest gap is one sonar ping, 101 ms in the host simulation), so a stalled task stops the car within 250 ms (A14 asks for 500 ms). The motor outputs go off with the reset, and the first state after boot reports `watchdog reset` as its reason. `usermain()` stops the watchdog first thing at start-up.
 - **Line recovery.** A lost line gets an expanding sweep search before the car gives up with a reason.
-- **Collision.** An IMU impact triggers a stop, a reverse, a scan and avoidance.
+- **Lifted or overturned.** The IMU stops the motors within about 80 ms of the car being tilted past 30° or pulled off the floor (not yet tuned on the car). IMU collision detection was removed from the requirements on 11 Nov.
 - **Communication.** Reconnection uses back-off, the last-will marks the car offline, a heartbeat sequence number reveals lost messages, and telemetry is simply dropped (and counted) when offline, so control is never delayed by the network.
 - **Real-time.** Control runs at higher priority than communication, and interrupt handlers are short.
 
@@ -597,7 +598,8 @@ Pure algorithm modules contain no RTOS calls, which is why they can be unit-test
 
 - **Barcode at running height.** The barcode sensor sits high enough that narrow bars barely change its reading. Reads at 75 mm/s are reliable on the course (SYS-02 4 of 4), but faster runs and worn codes miss more frames.
 - **Obstacle width.** The sonar beam makes small boxes read 100–120 mm too wide (S5-U07). The bypass uses this as margin and the centre is accurate, so the side choice is unaffected.
-- **Sonar fault shown as an IMU fault.** The IMU (GP4/5) and the sonar (GP6/7) share a connector area; pulling a sonar wire at the board also disturbs the IMU's I2C link, so the car stops on `fault: IMU` first (S5-U12, 10 Nov). It always stops; the sonar's own fault was shown on 30 Oct and 4 Nov. A rerun unplugging at the sensor end is planned.
+- **Sonar dropouts.** `fault: sonar no echo` stopped the car now and then on bends and at starts. The HC-SR04 runs from 3.3 V, below its 5 V rating, so a dip in the supply when the motors load it is the likely cause; a module rated for 3.3 V (HC-SR04P, RCWL-1601) or a 5 V supply with a divider on ECHO is the fix. ECHO pulses under 50 µs are now ignored and the console prints the cause of each dropout. (Earlier runs that showed `fault: IMU` when "a sonar wire" was pulled had the wrong wire unplugged; see S5-U12, 11 Nov.)
+- **Obstacle side.** The beam is wider than the boxes, so box edges are rarely seen inside the ±40° sweep; the side was right about 3 times in 4. Since 11 Nov the side is taken from which half of the sweep holds more echoes (`OBST_LEAN_POINTS`); not yet rerun on the car.
 - Encoders have no direction channel, so direction is inferred from the commanded sign. A wheel pushed backwards by an external force is counted as forward.
 - - The scan covers ±40°. Free space beyond it is assumed (A10), and the obstacle's depth is not measured: the pass assumes at most `OBST_DEPTH_MAX_MM` (150 mm, the course's boxes). A deeper obstacle would be clipped when the car turns back to the line.
 - A low-mounted sonar can still see a hump's face before the car tilts (assumption A12). Log the front range while approaching the course hump; on the course it stayed above the 200 mm trigger (S5-U10).

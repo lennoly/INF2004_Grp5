@@ -4,10 +4,11 @@
  *
  * IDLE --start--> LINE_FOLLOW --barcode+junction--> NAV_TURN --> LINE_FOLLOW
  *                   |  |  +--line lost--> LINE_SEARCH --found--> LINE_FOLLOW
- *                   |  +--2 front pings < OBST_DETECT_MM or impact--> OBSTACLE
+ *                   |  +--2 front pings < OBST_DETECT_MM--> OBSTACLE
  *                   |       OBSTACLE: scan, plan, bypass, reacquire line
  * any --stop / blocked / line not found--> STOPPED --start--> LINE_FOLLOW
  * any running state --fault bit / no fresh front reading--> STOPPED
+ * any running state --lifted or overturned (IMU)--> STOPPED
  * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (360 degree spin)
  *
  * Manoeuvres are sequences of blocking motion moves executed in this task;
@@ -30,6 +31,7 @@
 #include "ir_sensor.h"
 #include "barcode.h"
 #include "imu.h"
+#include "terrain.h"
 #include "servo.h"
 #include "ultrasonic.h"
 #include "obstacle.h"
@@ -154,6 +156,7 @@ static bool          gb_btn_stop_prev     = false;
 static bool          gb_start_armed       = false;
 static bool          gb_after_impact      = false;
 static bool          gb_path_blocked      = false; /* front watch hit */
+static uint32_t      g_lift_run           = 0u;    /* terrain_lift_run() */
 
 /* Names indexed by vehicle_state_t. */
 static char const * const g_state_names[] = {
@@ -606,15 +609,39 @@ poll_inputs (void)
 static void
 check_faults (void)
 {
-    uint32_t mask      = fault_mask() & STOP_FAULTS;
-    bool     b_running = (VS_IDLE != g_st.state) && (VS_STOPPED != g_st.state);
-    bool     b_stale   = obstacle_front_stale();
+    uint32_t     mask      = fault_mask() & STOP_FAULTS;
+    bool         b_running = (VS_IDLE != g_st.state)
+                             && (VS_STOPPED != g_st.state);
+    bool         b_stale   = obstacle_front_stale();
+    bool         b_lifted  = false;
+    imu_status_t imu;
 
-    if (b_running && ((0u != mask) || b_stale) && (!gb_abort))
+    /* Lifted or overturned ends the run (the demo's end signal).  Only on
+       good IMU data; a dead IMU stops the car through its fault bit. */
+    imu_get_status(&imu);
+    g_lift_run = (b_running && imu.b_ok)
+                     ? terrain_lift_run(g_lift_run, imu.pitch_deg,
+                                        imu.roll_deg, imu.az_mg)
+                     : 0u;
+    b_lifted   = (g_lift_run >= LIFT_CONFIRM_STEPS);
+
+    if (b_running && ((0u != mask) || b_stale || b_lifted) && (!gb_abort))
     {
         gb_abort = true;
 
-        if (0u != (mask & (1u << FAULT_MOTOR_STALL)))
+        if (b_lifted)
+        {
+            gp_abort_why = "lifted / overturned";
+
+            /* Casts: tm_printf() takes the kernel's UB string type (ASCII);
+               angles and mg are small, so they fit INT. */
+            (void) tm_printf((UB const *) "[vehicle] lifted: pitch=%d roll=%d "
+                                          "az=%d mg\n",
+                             (INT) car_math_round(imu.pitch_deg),
+                             (INT) car_math_round(imu.roll_deg),
+                             (INT) car_math_round(imu.az_mg));
+        }
+        else if (0u != (mask & (1u << FAULT_MOTOR_STALL)))
         {
             gp_abort_why = "fault: motor stall";
         }
@@ -1430,7 +1457,7 @@ handle_line_follow (void)
     else if (obstacle_due(motion.odo_mm))
     {
         motion_stop();
-        set_state(VS_OBSTACLE, "obstacle ahead / impact");
+        set_state(VS_OBSTACLE, "obstacle ahead");
     }
     else
     {
