@@ -42,7 +42,7 @@ static char const * const g_reasons[] = {
     "line not found / end",
     "nav done",
     "nav: line not found",
-    "obstacle ahead / impact",
+    "obstacle ahead",
     "path clear",
     "obstacle bypassed",
     "bypass: line not found",
@@ -59,7 +59,8 @@ static char const * const g_reasons[] = {
     "watchdog reset",
     "LEFT, no junction",
     "RIGHT, no junction",
-    "STRAIGHT, no junction"};
+    "STRAIGHT, no junction",
+    "lifted / overturned"};
 
 #define REASON_COUNT (sizeof(g_reasons) / sizeof(g_reasons[0]))
 
@@ -304,6 +305,7 @@ packed_profile_unpack (packed_profile_t const *  p_in,
     p_out->centre_mm      = s_value(p_in->centre, PACKED_LATERAL_BITS, UNIT);
     p_out->clear_left_mm  = (int32_t) p_in->clear_left;
     p_out->clear_right_mm = (int32_t) p_in->clear_right;
+    p_out->lean           = 0; /* planning only: not packed */
 }
 
 /*!

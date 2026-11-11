@@ -33,8 +33,7 @@ pip install -r requirements.txt
   (yaw/pitch/roll, terrain event, speed and task, bumps, shock count),
   barcode (letter read, what the car does with it, pending turn, the demo
   letters), obstacles (front distance, last action, last scan's distance,
-  size, centre and clearances; type the real box width to see the width
-  error, or "unknown" when an edge was not seen), link heartbeat (WiFi state, sent/dropped, re-joins, chip resets).
+  size, centre and clearances), link heartbeat (WiFi state, sent/dropped, re-joins, chip resets).
 * **Terrain profile:** bump height and pitch over the last 2 m driven.
 * **SHOCK pill:** red in the header for 5 s after each impact, with its
   strength in mg.

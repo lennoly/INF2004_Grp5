@@ -68,6 +68,8 @@ float32_t       terrain_impact_jerk(float32_t delta_fwd_mg,
                                     float32_t delta_side_mg,
                                     float32_t delta_up_mg,
                                     float32_t travel_sign);
+uint32_t        terrain_lift_run(uint32_t run, float32_t pitch_deg,
+                                 float32_t roll_deg, float32_t az_mg);
 uint32_t        terrain_impact_blank(uint32_t  blank_ms,
                                      float32_t duty_change_pct);
 

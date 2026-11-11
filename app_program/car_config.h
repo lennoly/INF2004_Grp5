@@ -210,6 +210,15 @@
 /* Encoders and compass must both turn: straight pushes read up to 12 deg/s
    on the encoders and 9 on the compass, a hand turn 12-39 and 26-81.     */
 #define TURN_RATE_EVENT_DPS         (10.0f)
+/* Lifted or overturned (ends a run, 11 Nov requirement): pitch or roll past
+   LIFT_TILT_DEG, or the vertical acceleration LIFT_AZ_MG away from 1 g (a
+   lift straight up; upside down reads -1 g), for LIFT_CONFIRM_STEPS vehicle
+   steps (20 ms each) in a row.  Driving reached 20 deg on humps and 26.5
+   deg once (telemetry logs to 10 Nov).  [CALIBRATE] not yet tried on the
+   car: the stop prints the pitch, roll and az that caused it. */
+#define LIFT_TILT_DEG               (30.0f)
+#define LIFT_AZ_MG                  (300.0f)
+#define LIFT_CONFIRM_STEPS          (3u)
 #define ACCEL_EVENT_MM_S2           (250.0f)
 
 /* ------------------------------------------------------------------------ */
@@ -244,9 +253,10 @@
    up): the profile treats echoes this far or further as no echo.  The
    front sensor still watches the pass for real objects. */
 #define OBST_FLOOR_MM               (280)     /* [CALIBRATE]               */
-/* 1: an IMU impact also starts the obstacle routine.  0 while tuning line   */
-/* following: impacts are still counted and reported, but do not stop.     */
-#define OBST_ON_IMPACT              (1)
+/* 1: an IMU impact also starts the obstacle routine.  0 (11 Nov): IMU    */
+/* collision detection is dropped from the requirements; impacts are     */
+/* still counted in the telemetry but never change what the car does.    */
+#define OBST_ON_IMPACT              (0)
 #define OBST_CONFIRM_READINGS       (2u)      /* close front pings in a row */
 /* 4 Nov: 2 stopped the car on short dropouts while pivoting (194058,    */
 /* 194455); 4 pings at ~70 ms: a dead sensor still stops in ~0.3 s.      */
@@ -279,6 +289,13 @@
    35 deg out, on the second-last point, so a 10 cm box centred read cl=0
    (140935).  Ceiling: one dropout on the end point now counts as free. */
 #define OBST_EDGE_POINTS            (1u)
+/* Side vote: echoes of the box right of straight ahead minus those left of
+   it.  This many or more: the box is on that side, pass on the other,
+   whatever the edges say (a 10-20 cm box at 200 mm echoes out to the
+   sweep's ends, so "edge seen" is often one stray point; the six 4 Nov
+   bypass scans vote -4..+3 with the right sign each time).  Fewer: the
+   edge rules below decide.  A large value turns the vote off. */
+#define OBST_LEAN_POINTS            (2)
 /* Sonar cone: each seen edge is pulled in by closest x tan(beam).  0: a
    flat face only echoes near square-on, so the seen box can sit 60-80 mm
    from the real one (25 Oct); 8 deg cut a pass to 53 mm.  Keep the edges

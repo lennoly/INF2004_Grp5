@@ -93,7 +93,7 @@ is logged to `logs/<date_time>/`. More: [`tools/dashboard/README.md`](tools/dash
 ## Tests and coding standard (BARR-C:2018)
 
 ```bash
-make -C tests/host                        # 325 unit and simulation tests
+make -C tests/host                        # 326 unit and simulation tests
 sh tools/barr_format.sh --check           # layout
 python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
 ```

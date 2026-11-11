@@ -34,6 +34,8 @@ typedef struct
     float32_t centre_mm;      /* lateral centre                        */
     int32_t   clear_left_mm;  /* free gap beyond the left edge         */
     int32_t   clear_right_mm; /* free gap beyond the right edge        */
+    int32_t   lean;           /* echoes right of ahead minus left; not */
+                              /* in the packed copy (reads 0 there)    */
 } avoidance_profile_t;
 
 typedef enum

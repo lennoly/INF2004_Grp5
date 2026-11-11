@@ -62,7 +62,7 @@ avoidance_profile (avoidance_point_t const * p_points, uint32_t count,
                    avoidance_profile_t * p_out)
 {
     avoidance_profile_t const empty = {false, 0, 0,    0.0f, 0.0f,
-                                       0.0f,  0.0f, 0, 0};
+                                       0.0f,  0.0f, 0, 0,    0};
     uint32_t                  best  = 0u;
     uint32_t                  low   = 0u;
     uint32_t                  high  = 0u;
@@ -397,6 +397,20 @@ measure_extent (avoidance_point_t const * p_points, uint32_t low, uint32_t high,
             p_out->right_edge_mm = (lateral > p_out->right_edge_mm)
                                        ? lateral
                                        : p_out->right_edge_mm;
+
+            /* Side vote (OBST_LEAN_POINTS): lower angles are to the right. */
+            if (p_points[idx].angle_deg < SERVO_CENTRE_DEG)
+            {
+                p_out->lean++;
+            }
+            else if (p_points[idx].angle_deg > SERVO_CENTRE_DEG)
+            {
+                p_out->lean--;
+            }
+            else
+            {
+                /* Straight ahead: neither side. */
+            }
         }
     }
 
@@ -493,6 +507,8 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     bool             b_near     = false;
     bool             b_unsure   = false;
     bool             b_prefer_l = false;
+    bool             b_blind_l  = false;
+    bool             b_blind_r  = false;
 
     /* Casts: clearances are at most OBST_MAX_CLEARANCE_MM and the closest
        echo at most US_MAX_MM, so they convert exactly to float32_t. */
@@ -514,8 +530,24 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     b_prefer_l = b_near     ? (0 != OBST_BLIND_LEFT)
                  : b_unsure ? (p_prof->centre_mm > 0.0f)
                             : (off_left <= off_right);
-    off_left   = b_unsure ? OBST_BLIND_OFFSET_MM : off_left;
-    off_right  = b_unsure ? OBST_BLIND_OFFSET_MM : off_right;
+
+    /* Side vote: most of the echoes on one side put the box there, so pass
+       on the other.  An edge not seen there (clearance 0) is where the
+       sweep ended, not an object: that side stays open, passed wide. */
+    if ((p_prof->lean >= OBST_LEAN_POINTS)
+        || (p_prof->lean <= -OBST_LEAN_POINTS))
+    {
+        b_prefer_l = (p_prof->lean > 0);
+        b_left_ok  = b_left_ok || (b_prefer_l && (0 == p_prof->clear_left_mm));
+        b_right_ok = b_right_ok
+                     || ((!b_prefer_l) && (0 == p_prof->clear_right_mm));
+        b_left_ok  = b_left_ok && (b_prefer_l || (!b_right_ok));
+    }
+
+    b_blind_l  = b_unsure || (0 == p_prof->clear_left_mm);
+    b_blind_r  = b_unsure || (0 == p_prof->clear_right_mm);
+    off_left   = b_blind_l ? OBST_BLIND_OFFSET_MM : off_left;
+    off_right  = b_blind_r ? OBST_BLIND_OFFSET_MM : off_right;
     off_left   = (off_left > OBST_MIN_OFFSET_MM) ? off_left
                                                  : OBST_MIN_OFFSET_MM;
     off_right  = (off_right > OBST_MIN_OFFSET_MM) ? off_right
@@ -526,14 +558,18 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
         plan.action    = AVOID_TURN_LEFT;
         plan.offset_mm = off_left;
         plan.pass_mm   = pass;
-        plan.edge_mm   = -p_prof->left_edge_mm; /* seen on this side */
+        plan.edge_mm   = (0 == p_prof->clear_left_mm)
+                             ? BLIND_EDGE_MM
+                             : -p_prof->left_edge_mm; /* seen on this side */
     }
     else if (b_right_ok)
     {
         plan.action    = AVOID_TURN_RIGHT;
         plan.offset_mm = off_right;
         plan.pass_mm   = pass;
-        plan.edge_mm   = p_prof->right_edge_mm; /* seen on this side */
+        plan.edge_mm   = (0 == p_prof->clear_right_mm)
+                             ? BLIND_EDGE_MM
+                             : p_prof->right_edge_mm; /* seen on this side */
     }
     else if ((0 == p_prof->clear_left_mm) && (0 == p_prof->clear_right_mm))
     {

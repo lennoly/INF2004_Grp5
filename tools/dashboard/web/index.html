@@ -148,9 +148,6 @@ canvas { width: 100%; height: 115px; display: block; }
       <div class="tune"><label>Cruise</label>
         <input id="speed0" placeholder="mm/s"><span></span><span></span>
         <button data-tune="speed">Set</button></div>
-      <div class="tune"><label>Scan</label>
-        <input id="detect0" placeholder="stop at mm"><span></span><span></span>
-        <button data-tune="detect">Set</button></div>
     </section>
     <section>
       <h2>Command</h2>
@@ -228,9 +225,7 @@ canvas { width: 100%; height: 115px; display: block; }
         <dt>Last scan: distance</dt><dd id="v-odist">–</dd>
         <dt>Size (width)</dt><dd id="v-owidth" class="big">–</dd>
         <dt>Centre offset</dt><dd id="v-ocentre">–</dd>
-        <dt>Clear left / right</dt><dd id="v-oclear">–</dd>
-        <dt>Real width (mm)</dt><dd><input id="real-w" placeholder="e.g. 80" inputmode="numeric"></dd>
-        <dt>Width error</dt><dd id="v-oerr">–</dd></dl></section>
+        <dt>Clear left / right</dt><dd id="v-oclear">–</dd></dl></section>
       <section><h2>Link (heartbeat)</h2><dl class="kv">
         <dt>MQTT</dt><dd id="v-hlink">–</dd>
         <dt>WiFi</dt><dd id="v-wifi">–</dd>
@@ -272,7 +267,7 @@ document.querySelectorAll("[data-cmd]").forEach(b =>
   b.addEventListener("click", () => send(b.dataset.cmd)));
 document.querySelectorAll("[data-tune]").forEach(b =>
   b.addEventListener("click", () => {
-    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1, detect: 1 }[k];
+    const k = b.dataset.tune, n = { pid: 3, ff: 2, line: 3, speed: 1 }[k];
     const vals = [];
     for (let i = 0; i < n; i++) vals.push($(k + i).value.trim() || "0");
     send(k + "=" + vals.join(","));
@@ -393,14 +388,6 @@ function update(m) {
     setText("v-ocentre", ob.found ? fmt(ob.centre, 0, " mm") + (ob.centre > 0 ? " right" : ob.centre < 0 ? " left" : "") : "–");
     setText("v-oclear", ob.found ? seen(ob.cl) + " / " + seen(ob.cr) : "–");
   }
-  const real = parseFloat($("real-w").value);
-  let err = "–";
-  if (ob && ob.found && real > 0) {
-    err = ob.width_known
-      ? fmt(ob.width - real, 0, " mm") + "  (" + fmt((ob.width - real) * 100 / real, 0, " %") + ")"
-      : "unknown: an edge was not seen";
-  }
-  setText("v-oerr", err);
   setText("v-hlink", hb.link || "–"); setText("v-wifi", hb.wifi || "–");
   setText("v-ip", hb.ip || "–");
   setText("v-pub", hb.pub === undefined ? "–" : hb.pub + " / " + hb.drop);
