@@ -31,5 +31,5 @@ Write these down while you test (phone notes are fine); I fill in the rows.
 
 ## Left
 
-- Upload the 9 silent videos (`Downloads\muted\`) as unlisted YouTube; links go in `videos/README.md` and the result rows.
+- Flash the latest build and check on the car: `bypass=` from the dashboard, one full lap with the USB console logged (no `lifted` stop at junctions or humps, no `fault: sonar no echo`).
 - Optional: S5-U12 with a sonar wire pulled while driving (only shown for a wire already out at START).

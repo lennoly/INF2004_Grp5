@@ -31,4 +31,12 @@ Newest at the bottom. Never delete a row.
 
 | Date | Subsystem | Test ID / demo | Commit | Student ID | Link | Notes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-11-09 | System | SYS-01 full lap | f73ab1d | 2500343 | https://youtube.com/shorts/8sh7tQbx5eY | line following, no obstacles |
+| 2026-11-09 | System | SYS-04 box left of the line | f73ab1d | 2500343 | https://youtube.com/shorts/l5bpn10cjaI | passed on the right, line rejoined |
+| 2026-11-09 | System | SYS-04 box centred on the line | f73ab1d | 2500343 | https://youtube.com/shorts/Y-Oc0GmpVPY | passed on the left, line rejoined |
+| 2026-11-09 | System | SYS-04 box right of the line | f73ab1d | 2500343 | https://youtube.com/shorts/N_EDJyTXCak | passed on the left, line rejoined |
+| 2026-11-10 | System | SYS-02 LEFT turn | f73ab1d | 2500343 | https://youtube.com/shorts/DCXBFoi3twk | barcode A mapped to LEFT |
+| 2026-11-10 | System | SYS-02 RIGHT turn | f73ab1d | 2500343 | https://youtube.com/shorts/xc2hqJAoMPM | barcode A mapped to RIGHT |
+| 2026-11-10 | System | SYS-02 STRAIGHT | f73ab1d | 2500343 | https://youtube.com/shorts/UIX6vHWPrgY | barcode A mapped to STRAIGHT |
+| 2026-11-10 | System | SYS-02 U-TURN | f73ab1d | 2500343 | https://youtube.com/shorts/ACjdW0TdYBc | U-turn plus the dashboard stats |
+| 2026-11-10 | System | SYS-03 hump | f73ab1d | 2500343 | https://youtube.com/shorts/E7yLJYYMkGQ | 10 mm hump, dashboard shows 12.2 mm |

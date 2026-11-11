@@ -28,7 +28,7 @@ telemetry runs last, so sending data never delays driving.
 |---|---|---|---|
 | 2 – motors, encoders | motion | `motion_get_status()` | wheel speed, target, PWM, encoders, odometer, heading |
 | 3 – line, barcode | IR sampler ISR, barcode task | `ir_sensor_read()`, `barcode_get_stats()` | IR levels, line error, last barcode, count |
-| 4 – IMU, terrain | imu | `imu_get_status()`, `imu_take_peak_jerk()` | pitch, roll, yaw, turn rate, motion event, humps, impacts, shock mg |
+| 4 – IMU, terrain | imu | `imu_get_status()` | pitch, roll, yaw, turn rate, motion event, humps |
 | 5 – sonar, obstacles | obstacle | `obstacle_get_last()`, front reading | front distance, last scan (distance, width, centre, clearances, action) |
 | 5 – vehicle | vehicle | `vehicle_get_status()` | state, reason, pending turn, obstacles passed |
 | all | any owner | `fault_mask()` | fault bits (one writer per bit) |
@@ -51,12 +51,12 @@ one word, written with a single store.
 | Frame | When | Built from |
 |---|---|---|
 | Telemetry | every 200 ms (5 Hz) over WiFi, 1 s over USB | all snapshots above |
-| Event | checked every 100 ms, sent only on a change | state change, barcode, hump, impact (with mg), obstacle scan |
+| Event | checked every 100 ms, sent only on a change | state change, barcode, hump, obstacle scan |
 | Heartbeat | every 1 s | uptime, link counters, IMU health, fault counts |
 | Reply / gains | after each command | command result, gains in use |
 
 Events are found by comparing counters with the last ones sent, e.g.
-`state_seq`, `decoded`, `humps`, `impacts`, scan count. A change that comes
+`state_seq`, `decoded`, `humps`, scan count. A change that comes
 and goes between two checks is still reported once.
 
 **Links:**
