@@ -90,6 +90,11 @@ static volatile bool      gb_reset_run        = false;
 static imu_status_t   g_work;
 static terrain_hump_t g_hump;
 static float32_t      g_bias[IMU_AXES] = {0.0f, 0.0f, 0.0f};
+/* +1 if the chip's Z axis points up, -1 if down (set by calibrate_accel()
+   from the resting reading).  Before 15 Nov a Z axis pointing down (-1 g at
+   rest) was taken as a 2 g bias, so tilting raised az and the angles read
+   low (about 29 deg at 45). */
+static float32_t      g_z_sign         = 1.0f;
 static uint32_t       g_seq            = 0u; /* good samples (freshness) */
 static uint32_t       g_fail_run       = 0u; /* failed reads in a row    */
 
@@ -398,7 +403,8 @@ read_sensors (float32_t * p_acc, float32_t * p_mag)
 
 /*!
  * @brief Average IMU_CALIB_SAMPLES readings with the car standing still on
- *        a flat floor (expected: 0, 0 and 1 g).
+ *        a flat floor (expected: 0, 0 and +1 g, or -1 g with the chip's Z
+ *        axis pointing down: g_z_sign).
  */
 static void
 calibrate_accel (void)
@@ -434,7 +440,10 @@ calibrate_accel (void)
             g_bias[axis] = sum[axis] / samples;
         }
 
-        g_bias[AXIS_Z] -= ONE_G_MG;
+        /* Level and still, Z reads +1 g or -1 g: its sign gives the
+           mounting, and the bias is the rest after that. */
+        g_z_sign       = (g_bias[AXIS_Z] < 0.0f) ? -1.0f : 1.0f;
+        g_bias[AXIS_Z] = (g_z_sign * g_bias[AXIS_Z]) - ONE_G_MG;
     }
 }
 
@@ -549,7 +558,8 @@ update_tilt (float32_t const * p_acc, float32_t speed,
                     * ((IMU_FORWARD_SIGN * (p_acc[AXIS_Y] - g_bias[AXIS_Y]))
                        - g_work.ay_mg);
     g_work.az_mg +=
-        ACCEL_LPF * ((p_acc[AXIS_Z] - g_bias[AXIS_Z]) - g_work.az_mg);
+        ACCEL_LPF
+        * (((g_z_sign * p_acc[AXIS_Z]) - g_bias[AXIS_Z]) - g_work.az_mg);
 
     g_work.accel_mm_s2 +=
         DV_LPF * (((speed - p_hist->speed) / DT_S) - g_work.accel_mm_s2);

@@ -71,6 +71,7 @@ static char const * find_keyword(char const * p_text, uint32_t * p_index);
 static char const * parse_values(char const * p_text, float32_t * p_args,
                                  uint32_t * p_count);
 static bool         validate(command_t const * p_cmd);
+static bool zero_or_within(float32_t value, float32_t low, float32_t high);
 
 /*!
  * @brief Parse one command line.
@@ -695,18 +696,14 @@ validate (command_t const * p_cmd)
         break;
 
         case COMMAND_BYPASS:
-            /* Casts: the limits are small integers, exact in float32_t;
-               only < and > on floats (Rule 5.4.b.iv).  0: automatic. */
-            b_ok = (((p_cmd->arg[0] > -0.5f) && (p_cmd->arg[0] < 0.5f))
-                    || ((p_cmd->arg[0]
-                         >= (float32_t) COMMAND_BYPASS_SIDE_MIN_MM)
-                        && (p_cmd->arg[0]
-                            <= (float32_t) COMMAND_BYPASS_SIDE_MAX_MM)))
-                   && (((p_cmd->arg[1] > -0.5f) && (p_cmd->arg[1] < 0.5f))
-                       || ((p_cmd->arg[1]
-                            >= (float32_t) COMMAND_BYPASS_STRAIGHT_MIN_MM)
-                           && (p_cmd->arg[1]
-                               <= (float32_t) COMMAND_BYPASS_STRAIGHT_MAX_MM)));
+            /* Casts: the limits are small integers, exact in float32_t. */
+            b_ok = (zero_or_within(p_cmd->arg[0],
+                                   (float32_t) COMMAND_BYPASS_SIDE_MIN_MM,
+                                   (float32_t) COMMAND_BYPASS_SIDE_MAX_MM))
+                   && (zero_or_within(
+                       p_cmd->arg[1],
+                       (float32_t) COMMAND_BYPASS_STRAIGHT_MIN_MM,
+                       (float32_t) COMMAND_BYPASS_STRAIGHT_MAX_MM));
             gp_error = b_ok ? gp_error
                             : "bypass: sideways 0 or 100..400, straight 0 or "
                               "50..800 mm";
@@ -718,6 +715,23 @@ validate (command_t const * p_cmd)
     }
 
     return (b_ok);
+}
+
+/*!
+ * @brief Whether a value is 0 (automatic) or inside a range; only < and >
+ *        on floats, never equality (Rule 5.4.b.iv).
+ *
+ * @param[in] value Value.
+ * @param[in] low   Smallest value allowed besides 0.
+ * @param[in] high  Largest value allowed.
+ *
+ * @return true if the value rounds to 0 or lies in low..high.
+ */
+static bool
+zero_or_within (float32_t value, float32_t low, float32_t high)
+{
+    return (((value > -0.5f) && (value < 0.5f))
+            || ((value >= low) && (value <= high)));
 }
 
 /*** end of file ***/

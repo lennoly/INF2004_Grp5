@@ -122,7 +122,7 @@ CPU cost measured on the car with the `timing` command over a full 72 s lap (INT
 | IR left | VCC / GND / **A0** | 3V3 / GND / **GP26 (ADC0)** | use analog output, D0 unused |
 | IR right | VCC / GND / **A0** | 3V3 / GND / **GP27 (ADC1)** | |
 | IR barcode | VCC / GND / **A0** | 3V3 / GND / **GP28 (ADC2)** | |
-| LSM303D IMU | VIN / GND / SDA / SCL | 3V3 / GND / **GP4 / GP5** | I2C0 at 400 kHz; chip X axis forward, Z up |
+| LSM303D IMU | VIN / GND / SDA / SCL | 3V3 / GND / **GP4 / GP5** | I2C0 at 400 kHz; chip X axis forward, Z down on this car (the start-up calibration detects either way) |
 | HC-SR04 | VCC / GND / TRIG / ECHO | 3V3 / GND / **GP6 / GP7** | per course slide; a 5 V module needs a divider on ECHO |
 | Servo | signal / V+ / GND | **Servo port GP12** | 90° = straight ahead |
 | Buttons | — | GP20 START, GP21 STOP | on-board |
@@ -316,17 +316,15 @@ The two line sensors sit close together, so a small offset already gives a large
 
 **Barcode** (`barcode_decode.c`). The course barcode is **Code 39**. We decoded the provided specification photo by hand as `*A*` (start, A, stop) and used the photo's bar widths as a test vector. Bars and spaces are timed by the 1 kHz sampler, using hysteresis on the normalised reading (black above 0.08, white below 0.05; the sensor sits high, so the contrast is small). A frame ends after 500 ms of white.
 
-Decoding classifies the **3 widest of each 9 elements as wide**. Code 39 guarantees exactly three wide elements per character, so this works regardless of speed and only assumes the speed is steady over one ≈40 mm character. A frame that fails forwards is reversed and decoded again, because the car may read the code from either end. Frames must start and end with `*`, which rejects line crossings and noise.
+Decoding classifies the wide elements per character: Code 39 has exactly three, two of the five bars and one of the four spaces, so the **2 widest bars and the widest space are wide**. Bars and spaces are split separately because the sensor reads bars thinner and spaces wider than printed. This works regardless of speed and only assumes the speed is steady over one ≈40 mm character. A frame that fails forwards is reversed and decoded again, so the code reads the same whichever way the car crosses it (the brief: both directions, every letter A–Z). A frame must contain a `*` next to the data character, which rejects line crossings and noise; a frame missing its first bars is still read from its last character and `*`.
 
-**Navigation command interface.** Decoded characters map A→LEFT, B→RIGHT, C→STRAIGHT and D→U-TURN by default; the `map=` command changes the mapping at run time, so the course's own letters can be used without reflashing. Commands reach the vehicle task through a message buffer.
+**Navigation command interface.** The letter-to-movement mapping is not hard-coded (the brief): the firmware starts with no letters, and the instructor's four letters are sent from the dashboard over MQTT as `map=<1..4>,<letter>` before the run. A reset clears them. Decoded commands reach the vehicle task through a message buffer and are stored until the next cross-junction.
 
-The vehicle executes a command at the next junction:
+The vehicle executes the stored command at the next cross-junction, seen as a 12–30 mm black stripe under the barcode sensor (the course line is 18 mm; barcode bars are at most about 8 mm). It keeps following the line until then, however far that is (`NAV_PENDING_MAX_MM` 0; it was 400 mm until 15 Nov):
 
-1. Advance by the sensor-to-axle offset.
-2. Make an encoder turn.
-3. Sweep to re-centre on the line.
-
-A U-turn is executed immediately. If no junction appears within 400 mm, the command is executed anyway.
+1. LEFT / RIGHT: creep 60 mm, pivot 75° by the encoders, then sweep onto the new line.
+2. U-TURN: pivot 180°, then sweep onto the line.
+3. STRAIGHT: drive across the junction.
 
 **Verification.**
 
@@ -347,7 +345,7 @@ A U-turn is executed immediately. If no junction appears within 400 mm, the comm
 - Accelerometer: 100 Hz, ±2 g, block data update, 0.061 mg/LSB.
 - Magnetometer: 50 Hz, high resolution, ±4 gauss, continuous conversion.
 
-At start-up, 100 samples taken while the car is still give the accelerometer biases. The magnetometer's hard-iron offsets come from the min/max recorded during the 360° calibration spin.
+At start-up, 100 samples taken while the car is still give the accelerometer biases; the sign of the resting Z reading (+1 g or −1 g) tells which way the chip is mounted. Until 15 Nov a Z axis pointing down was taken as a 2 g bias, which made large tilts read low (about 29° at 45°). The magnetometer's hard-iron offsets come from the min/max recorded during the 360° calibration spin.
 
 **No gyroscope.** The LSM303D has no gyro, so:
 
@@ -557,9 +555,9 @@ All application code (`app_program/`, 52 files) and the host tests (`tests/host/
 | Manual review | comment quality, `volatile` on every variable shared with an ISR or another task, `const` parameters, `isfinite()` after floating-point calculations, header contents, single-owner kernel objects | 1.8, 2.2, 4.2, 5.4.b.v |
 | Project documents | abbreviations table `docs/ABBREVIATIONS.md`; file templates `docs/templates/module.c` and `module.h` | 1.5.b, 4.4.a |
 
-To reproduce, from the repository root: `sh tools/barr_format.sh --check` (clang-format plus `barr_layout.py`; reports any file whose layout would change), `python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]` (skips the template-owned files) and `make -C tests/host`. `sh tools/barr_format.sh` reformats in place.
+To reproduce, from the repository root: `sh tools/barr_format.sh --check` (clang-format plus `barr_layout.py`; reports any file whose layout would change), `python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch]` (the firmware; skips the template-owned files) and `make -C tests/host`. `sh tools/barr_format.sh` reformats in place.
 
-**Result.** `tools/barr_check.py` on the earlier code and on the delivered code:
+**Result.** `tools/barr_check.py` on the earlier code and on the delivered firmware (`app_program/`; the host test code in `tests/host/` is not held to the standard and still has findings):
 
 | Rule | Finding | Before | After |
 |---|---|---|---|
@@ -615,7 +613,7 @@ Pure algorithm modules contain no RTOS calls, which is why they can be unit-test
 
 - **Barcode at running height.** The barcode sensor sits high enough that narrow bars barely change its reading. Reads at 75 mm/s are reliable on the course (SYS-02 4 of 4), but faster runs and worn codes miss more frames.
 - **Obstacle width.** The sonar beam makes small boxes read 100–120 mm too wide (S5-U07). The bypass uses this as margin. Not to be fixed: it is the sensor's beam.
-- **Sonar dropouts.** `fault: sonar no echo` stopped the car now and then on bends and at starts. Cause (11 Nov console): with nothing in range the module keeps ECHO high past the next pings, and four of those in a row counted as a dead sensor. Such a pulse is now read as out of range for up to 1 s. The module still misses a trigger now and then (it runs from 3.3 V, below its 5 V rating); single misses do not stop the car.
+- **Sonar dropouts.** `fault: sonar no echo` stopped the car now and then on bends and at starts. Cause (11 Nov console): with nothing in range the module keeps ECHO high past the next pings, and four of those in a row counted as a dead sensor. Such a pulse is now read as out of range for up to 1 s; an obstacle that appears during that second is not seen. The module still misses a trigger now and then (it runs from 3.3 V, below its 5 V rating); single misses do not stop the car.
 - **Obstacle side.** The beam is wider than the boxes, so box edges are rarely seen inside the ±40° sweep; the side was right about 3 times in 4. Since 11 Nov the side is taken from which half of the sweep holds more echoes (`OBST_LEAN_POINTS`), but a 90 mm box moved 45 mm either way still reads the same (11 Nov, 10 scans), so every side pass now shifts at least 240 mm, enough to clear such a box on either side.
 - Encoders have no direction channel, so direction is inferred from the commanded sign. A wheel pushed backwards by an external force is counted as forward.
 - The scan covers ±40°. Free space beyond it is assumed (A10), and the obstacle's depth is not measured: the pass assumes at most `OBST_DEPTH_MAX_MM` (150 mm, the course's boxes). A deeper obstacle would be clipped when the car turns back to the line.

@@ -40,8 +40,9 @@ pip install -r requirements.txt
   that leg to the car. Only while IDLE or STOPPED, until the next restart.
 * **Distances** (front and last scan) show the sonar reading and, in
   brackets, the distance from the wheel axle (+70 mm, `OBST_SENSOR_AHEAD_MM`).
-* **Barcode turns** show whether they ran at the junction or after 400 mm
-  without one ("LEFT, no junction" in the events).
+* **Barcode turns** run at the cross-junction.  If `NAV_PENDING_MAX_MM` is set
+  above 0 (off since 15 Nov) a turn that ran after that distance without a
+  junction shows as "LEFT, no junction" in the events.
 * The page fits one screen (about 1366 x 650 or larger); a smaller window
   falls back to one long page.
 * **Events and car console:** newest at the top.

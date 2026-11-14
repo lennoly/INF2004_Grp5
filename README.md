@@ -96,5 +96,8 @@ is logged to `logs/<date_time>/`. More: [`tools/dashboard/README.md`](tools/dash
 ```bash
 make -C tests/host                        # 313 unit and simulation tests
 sh tools/barr_format.sh --check           # layout
-python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch] tests/host/*.[ch]   # expect TOTAL 0
+python3 tools/barr_check.py app_program/*.[ch] app_program/*/*.[ch]   # firmware: expect TOTAL 0
 ```
+
+The host test code (`tests/host/`) is not held to BARR-C: run on it, the
+checker still reports findings (about 230 on 15 Nov).

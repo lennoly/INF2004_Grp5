@@ -277,11 +277,10 @@ add_element (ir_sensor_element_t element)
     bool     b_bar = packed_ir_element_bar(element);
     uint32_t ticks = packed_ir_element_ticks(element);
 
-    if ((!b_bar) && (ticks >= BARCODE_QUIET_MS))
-    {
-        finish_frame(); /* long white: the previous frame is over */
-    }
-    else if (b_bar && (PACKED_WIDTH_OVER == ticks))
+    /* A white gap of BARCODE_QUIET_MS (500 ms) cannot arrive here: widths
+       saturate at PACKED_WIDTH_OVER (255 ms), so barcode_task()'s idle
+       timer ends the frame before such a space is reported. */
+    if (b_bar && (PACKED_WIDTH_OVER == ticks))
     {
         g_count = 0u; /* over-range bar: reset, never wrap into a short one */
     }

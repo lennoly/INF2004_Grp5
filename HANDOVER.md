@@ -62,8 +62,8 @@ GP6/7, servo GP12. Full table: [docs/WIRING.md](docs/WIRING.md).
 | Wheel PID | kp 0.104, ki 0.60, kd 0, feed-forward 0.12, offset 2.3 % |
 | Geometry | wheel 58.9 mm, track 132 mm, IR row 140 mm ahead of the axle |
 | Line follow | gain 18 (also for the first 150 mm after a start or turn), ki = kd = 0 |
-| Barcode | black above 0.08, white below 0.05 (normalised), frame ends after 500 ms of white |
-| Barcode map | A LEFT, B RIGHT, C STRAIGHT, D U-TURN by default; `map=<1..4>,<idx>` changes it live (A=10 … Z=35) |
+| Barcode | black above 0.08, white below 0.05 (normalised), frame ends after 500 ms of white; the stored command runs at the next cross-junction (a 12–30 mm black stripe under the barcode sensor), however far away: no distance limit (`NAV_PENDING_MAX_MM` 0, was 400 mm) |
+| Barcode map | none built in (the brief: not hard-coded, sent over MQTT); set with `map=<1..4>,<idx>` (A=10 … Z=35, dashboard Demo barcode letters) after every power-on |
 | Hump | starts at 6° pitch or 3° roll; height from pitch/roll × distance travelled |
 | Obstacle | stop at 2 readings under 200 mm; echoes at 280 mm or more are floor; scan 50°–130° in 5° steps |
 | Side choice | box echoes right of straight ahead minus those left of it: 2 or more either way and the car passes on the other side (`OBST_LEAN_POINTS`); closer than that, the seen edges decide, and a centred or blind box passes on the left |
@@ -111,13 +111,15 @@ removed, and the sonar ECHO fix over a full lap (section 7).
 - **Barcode:** with the sensor at its old height narrow bars barely register (reliable at 75 mm/s only). Kent's fix is to mount it close to the ground; a barcode sheet that is not flat can then scrape it. The black/white levels (0.08 / 0.05) were set for the high mount: check them with TEST_IR after lowering it.
 - **Obstacle width and side:** given up, not to be fixed (Kent, 11 Nov). The HC-SR04's beam (about ±15°) makes a 10–20 cm box at 200 mm echo across almost the whole ±40° sweep, so its width reads 100–120 mm too wide (S5-U07 FAIL) and its side cannot be told for a small box. The car copes by passing wide (at least 240 mm, about 320 mm of free floor beside the line); `bypass=` sets the legs by hand if a course needs something else.
 - **Sonar dropouts:** `fault: sonar no echo` at starts and on bends came from the module holding ECHO high when nothing is in range (11 Nov console: `ECHO stuck high`); that now reads as out of range. Not yet seen over a full lap. The module also misses single triggers (it runs from 3.3 V, below its 5 V rating); those do not stop the car.
-- **Lift detection:** the IMU's Z axis points down, so large tilts read low (28° shown at about 45° real) and the tilt stop comes from the acceleration limit. Small angles and hump heights are unaffected. A level lift is caught by the IR sensors, about 0.5 s after the wheels leave the floor.
+- **Lift detection:** the IMU's Z axis points down. Until 15 Nov the code took that as a 2 g bias, so large tilts read low (28° shown at about 45° real) and the tilt stop came from the acceleration limit. The calibration now detects the Z direction, so angles read true and the tilt stop acts at a real 30°. Not yet run on the car: re-run S4-U07 and a hump lap, since humps that read 20–26.5° before were about 23–37° real (raise `LIFT_TILT_DEG` if a hump stops the car). A level lift is caught by the IR sensors, about 0.5 s after the wheels leave the floor.
+- **Sonar blind for up to 1 s:** while the HC-SR04 holds ECHO high (nothing in range) its pings read "out of range" for up to 1 s (`ECHO_LONG_US`) before they count as a fault; an obstacle that appears in that time is not seen.
 - **Obstacle depth** is not measured: a box deeper than 150 mm would be clipped on the way back to the line.
 - Tuned values live in RAM only.
 
 ## 7. Left to do
 
 - Flash the latest build and check on the car: `bypass=` from the dashboard (e.g. 300 and 250, then 0 and 0), one full lap with the USB console logged (no `lifted` stop at junctions or humps, no `fault: sonar no echo`), and the dashboard against the new firmware (flash and dashboard must both be the new ones).
+- 15 Nov build (IMU Z-axis fix, no 400 mm barcode fallback): re-run S4-U07 (tilts and a level lift), one lap over the humps (no `lifted` stop, hump height still about right, SYS-03), and SYS-02 with a barcode far from its junction (the car must keep following until the junction).
 - Optional: turn the car over once (S4-U07).
 - Dropped, do not run: S5-U09, S3-U03 reruns.
 
@@ -125,7 +127,7 @@ removed, and the sonar ECHO fix over a full lap (section 7).
 
 1. Build `MISSION` (WiFi build if showing the dashboard), flash, power on with the car still.
 2. Hold START 2 s over the line: calibration spin.
-3. Set the barcode letters with `map=` if the course uses other letters. Set `bypass=` only if the automatic pass does not suit the course; it resets at power-on.
+3. Set the four barcode letters the instructor gives with `map=` (dashboard: Demo barcode letters, Set) while the car is IDLE or STOPPED. There are no default letters and a reset clears them: without this no barcode turns the car. Set `bypass=` only if the automatic pass does not suit the course; it resets at power-on.
 4. Short press START. Watch the dashboard: state, barcode, hump peak, obstacle events.
 5. Lift the car to end the run: the motors stop and the state shows `STOPPED (lifted / overturned)`.
 

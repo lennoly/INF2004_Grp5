@@ -7,7 +7,7 @@
  *                  an 8 cm box between those angles and let the car drive
  *                  on into it (25 Oct), so it was dropped.
  * Stage 2 fine   : the whole SERVO_MIN_DEG..SERVO_MAX_DEG range in
- *                  OBST_FINE_STEP_DEG steps (19 points, median of 3 each),
+ *                  OBST_FINE_STEP_DEG steps (17 points, median of 3 each),
  *                  left to right (SERVO_MAX_DEG first).  The mount only
  *                  turns 45 degrees each way, so the
  *                  brief's example angles (30 .. 150) cannot be reached.
@@ -641,6 +641,7 @@ static void
 monitor_update (ultrasonic_ping_t const * p_ping)
 {
     bool     b_valid = (ULTRASONIC_VALID == p_ping->result);
+    /* Cast: the detect distance is at most 279 mm, exact in int32_t. */
     bool     b_close = b_valid && (p_ping->dist_mm < (int32_t) g_detect_mm);
     bool     b_fault = (ULTRASONIC_FAULT == p_ping->result);
     uint32_t counts  = g_counts;
@@ -653,7 +654,7 @@ monitor_update (ultrasonic_ping_t const * p_ping)
            first and stored with one byte write. */
         n_close  = b_close ? count_up(n_close, OBST_CONFIRM_READINGS) : 0u;
         n_fault  = b_fault ? count_up(n_fault, OBST_FAULT_LIMIT) : 0u;
-        /* Cast: both counts are at most 3 (checked above). */
+        /* Cast: both counts are at most 7 (checked above). */
         g_counts = (uint8_t) (n_close | (n_fault << COUNT_BITS));
         g_front = packed_front_make(
             p_ping->result, b_valid ? p_ping->dist_mm : ULTRASONIC_NO_ECHO,

@@ -107,7 +107,7 @@ the imu task.
 | `reason` | 27 texts | 5 | index into the reason table (`packed.c`); unknown text = "other" |
 | `state_seq` | wraps | 8 | readers only test for a change |
 | `barcodes`, `obstacles` | 0 … 255 (saturating) | 8 each | count |
-| `cruise` | 60 … 300 mm/s | 9 | 1 mm/s |
+| `cruise` | 50 … 300 mm/s | 9 | 1 mm/s |
 | `line_error` | −1 … +1 | 11 | signed permille |
 | `front` | 0 … 4094 mm, 4095 = no echo | 12 | mm |
 | `run_ms` | 0 … 4.6 h (saturating) | 24 | ms |

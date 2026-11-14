@@ -225,7 +225,7 @@ avoidance_width_estimate (avoidance_profile_t const * p_prof)
                     - (2.0f * (float32_t) p_prof->closest_mm
                        * (car_math_sin(beam) / car_math_cos(beam)));
 
-    return ((p_prof->b_found && (est > 0.0f)) ? est : 0.0f);
+    return (((p_prof->b_found) && (est > 0.0f)) ? est : 0.0f);
 }
 
 /*!

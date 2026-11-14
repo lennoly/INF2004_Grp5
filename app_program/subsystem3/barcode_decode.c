@@ -19,7 +19,7 @@
 #define NARROW_LAST       (2u) /* sorted index: widest narrow  */
 #define WIDE_FIRST        (3u) /* sorted index: narrowest wide */
 #define TAIL_ELEMENTS     ((2u * ELEMENTS_PER_SLOT) - 1u) /* data+gap+stop */
-#define PAIR_ELEMENTS     (2u) /* a bar and a space: bars stay on even indexes */
+#define PAIR_ELEMENTS     (2u) /* bar + space: bars stay on even indexes */
 #define START_STOP        ('*')
 #define DECODE_OK         (0)
 #define TERMINATOR        ('\0')
@@ -49,9 +49,10 @@ static char const * const g_nav_names[] = {"NONE", "LEFT", "RIGHT", "STRAIGHT",
                                            "UTURN"};
 
 /* Letter per command, indexed by barcode_decode_nav_t (NAV_NONE unused).
-   '\0' = not set: no default, only the map= command sets one (written by
-   the telemetry task, read by the barcode task: one-byte stores, atomic
-   on this CPU).  A decoded letter is never '\0'. */
+   NUL = not set: no default (the brief: the mapping is not hard-coded),
+   only the map= command, sent over MQTT, sets one (written by the
+   telemetry task, read by the barcode task: one-byte stores, atomic on
+   this CPU).  A decoded letter is never NUL. */
 static volatile char g_symbols[] = {'\0', '\0', '\0', '\0', '\0'};
 
 #define SYMBOL_SLOTS (sizeof(g_symbols) / sizeof(g_symbols[0]))

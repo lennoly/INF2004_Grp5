@@ -83,6 +83,7 @@ static void           handle_commands(void);
 static void           reply(command_t const * p_cmd, frames_error_t error,
                             char const * p_text);
 static frames_error_t execute(command_t const * p_cmd);
+static void           execute_setting(command_t const * p_cmd);
 static char const *   error_text(frames_error_t error);
 static bool           stationary(void);
 static void           emit_timing(void);
@@ -359,32 +360,11 @@ execute (command_t const * p_cmd)
         break;
 
         case COMMAND_DETECT:
-            /* Cast: command_check() only accepts 100..279 mm. */
-            obstacle_set_detect_mm((uint32_t) car_math_round(p_cmd->arg[0]));
-            (void) tm_printf((UB const *) "# detect=%d mm\n",
-                             (INT) car_math_round(p_cmd->arg[0]));
-        break;
-
+            /* Same handling as COMMAND_MAP. */
         case COMMAND_BYPASS:
-            /* Casts: command_check() only accepts 0 or 50..800 mm. */
-            vehicle_set_bypass((uint32_t) car_math_round(p_cmd->arg[0]),
-                               (uint32_t) car_math_round(p_cmd->arg[1]));
-            (void) tm_printf((UB const *) "# bypass sideways=%d straight=%d mm "
-                                          "(0 = automatic)\n",
-                             (INT) car_math_round(p_cmd->arg[0]),
-                             (INT) car_math_round(p_cmd->arg[1]));
-        break;
-
+            /* Same handling as COMMAND_MAP. */
         case COMMAND_MAP:
-            /* Casts: command_check() only accepts 1..4 and 0..42. */
-            barcode_decode_set_symbol(
-                (barcode_decode_nav_t) car_math_round(p_cmd->arg[0]),
-                packed_symbol_char((uint32_t) car_math_round(p_cmd->arg[1])));
-            (void) tm_printf((UB const *) "# map L=%c R=%c S=%c U=%c\n",
-                             (INT) barcode_decode_symbol(NAV_LEFT),
-                             (INT) barcode_decode_symbol(NAV_RIGHT),
-                             (INT) barcode_decode_symbol(NAV_STRAIGHT),
-                             (INT) barcode_decode_symbol(NAV_UTURN));
+            execute_setting(p_cmd);
         break;
 
         default:
@@ -394,6 +374,49 @@ execute (command_t const * p_cmd)
 
     return ((!b_allowed) ? FRAMES_ERR_DRIVING
                          : (b_ok ? FRAMES_OK : FRAMES_ERR_UNAVAILABLE));
+}
+
+/*!
+ * @brief Carry out a valid setting command (detect=, bypass= or map=) and
+ *        echo the new value on the console.
+ *
+ * @param[in] p_cmd COMMAND_DETECT, COMMAND_BYPASS or COMMAND_MAP.
+ */
+static void
+execute_setting (command_t const * p_cmd)
+{
+    /* Casts in the messages: tm_printf() takes the kernel's UB string type
+       (ASCII literals); the values are small and fit INT. */
+    if (COMMAND_DETECT == p_cmd->kind)
+    {
+        /* Cast: command_check() only accepts 100..279 mm. */
+        obstacle_set_detect_mm((uint32_t) car_math_round(p_cmd->arg[0]));
+        (void) tm_printf((UB const *) "# detect=%d mm\n",
+                         (INT) car_math_round(p_cmd->arg[0]));
+    }
+    else if (COMMAND_BYPASS == p_cmd->kind)
+    {
+        /* Casts: command_check() only accepts 0, 100..400 and 50..800 mm. */
+        vehicle_set_bypass((uint32_t) car_math_round(p_cmd->arg[0]),
+                           (uint32_t) car_math_round(p_cmd->arg[1]));
+        (void) tm_printf((UB const *) "# bypass sideways=%d straight=%d mm "
+                                      "(0 = automatic)\n",
+                         (INT) car_math_round(p_cmd->arg[0]),
+                         (INT) car_math_round(p_cmd->arg[1]));
+    }
+    else
+    {
+        /* COMMAND_MAP.  Casts: command_check() only accepts 1..4 and
+           0..42. */
+        barcode_decode_set_symbol(
+            (barcode_decode_nav_t) car_math_round(p_cmd->arg[0]),
+            packed_symbol_char((uint32_t) car_math_round(p_cmd->arg[1])));
+        (void) tm_printf((UB const *) "# map L=%c R=%c S=%c U=%c\n",
+                         (INT) barcode_decode_symbol(NAV_LEFT),
+                         (INT) barcode_decode_symbol(NAV_RIGHT),
+                         (INT) barcode_decode_symbol(NAV_STRAIGHT),
+                         (INT) barcode_decode_symbol(NAV_UTURN));
+    }
 }
 
 /*!
@@ -673,9 +696,8 @@ emit_help (void)
                      "#   bypass=<side>,<fwd> obstacle pass: sideways shift "
                      "(100..400) and straight leg (50..800) in mm, 0 = "
                      "automatic, until restart\n"
-                     "#   speed=, pid=, ff=, line=, map=, detect=, bypass= only while "
-                     "IDLE "
-                     "or STOPPED\n"
+                     "#   speed=, pid=, ff=, line=, map=, detect=, bypass= "
+                     "only while IDLE or STOPPED\n"
                      "#   timing: task times, control jitter and CPU load "
                      "since the last timing\n"
                      "# MQTT takes the same commands as binary frames "

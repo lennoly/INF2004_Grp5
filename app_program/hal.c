@@ -78,6 +78,10 @@ static volatile uint32_t g_alarm_target = 0u;
 
 /* Watchdog reload value; written and used only by the vehicle task. */
 static uint32_t g_watchdog_load = 0u;
+
+/* Why this boot happened, read once by hal_tick_start() before anything
+   stops the watchdog (which clears the marker); read-only after that. */
+static bool gb_watchdog_reset = false;
 #if defined(TM_WIFI_JOIN) && TM_WIFI_JOIN
 static uint8_t const g_ssid[]     = UTK_WIFI_SSID;
 static uint8_t const g_password[] = UTK_WIFI_PASSWORD;
@@ -763,6 +767,11 @@ hal_memory_barrier (void)
 void
 hal_tick_start (void)
 {
+    /* First call at boot: note a watchdog timeout before
+       hal_watchdog_stop() clears the marker (hal_watchdog_caused_reset()). */
+    gb_watchdog_reset =
+        (0u != (watchdog_hw->reason & WATCHDOG_REASON_TIMER_BITS))
+        && (WATCHDOG_MAGIC == watchdog_hw->scratch[WATCHDOG_SCRATCH]);
     watchdog_hw->tick = WATCHDOG_TICK_ENABLE_BITS | XOSC_MHZ;
 }
 
@@ -805,12 +814,15 @@ hal_watchdog_start (uint32_t timeout_ms)
 }
 
 /*!
- * @brief Stop the watchdog (hal_watchdog_start() arms it again).
+ * @brief Stop the watchdog (hal_watchdog_start() arms it again).  The
+ *        marker is cleared too, so a later forced reboot (e.g. a reflash)
+ *        is not reported as a watchdog reset.
  */
 void
 hal_watchdog_stop (void)
 {
     hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    watchdog_hw->scratch[WATCHDOG_SCRATCH] = 0u;
 }
 
 /*!
@@ -828,16 +840,16 @@ hal_watchdog_feed (void)
 
 /*!
  * @brief Whether the last reset was a timeout of hal_watchdog_start()'s
- *        watchdog (the SDK's watchdog_enable_caused_reboot() test; a
- *        power-on clears the scratch marker).
+ *        watchdog: the timer reason bit, and the marker it writes (cleared
+ *        by a power-on and by hal_watchdog_stop()), as read at boot by
+ *        hal_tick_start().
  *
  * @return true after a watchdog reset.
  */
 bool
 hal_watchdog_caused_reset (void)
 {
-    return ((0u != watchdog_hw->reason)
-            && (WATCHDOG_MAGIC == watchdog_hw->scratch[WATCHDOG_SCRATCH]));
+    return (gb_watchdog_reset);
 }
 
 /*!

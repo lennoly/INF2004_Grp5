@@ -75,7 +75,7 @@
 #define REACQ_BASE_MS      (360u)
 #define REACQ_BASE_SPEED   (50.0f) /* the speed REACQ_BASE_MS is for */
 #define REJOIN_EXTRA_MM    (0.0f)  /* return leg past the original path   */
-#define PASS_EXTRA_MM      (50.0f) /* [CALIBRATE] straight leg, on top (was 30) */
+#define PASS_EXTRA_MM      (50.0f) /* [CALIBRATE] straight leg extra (was 30) */
 #define REJOIN_SEEN_LEVEL  (0.5f)  /* line sensor this black: line met   */
 #define SIDE_LEFT          (1.0f)
 #define SIDE_RIGHT         (-1.0f)
@@ -633,7 +633,7 @@ check_faults (void)
     /* Lifted or overturned ends the run (the demo's end signal).  Only on
        good IMU data; a dead IMU stops the car through its fault bit. */
     imu_get_status(&imu);
-    g_lift_run = (b_running && imu.b_ok)
+    g_lift_run = (b_running && (imu.b_ok))
                      ? terrain_lift_run(g_lift_run, imu.pitch_deg,
                                         imu.roll_deg, imu.az_mg)
                      : 0u;
@@ -1360,7 +1360,7 @@ watch_junction_bar (float32_t odo_mm)
  *        next junction reached after the command (the barcode sensor
  *        past the junction line, or with NAV_LINE_JUNCTION the line
  *        sensors on one; or at once, if so configured), or after
- *        NAV_PENDING_MAX_MM without a junction.
+ *        NAV_PENDING_MAX_MM without a junction (0: never, wait for it).
  *
  * @param[in] odo_mm Current odometer reading.
  *
@@ -1375,7 +1375,8 @@ nav_due (float32_t odo_mm)
             && ((0 == NAV_EXECUTE_AT_JUNCTION) || gb_bar_junction
                 || ((0 != NAV_LINE_JUNCTION) && gb_left_junction
                     && (LINE_JUNCTION == g_st.line_state))
-                || ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM)));
+                || ((NAV_PENDING_MAX_MM > 0.0f)
+                    && ((odo_mm - g_pending_odo) > NAV_PENDING_MAX_MM))));
 }
 
 /*!
@@ -1473,7 +1474,7 @@ handle_line_follow (void)
         steer = line_follow_steer(&g_lf, ir_snap.norm[IR_LEFT],
                                   ir_snap.norm[IR_RIGHT], DT_S);
 
-        /* Cast: the cruise speed is 60..400 mm/s, exact in float32_t.
+        /* Cast: the cruise speed is 50..300 mm/s, exact in float32_t.
            On a hump: a push up the ramp, held back coming down. */
         imu_get_status(&imu);
         speed = (HUMP_CLIMBING == imu.hump.state)     ? SPEED_HUMP_UP_MM_S

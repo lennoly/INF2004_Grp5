@@ -129,7 +129,8 @@
 #define IR_DEFAULT_WHITE            (200u)    /* [CALIBRATE] raw ADC counts */
 #define IR_DEFAULT_BLACK            (2400u)   /* [CALIBRATE] TEST_IR 22 Oct */
 
-#define LINE_KP                     (18.0f)   /* (mm/s) per unit error; 6 Nov: 45 -> 35 -> 18, jitter (200324) */
+/* (mm/s) per unit error; 6 Nov: 45 -> 35 -> 18, jitter (200324). */
+#define LINE_KP                     (18.0f)
 #define LINE_KI                     (0.0f)
 #define LINE_KD                     (0.0f)
 #define LINE_LOST_LEVEL             (0.15f)   /* both below => off line     */
@@ -156,7 +157,9 @@
 /* No default letter per command: none turns the car until map= sets it
    (dashboard Demo barcode letters), and every reset clears them. */
 #define NAV_EXECUTE_AT_JUNCTION     (1)       /* 0 = act immediately        */
-#define NAV_PENDING_MAX_MM          (400.0f)  /* no junction => act anyway  */
+/* No junction this far after the barcode: act anyway.  0 = off: the brief
+   says the car keeps going until the cross-junction (was 400 to 15 Nov). */
+#define NAV_PENDING_MAX_MM          (0.0f)
 /* Junctions seen by the barcode sensor: the junction line (18 mm) crosses */
 /* under it; barcode bars are at most about 8 mm.  The turn starts once    */
 /* the sensor is past the line.                                            */
@@ -172,7 +175,9 @@
 /* After a junction turn or a line search: follow at SPEED_SLOW_MM_S for    */
 /* this distance so the steering lines the car up, then cruise.             */
 #define LINE_SETTLE_MM              (150.0f)
-#define LINE_SETTLE_KP              (18.0f)   /* steering (mm/s) meanwhile; 10 Nov: was 40, shook at every start (185006), now = LINE_KP */
+/* Steering (mm/s) meanwhile; 10 Nov: was 40, shook at every start      */
+/* (185006), now = LINE_KP.                                              */
+#define LINE_SETTLE_KP              (18.0f)
 #define LINE_SETTLE_MAX_MS          (1500u)   /* ...but never longer        */
 
 /* ------------------------------------------------------------------------ */
@@ -203,8 +208,10 @@
    LIFT_TILT_DEG, or the vertical acceleration LIFT_AZ_MG away from 1 g (a
    lift straight up; upside down reads -1 g), for LIFT_CONFIRM_STEPS vehicle
    steps (20 ms each) in a row.  Driving reached 20 deg on humps and 26.5
-   deg once (telemetry logs to 10 Nov).  [CALIBRATE] not yet tried on the
-   car: the stop prints the pitch, roll and az that caused it. */
+   deg once (telemetry logs to 10 Nov), but those angles read low (Z axis
+   taken as a 2 g bias, fixed in imu.c 15 Nov): about 23 and 37 deg real.
+   [CALIBRATE] re-check humps on the car: if they stop it as "lifted",
+   raise this.  The stop prints the pitch, roll and az that caused it. */
 #define LIFT_TILT_DEG               (30.0f)
 #define LIFT_AZ_MG                  (300.0f)
 #define LIFT_CONFIRM_STEPS          (3u)
@@ -305,11 +312,14 @@
    wide by OBST_BLIND_OFFSET_MM on OBST_BLIND_LEFT's side.  40 sent a box
    well right of the line (read +30 mm, 4 Nov 190538) right, into it; a
    centred box read -11..+23 and clears on either side.  0 (6 Nov, Kent):
-   always pass away from the side the box reads on, even -9 mm. */
-#define OBST_CENTRE_UNSURE_MM       (0.0f)    /* [CALIBRATE] 6 Nov: off; was 20, 40 */
+   always pass away from the side the box reads on, even -9 mm (was 20,
+   then 40). */
+#define OBST_CENTRE_UNSURE_MM       (0.0f)    /* [CALIBRATE] 6 Nov: off   */
 /* Smallest sideways shift of a side pass: the seen edge can be 60-80 mm
    off, so a pass sized to it alone could clip the box (53 mm, 25 Oct). */
-#define OBST_MIN_OFFSET_MM          (240.0f)  /* [CALIBRATE] 11 Nov: was 150; the side of a 90 mm box cannot be told (141912), 240 clears it on either side */
+/* [CALIBRATE] 11 Nov: was 150; the side of a 90 mm box cannot be told  */
+/* (141912), 240 clears it on either side.                               */
+#define OBST_MIN_OFFSET_MM          (240.0f)
 /* Side of a blind pass and of any box within OBST_CENTRE_UNSURE_MM of the */
 /* line: 1 = left (4 Nov, Kent's choice; was right).                      */
 #define OBST_BLIND_LEFT             (1)       /* 0: pass on the right      */

@@ -49,3 +49,6 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Local datasheets, not committed
+/project/datasheet/

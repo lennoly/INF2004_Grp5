@@ -64,6 +64,11 @@ static char const * const g_reasons[] = {
 
 #define REASON_COUNT (sizeof(g_reasons) / sizeof(g_reasons[0]))
 
+/* C99 compile-time check (a negative array size is a compile error): the
+   table must fit the reason field.  31 of 32 codes are used (15 Nov). */
+typedef char packed_reasons_fit_t
+    [(REASON_COUNT <= (1u << PACKED_REASON_BITS)) ? 1 : -1];
+
 static uint32_t  s_field(float32_t value, float32_t scale, uint32_t bits);
 static uint32_t  u_field(float32_t value, float32_t scale, uint32_t bits);
 static float32_t s_value(uint32_t field, uint32_t bits, float32_t scale);
