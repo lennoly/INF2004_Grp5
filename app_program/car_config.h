@@ -41,7 +41,7 @@
 #define PIN_MOTOR_R_A               (10u)  /* M2A, PWM5 A                   */
 #define PIN_MOTOR_R_B               (11u)  /* M2B, PWM5 B                   */
 
-/* Wheel encoders (LM393 slotted opto, D0 output) - Grove port 2.           */
+/* Wheel encoders (Hall, on the gear motors; phase A only) - Grove port 2.  */
 #define PIN_ENCODER_L               (2u)
 #define PIN_ENCODER_R               (3u)
 
@@ -74,7 +74,7 @@
 /* [CALIBRATE] effective, not the 64 mm tyre: 65 x 450 / 497 from the  */
 /* TEST_MOTION runs on 28 Oct (encoders 497 mm, tape 450 mm).         */
 #define WHEEL_DIAMETER_MM           (58.9f)
-#define ENCODER_SLOTS               (559u)    /* slots on the encoder disc   */
+#define ENCODER_SLOTS               (559u)    /* pulses per wheel turn       */
 /* [CALIBRATE] effective (tyres scrub in turns): 110 under, 147 over.   */
 /* 28 Oct, after the 58.9 diameter: 138 turned ~93 / ~190 deg for an   */
 /* encoder 87 / 177.5, so the real track is ~129; 132 also covers the */

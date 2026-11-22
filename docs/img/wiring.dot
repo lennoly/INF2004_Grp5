@@ -5,7 +5,7 @@ graph W {
   pico [label="Raspberry Pi Pico W\non Cytron Robo Pico\n\nGP0/GP1  console UART (reserved)\nGP16  liveness LED (reserved)\nGP20 START   GP21 STOP (on-board)\nGP23/24/25/29  WiFi radio (reserved)", fillcolor="#dbeafe", height=3.2, width=3.2];
   bat  [label="Power bank / battery\n3.6-6 V -> VIN terminal", fillcolor="#fde68a"];
   ml [label="Left DC motor",  fillcolor="#e5e7eb"]; mr [label="Right DC motor", fillcolor="#e5e7eb"];
-  el [label="Left wheel encoder\n(LM393 slot, D0)", fillcolor="#dcfce7"]; er [label="Right wheel encoder\n(LM393 slot, D0)", fillcolor="#dcfce7"];
+  el [label="Left wheel encoder\n(Hall, phase A)", fillcolor="#dcfce7"]; er [label="Right wheel encoder\n(Hall, phase A)", fillcolor="#dcfce7"];
   irl [label="IR left (A0)", fillcolor="#fef3c7"]; irr [label="IR right (A0)", fillcolor="#fef3c7"]; irb [label="IR barcode (A0)", fillcolor="#fef3c7"];
   imu [label="LSM303D IMU\n(X forward, Z down)", fillcolor="#ede9fe"];
   us  [label="HC-SR04 ultrasonic\n(on servo horn)", fillcolor="#fee2e2"];

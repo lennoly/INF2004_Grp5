@@ -12,20 +12,20 @@ Each owner also counts how often its fault was raised (8-bit, saturating)
 and records when it last ran, so a fault shorter than 20 ms and a stalled
 owner can still be seen (heartbeat `faults` and `fcount`).
 
-State of the code: `main` after the Change Requirement 1 commit, with branch
-`Raees` merged (STOP latch, STOP-aware scans, sonar stale, watchdog). Rows
-marked *designed* are in the Week 6 design but not yet in the code.
+State of the code: `main` (22 Nov), which includes branch
+`Raees` (STOP latch, STOP-aware scans, sonar stale, watchdog).
+Every row is in the code.
 
 | Fault | Detection (owner) | Detection latency | Response | Recovery | Reason (state event) |
 |---|---|---|---|---|---|
 | STOP button GP21 | falling-edge interrupt latch, read by the vehicle task in every wait; scans check it every 20 ms while the servo moves and after every ping | ≤ 20 ms; during a scan ≤ one ping (≤ 100 ms) | brake, servo centred, STOPPED; STOP never moves the car | START (acts on release) | `stop command` |
 | `stop` from console or MQTT | telemetry task, then the vehicle queue | ≤ 40 ms after it reaches the car (+ network for MQTT) | as above | as above | `stop command` |
 | Motor stall | motion task: move exceeds 3 × ideal time + 1 s (`FAULT_MOTOR_STALL`) | move-dependent, plus ≤ 20 ms | move fails, STOPPED | bit clears when the next move is accepted; START | `fault: motor stall` |
-| Move never finishes | vehicle `run_move()`: 10 s (`MOVE_TIMEOUT_MS`) | 10 s | `motion_stop()`, the manoeuvre fails | next manoeuvre | depends on the manoeuvre |
+| Move never finishes | vehicle `run_move()`: 20 s (`MOVE_TIMEOUT_MS`) | 20 s | `motion_stop()`, the manoeuvre fails | next manoeuvre | depends on the manoeuvre |
 | Encoder fault | motion task: a wheel driven at ≥ friction offset + 10 % with no edge for 500 ms (`FAULT_ENCODER`) | 500 ms + ≤ 20 ms | STOPPED | bit clears as soon as edges return; START | `fault: encoder` |
 | IMU fault | imu task: 3 failed reads in a row (`FAULT_IMU`); `b_ok` false; freshness `seq` stops | 60 ms + ≤ 20 ms | STOPPED | the imu task rewrites the sensor configuration every step while faulted (a re-plugged LSM303D powers up in power-down mode), then the bit clears on the next good read; START | `fault: IMU` |
-| Sonar no echo | sonar monitor: 4 FAULT pings in a row (`OBST_FAULT_LIMIT`, `FAULT_NO_ECHO`); the console prints the cause of the first (`[sonar] FAULT ping: ...`) | 0.3-0.45 s + ≤ 20 ms | STOPPED | bit clears on the next VALID or OUT_OF_RANGE ping; START | `fault: sonar no echo` |
-| Lifted or overturned | vehicle task, in `check_faults()`: IMU pitch or roll past `LIFT_TILT_DEG` (30°), or vertical acceleration `LIFT_AZ_MG` (300 mg) from 1 g, for `LIFT_CONFIRM_STEPS` (3) steps (`terrain_lift_run()`); only on good IMU data | 60 ms + ≤ 20 ms | STOPPED (motors braked) | put the car down; START | `lifted / overturned` |
+| Sonar no echo | sonar monitor: 4 FAULT pings in a row (`OBST_FAULT_LIMIT`, `FAULT_NO_ECHO`); the console prints the cause of the first (`[sonar] FAULT ping: ...`). ECHO still high from a pulse that was seen to start reads OUT_OF_RANGE, not FAULT, for up to 1 s (`ECHO_LONG_US`, nothing in range) | 0.3-0.45 s + ≤ 20 ms | STOPPED | bit clears on the next VALID or OUT_OF_RANGE ping; START | `fault: sonar no echo` |
+| Lifted or overturned | vehicle task, in `check_faults()`: IMU pitch or roll past `LIFT_TILT_DEG` (30°), or vertical acceleration `LIFT_AZ_MG` (300 mg) from 1 g, for `LIFT_CONFIRM_STEPS` (3) steps (`terrain_lift_run()`), only on good IMU data; or no floor under all three IR sensors (above `LIFT_NO_FLOOR_LEVEL`, 0.9) for `LIFT_NO_FLOOR_MM` (40 mm) of wheel travel, a level lift | 60 ms + ≤ 20 ms; level lift about 0.5 s at 75 mm/s | STOPPED (motors braked) | put the car down; START | `lifted / overturned` |
 | Sonar stale (no front reading for 300 ms) | vehicle task, in `check_faults()`: the front word is older than `OBST_STALE_MS` while the monitor is on (`obstacle_front_stale()`, from `packed_front_age_ms()`); a stalled monitor cannot set its own bit | 300 ms + ≤ 20 ms | STOPPED | START | `sonar stale` |
 | Wi-Fi loss | cyw43 task: link down after it was up (`FAULT_WIFI_LOSS`) | one poll (2 ms) | report only: STOP button and console still work | re-join 3 s after the loss, then every 5 s; chip restart after 10 s (not while driving); bit clears when the link is back | – (heartbeat `faults`) |
 | Line lost | line classifier: both sensors white for 150 ms | 150 ms | LINE_SEARCH: 5 alternating sweeps of growing length | line found → LINE_FOLLOW | `line lost`, then `line not found / end` |
@@ -43,7 +43,7 @@ For each row, while line following with telemetry streaming:
 | Motor stall | hold one wheel during a distance move | STOPPED `fault: motor stall` |
 | Encoder fault | unplug one encoder | STOPPED `fault: encoder` within 520 ms |
 | IMU fault | unplug the IMU Grove cable | STOPPED `fault: IMU` within 80 ms; reconnecting clears the bit |
-| Sonar no echo | unplug ECHO | STOPPED `fault: sonar no echo` within 160 ms |
+| Sonar no echo | unplug ECHO | STOPPED `fault: sonar no echo` within 0.5 s (4 FAULT pings, ~70 ms apart) |
 | Sonar stale | a test hook that pauses the monitor task (not written yet) | STOPPED `sonar stale` within 320 ms |
 | Watchdog | a test hook that blocks the vehicle task while driving (not written yet) | reset within 250 ms; boot reason `watchdog reset` |
 | Wi-Fi loss | switch the hotspot off | car keeps driving; heartbeat shows `wifi_loss`, then recovers |

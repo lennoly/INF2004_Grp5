@@ -9,7 +9,7 @@
  *   7  barcode   frame and decode the barcode edge stream       Buddy 3
  *   8  imu       50 Hz tilt, hump and motion events             Buddy 4
  *   9  sonar     front distance monitor                         Buddy 5
- *  10  telemetry 5 Hz JSON, heartbeat and commands              Buddy 1
+ *  10  telemetry 5 Hz frames, heartbeat and commands            Buddy 1
  *  10  blink     template liveness LED (GP16)
  *  11  test      standalone test programs (APP_MODE=TEST_xxx)
  * ISRs: IO_BANK0 (encoders, echo, STOP button) and TIMER alarm 3 (1 kHz IR

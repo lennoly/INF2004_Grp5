@@ -12,14 +12,15 @@ pip install -r requirements.txt
 ## Connect
 | Car firmware | Command |
 |---|---|
-| USB-console build (`*_usbcdc.uf2`), cable to the car | `python picocar_dashboard.py --serial auto` |
-| WiFi build (`*_wifi.uf2`) | `python picocar_dashboard.py --mqtt <broker-ip> --car car1` |
+| USB-console build (`CONSOLE=usb_cdc`: `*_usb_cdc.uf2`), cable to the car | `python picocar_dashboard.py --serial auto` |
+| WiFi build (`WIFI_MQTT=1`: `*_wifi_dns.uf2`) | `python picocar_dashboard.py --mqtt <broker-ip> --car car1` |
 
 * `--serial auto` finds the Pico by its USB vendor id; or give the port
   (`--serial COM5`). `--list-ports` shows them.
 * Close PuTTY or any other serial monitor first (one program per port).
-* MQTT: run mosquitto on the laptop (`mosquitto -c template/config/mosquitto.conf -v`),
-  with the laptop's IP in `template/config/mqtt_config.h`.
+* MQTT: run mosquitto on the laptop (`mosquitto -c mosquitto.conf -v`, the
+  two-line config in the main README), with the laptop's IP in
+  `template/config/mqtt_config.h`.
 * `--http-port 8051` if 8050 is taken; `--no-browser` to open the page yourself.
   Ctrl+C in the terminal stops it (the page then says "dashboard stopped?").
 
@@ -57,10 +58,12 @@ The tuning boxes fill in from the car. Edit and press **Apply**:
 
 | Box / command | Meaning | Default (`car_config.h`) |
 |---|---|---|
-| `pid=kp,ki,kd` | wheel-speed PID | `SPEED_KP/KI/KD` 0.08, 0.6, 0 |
-| `ff=kf,offset` | feed-forward %/(mm/s), friction offset % | `SPEED_KF` 0.104, `SPEED_OFFSET_PCT` 2.3 |
-| `line=kp,ki,kd` | line-following PID | `LINE_KP/KI/KD` 160, 0, 12 |
-| `speed=mm/s` | cruise speed (50..300) | `SPEED_CRUISE_MM_S` 50 |
+| `pid=kp,ki,kd` | wheel-speed PID | `SPEED_KP/KI/KD` 0.104, 0.60, 0 |
+| `ff=kf,offset` | feed-forward %/(mm/s), friction offset % | `SPEED_KF` 0.12, `SPEED_OFFSET_PCT` 2.3 |
+| `line=kp,ki,kd` | line-following PID | `LINE_KP/KI/KD` 18, 0, 0 |
+| `speed=mm/s` | cruise speed (50..300) | `SPEED_CRUISE_MM_S` 75 |
+| `bypass=side,straight` | obstacle pass legs in mm (100..400, 50..800), 0 = automatic | 0, 0 |
+| `detect=mm` | front stop distance (100..279) | `OBST_DETECT_MM` 200 |
 | `rate=ms` | telemetry period, 0 = off | 200 (MQTT), 1000 (USB) |
 
 Other commands: `start`, `stop`, `calibrate`, `gains`, `help`, `timing`
@@ -69,7 +72,7 @@ was read: 1 left, 2 right, 3 straight, 4 U-turn), `map=1..4,index` (the
 barcode letter for that turn as its Code 39 index, A=10 .. Z=35; the
 **Demo barcode letters** boxes send these for you, and a car reset clears
 them: there are no default letters).
-Tuning (`pid=`, `ff=`, `line=`, `speed=`, `map=`) is accepted only while the car is
+Tuning (`pid=`, `ff=`, `line=`, `speed=`, `map=`, `detect=`, `bypass=`) is accepted only while the car is
 IDLE or STOPPED; while it drives, the reply says so.
 The car answers every command with an event (`cmd ... ok` or the reason it
 failed) and then reports the gains now in use.

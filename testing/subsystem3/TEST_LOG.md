@@ -11,7 +11,7 @@ Define a test here before running it. Test IDs never change.
 | ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
 |---|---|---|---|---|---|
 | S3-U01 | line classifier and Code 39 decoder (forwards and reversed) | FR1–FR3 | host | `make -C tests/host` | 0 failed |
-| S3-U02 | IR calibration contrast | A5 | board | `APP_MODE=TEST_IR`; STOP while idle = calibration spin | white/black contrast > 50 % of ADC range |
+| S3-U02 | IR calibration contrast | A5 | board | `APP_MODE=TEST_IR`; press START, then slide the car across the line during the 5 s calibration | white/black contrast > 50 % of ADC range |
 | S3-U03 | barcode reading | FR2, A6 | board | `APP_MODE=TEST_BARCODE` over the 14 cm barcodes; 5 passes each at 100 and 180 mm/s, mixed letters and both directions | ≥ 4 of 5 read at each speed, 0 wrong letters |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`

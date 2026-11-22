@@ -94,8 +94,9 @@ python tools/dashboard/picocar_dashboard.py --mqtt <broker IP> # WiFi build
 ```
 
 Live tuning (accepted while IDLE or STOPPED): `pid=kp,ki,kd`, `ff=kf,offset`,
-`line=kp,ki,kd`, `speed=`, `map=<1..4>,<letter idx>`, `bypass=<sideways mm>,<straight mm>`
-(0 = automatic), `rate=`, `gains`, `timing`, `help`.
+`line=kp,ki,kd`, `speed=`, `map=<1..4>,<letter idx>`, `detect=<mm>`,
+`bypass=<sideways mm>,<straight mm>` (0 = automatic); any time: `rate=`,
+`nav=<1..4>`, `gains`, `timing`, `help`.
 Gains reset on reboot; copy final values into `car_config.h`. Every session
 is logged to `logs/<date_time>/`. More: [`tools/dashboard/README.md`](tools/dashboard/README.md).
 

@@ -6,8 +6,8 @@
 |---|---|---|---|
 | Left motor | + / − | M1 terminals (GP8 / GP9) | MxA=PWM, MxB=0 → forward; swap wires or set `MOTOR_L_INVERT` if reversed |
 | Right motor | + / − | M2 terminals (GP10 / GP11) | `MOTOR_R_INVERT` likewise |
-| Left encoder | VCC / GND / D0 | 3V3 / GND / **GP2** | Grove 2 |
-| Right encoder | VCC / GND / D0 | 3V3 / GND / **GP3** | Grove 2 |
+| Left encoder (Hall, on the motor) | VCC / GND / phase A | 3V3 / GND / **GP2** | Grove 2; phase B not connected; 559 pulses per wheel turn (`ENCODER_SLOTS`) |
+| Right encoder (Hall, on the motor) | VCC / GND / phase A | 3V3 / GND / **GP3** | Grove 2; phase B not connected |
 | IR left | VCC / GND / **A0** | 3V3 / GND / **GP26 (ADC0)** | use analog output, D0 unused |
 | IR right | VCC / GND / **A0** | 3V3 / GND / **GP27 (ADC1)** | |
 | IR barcode | VCC / GND / **A0** | 3V3 / GND / **GP28 (ADC2)** | |

@@ -14,14 +14,14 @@ Define a test here before running it. Test IDs never change.
 | S5-U02 | profile of known boxes | FR7, A9 | board | `APP_MODE=TEST_ULTRASONIC`; boxes at 150 and 250 mm, straight and offset | edges match tape measurements; servo 0° points right |
 | S5-U03 | bypass and line re-acquisition | FR8–FR9, A10 | manual | full bypass on the course, each allowed obstacle position, 5 times | clean rejoin every time |
 | S5-U04 | HC-SR04 no-target behaviour at 3.3 V (CSC05: test first) | A9, FR7 | board | `APP_MODE=TEST_ULTRASONIC`, sensor aimed at open space > 4 m; read the `a9,...` lines | every ping OUT_OF_RANGE; FAULT means no pulse: switch to 5 V + 1 k / 2 k divider before relying on "clear" |
-| S5-U05 | vehicle task and scanner in simulation: START/STOP rules, two-echo trigger, scan, box bypass, reverse after impact, hump guard, STOP during scan / line search / U-turn / bypass, stale barcodes, watchdog | FR7, FR8, FR12, NFR3, NFR9 | host | `make -C tests/host` | 0 failed |
+| S5-U05 | vehicle task and scanner in simulation: START/STOP rules, two-echo trigger, scan, box bypass, hump guard, STOP during scan / line search / U-turn / bypass, stale barcodes, watchdog | FR7, FR8, FR12, NFR3, NFR9 | host | `make -C tests/host` | 0 failed |
 | S5-U06 | servo direction | A9 | board | `APP_MODE=TEST_ULTRASONIC`, box 250 mm ahead and 60 mm to the right | `closest echo on the RIGHT`; otherwise set `SERVO_INVERT` to 1 |
 | S5-U07 | profile accuracy against tape | FR7, A9 | board | `TEST_ULTRASONIC`, 8 cm and 15 cm boxes (the ones available), each centred at 200 mm, 3 scans each; `python3 tools/scan_plot.py <log> --box X,Y,W` | width and centre error recorded per box; width within the beam-widening margin; fill the table in report section 4.5 |
 | S5-U08 | STOP during a scan | FR12, NFR3, A14 | board | `MISSION`, obstacle ahead; tap STOP while the sonar sweeps (logic analyser on GP21 and the servo signal if available) | scan ends within about one ping (0.1 s), servo re-centred, `STOPPED (stop command)` |
 | S5-U09 | reverse after an impact | FR8 | board | `MISSION`, push the car gently into a box | car reverses 120 mm, then scans |
-| S5-U10 | no obstacle stop on the hump | A12 | board | `MISSION` over the course hump; watch `front` in telemetry | no OBSTACLE while on the hump; front range above 300 mm on the approach |
+| S5-U10 | no obstacle stop on the hump | A12 | board | `MISSION` over the course hump; watch `front` in telemetry | no OBSTACLE while on the hump; front range above 200 mm (`OBST_DETECT_MM`) on the approach |
 | S5-U11 | watchdog stays quiet | NFR9 | board | `MISSION`: a scan, a bypass and a calibration spin | no `watchdog reset` reason after any of them |
-| S5-U12 | front sensor failure stops the car | FR7, A9, NFR9 | board | `MISSION`, line following: unplug ECHO (then TRIG) on the sonar | `STOPPED (sonar fault)` within about 0.2 s; reconnect and START again |
+| S5-U12 | front sensor failure stops the car | FR7, A9, NFR9 | board | `MISSION`, line following: unplug ECHO (then TRIG) on the sonar | `STOPPED (fault: sonar no echo)` within about 0.5 s (4 FAULT pings); reconnect and START again |
 
 *Method:* **host** = `make -C tests/host`; **board** = `APP_MODE=TEST_xxx`
 build on the car; **link** = `wifi_test.py`; **manual** = a person measures.

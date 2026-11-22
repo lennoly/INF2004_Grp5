@@ -166,7 +166,7 @@ timing_take (timing_report_t * p_out)
 }
 
 /*!
- * @brief Short name of a measured section, for the JSON report.
+ * @brief Short name of a measured section, for the console report.
  *
  * @param[in] section Section.
  *

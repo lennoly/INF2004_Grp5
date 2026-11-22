@@ -114,7 +114,7 @@ the **user** only sends to it or reads it.
 | IF-02 | S1 → vehicle | message buffer (owned by vehicle) | `vehicle.h` | start / stop / calibrate / speed commands | Week 6 design |
 | IF-03 | vehicle → S2 | request copy + "done" event flag (owned by S2) | `motion.h` (`motion_wait`) | move, velocity, stop; completion OK / FAIL | Week 6 design |
 | IF-04 | S5 ↔ vehicle | semaphore (owned by S5) | `ultrasonic.h` | one user of the sensor at a time, ≥ 60 ms between pings | Week 6 design |
-| IF-05 | S1 ↔ cyw43 task | two SPSC rings with memory barriers (owned by S1) | `mqtt_bridge.h` | JSON out (≤ 512 B), command lines in, link statistics | Week 6 design |
+| IF-05 | S1 ↔ cyw43 task | two SPSC rings with memory barriers (owned by S1) | `mqtt_bridge.h` | binary frames out (≤ 47 B, `MQTT_BRIDGE_PAYLOAD_MAX`), command frames in (≤ 15 B), link statistics | Week 6 design |
 | IF-06 | S2, S3, S4, S5, vehicle → S1 | status snapshots (copied with interrupts off) | each `*_get_status()` | telemetry fields, events, heartbeat | Week 6 design |
 | IF-07 | S2 → S4 | status snapshot | `motion_get_status()` | distance travelled, for hump height | Week 6 design |
 

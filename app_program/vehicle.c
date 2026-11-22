@@ -9,7 +9,7 @@
  * any --stop / blocked / line not found--> STOPPED --start--> LINE_FOLLOW
  * any running state --fault bit / no fresh front reading--> STOPPED
  * any running state --lifted or overturned (IMU)--> STOPPED
- * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (360 degree spin)
+ * IDLE/STOPPED --calibrate / START held 2 s--> CALIBRATE (330 degree spin)
  *
  * Manoeuvres are sequences of blocking motion moves executed in this task;
  * every wait, and every step of an obstacle scan, polls the STOP button and
@@ -45,7 +45,7 @@
 #define TASK_STACK         (3072)
 #define LOOP_MS            (20u)
 #define MS_PER_S           (1000.0f)
-#define MOVE_TIMEOUT_MS    (20000u) /* 360 deg spin at 50 mm/s: 9 s */
+#define MOVE_TIMEOUT_MS    (20000u) /* 800 mm bypass leg at 50 mm/s: 16 s */
 #define MBF_MSGS           (4u)
 #define LINE_GAINS         (3u)
 /* Every move (turns, bypass, reverses, line search) runs at the cruise
@@ -69,7 +69,7 @@
 #define CALIB_SPEED_MM_S   (100.0f) /* [CALIBRATE] calibration spin (was 50) */
 #define CALIB_TURN_DEG     (330.0f) /* [CALIBRATE] one real turn          */
 /* Line search: alternating sweeps, each REACQ_BASE_MS longer.  At 50 mm/s
-   per wheel on the 138 mm track the car turns about 41 deg/s, so 360 ms is
+   per wheel on the 132 mm track the car turns about 43 deg/s, so 360 ms is
    a 15 deg step: +15, -15, +30, -30, +45 deg (200 ms at 90 mm/s before). */
 #define REACQ_SWEEPS       (5u)
 #define REACQ_BASE_MS      (360u)

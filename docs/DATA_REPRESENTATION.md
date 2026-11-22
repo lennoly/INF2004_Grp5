@@ -36,7 +36,7 @@ These follow the Tribunal 1 decisions (Version B of the Tribunal 1 document).
 | Front sonar word `packed_front_t` | sonar monitor task | vehicle | one aligned 32-bit store / load, no lock | An aligned word access is atomic on the M0+. |
 | IR element ring (64 × 2 B) | 1 kHz IR ISR | barcode task | lock-free SPSC ring; `head` and `tail` in separate words | Each index has one writer; packing them into one word would break this (Tribunal 1). |
 | IR filter `g_filt` (3 × 16 bit) | IR ISR | tasks | one half-word store per update | Computed locally, stored once. |
-| Sonar counts `g_counts` (1 B: close 2 bits, FAULT 2 bits) | sonar monitor task; reset by `obstacle_monitor_enable()` | vehicle | whole-byte store, whole-byte read | Both counts are worked out from one read and stored with one write; the reset is a whole-byte store (the same as the two separate words before). |
+| Sonar counts `g_counts` (1 B: close 3 bits, FAULT 3 bits) | sonar monitor task; reset by `obstacle_monitor_enable()` | vehicle | whole-byte store, whole-byte read | Both counts are worked out from one read and stored with one write; the reset is a whole-byte store (the same as the two separate words before). |
 | Monitor handshake `gb_monitor`, `gb_monitor_busy` | vehicle / monitor task | the other task | one byte each | Kept apart on purpose: each flag has a different writer, and the pause handshake relies on two separate stores (section 4). |
 | Last scan points (3 B each) and counts | vehicle task (scan) | telemetry / TEST_ULTRASONIC | stored and read under DI/EI | One writer; copied whole. |
 | Servo angle `g_angle` (1 B) | the task moving the servo | sonar monitor | one byte store | Single store, atomic. |
@@ -81,7 +81,7 @@ Ranges are the valid range of the quantity; *bits* is the stored width.
 | Field | Valid range | Resolution | Bits |
 |---|---|---|---|
 | `b_ok` | last read succeeded | – | 1 |
-| `event` | 8 motion classes | – | 3 |
+| `event` | 7 motion classes | – | 3 |
 | `hump_state` | 3 states | – | 2 |
 | `humps`, `i2c_errors` | 0 … 255 (saturating) | 1 | 8 each |
 | `seq` | wraps; +1 per good sample (freshness, risk R1) | 1 | 8 |
@@ -104,7 +104,7 @@ the imu task.
 | `line_state` | 3 states | 2 | enum |
 | `pending_nav`, `last_nav` | 5 commands | 3 each | enum |
 | `last_action` | 5 actions | 3 | enum |
-| `reason` | 27 texts | 5 | index into the reason table (`packed.c`); unknown text = "other" |
+| `reason` | 31 texts (of 32) | 5 | index into the reason table (`packed.c`); unknown text = "other" |
 | `state_seq` | wraps | 8 | readers only test for a change |
 | `barcodes`, `obstacles` | 0 … 255 (saturating) | 8 each | count |
 | `cruise` | 50 … 300 mm/s | 9 | 1 mm/s |
@@ -134,7 +134,7 @@ the imu task.
 | Vehicle queue message | command 3, speed 9, three line gains 20 bits each (0 … 1000.000 in 0.001) | 20 B → 12 B |
 | IR filter state | Q4 of a 12-bit reading = 16 bits | 3 × 4 B → 3 × 2 B |
 | Fault mask | 5 bits: motor stall, encoder, IMU, no echo, Wi-Fi loss | (new) |
-| Sonar counts `g_counts` (Buddy 5) | bits 0–1 close readings in a row (0…`OBST_CONFIRM_READINGS`), bits 2–3 FAULT pings in a row (0…`OBST_FAULT_LIMIT`); a compile-time check keeps both limits ≤ 3 | 2 × 4 B → 1 B |
+| Sonar counts `g_counts` (Buddy 5) | bits 0–2 close readings in a row (0…`OBST_CONFIRM_READINGS`), bits 3–5 FAULT pings in a row (0…`OBST_FAULT_LIMIT`, 4); a compile-time check keeps both limits ≤ 7 | 2 × 4 B → 1 B |
 | Scan count `g_scans` (Buddy 5) | 8 bits, wraps (telemetry only tests for a change) | 4 B → 1 B |
 | Last scan points (Buddy 5) | angle 0…180° in 8 bits + distance 0…4000 mm in 16 bits (0xFFFF = no echo), 40 points; count 0…40 in 8 bits | 160 B + 4 B → 120 B + 1 B |
 | Servo angle (Buddy 5) | 0…180° in 8 bits | 4 B → 1 B |
@@ -237,7 +237,7 @@ JSON sizes are the old format with typical values. "After" sizes are exact
 | Barcode event | 42 B | 3 B |
 | Hump event | 46 B | 5 B |
 | Obstacle event | 114 B | 11 B |
-| Impact event | 23 B | 4 B |
+| Impact event | 23 B | 4 B (removed 11 Nov with IMU collision detection) |
 | Command reply | 51 B | 4 B |
 | Gains report | 115 B | 24 B |
 | Timing report | about 270 B (estimated) | 26 B (averages on the console) |
@@ -271,7 +271,7 @@ the same field names as the old JSON.
 | Gains (9) | speed PID 3 × 20, kf 20, offset 17, line PID 3 × 20 (all 0.001 steps), cruise 9, rate ms 13 |
 | Timing (10) | window ms 16, load % 7, jitter µs 16, periods 16, max µs 9 × 16 |
 | Status (11) | online 1 |
-| Command (12, laptop → car) | command 4, request id 16, then: speed 9 / rate 13 / nav 3 / map nav 3 + Code 39 index 6 / detect 9 / ff 20 + 17 / pid or line 3 × 20 |
+| Command (12, laptop → car) | command 4, request id 16, then: speed 9 / rate 13 / nav 3 / map nav 3 + Code 39 index 6 / detect 9 / bypass sideways 10 + straight 10 / ff 20 + 17 / pid or line 3 × 20 |
 
 The serial console keeps text commands for people; MQTT takes only command
 frames. A frame longer than 15 bytes is dropped whole, never truncated.
