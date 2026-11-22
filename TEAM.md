@@ -87,7 +87,7 @@ driving.
 ## 4. Task priorities
 
 1 is the highest. 3 and 4 are the template's USB and WiFi service tasks.
-Priorities follow deadlines (Week 6 design, `docs/REPORT.md` section 2.1).
+Priorities follow deadlines (Week 6 design, the report, section 2.1).
 
 | Subsystem | Tasks (name – priority – rate) |
 |---|---|

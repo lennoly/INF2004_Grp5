@@ -35,8 +35,6 @@ typedef struct
 int32_t      ultrasonic_init(void);
 void         ultrasonic_ping(ultrasonic_ping_t * p_out);
 char const * ultrasonic_class_name(ultrasonic_class_t result);
-int32_t      ultrasonic_measure_mm(void);
-int32_t      ultrasonic_median_mm(uint32_t samples);
 
 #endif /* ULTRASONIC_H */
 

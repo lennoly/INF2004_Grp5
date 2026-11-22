@@ -23,7 +23,6 @@
 #define MM_PER_US     (0.1715f)
 #define WIDTH_MAX_US  (0xFFFFu) /* echo width field saturates here */
 #define FLG_ECHO      (1u << 0)
-#define MAX_SAMPLES   (7u)
 /* Shorter ECHO pulses are noise (motor or TRIG coupling), not echoes: the
    nearest real echo, US_MIN_MM, is 117 us.  Ignored, so the real pulse
    after one is still timed. */
@@ -50,7 +49,6 @@ static bool gb_was_fault = false;
 
 static void               ping_locked(ultrasonic_ping_t * p_out);
 static ultrasonic_class_t echo_class(int32_t dist_mm);
-static void               sort_readings(int32_t * p_values, uint32_t count);
 static void echo_edge_isr(uint32_t pin, uint32_t events, uint32_t t_us);
 
 /*!
@@ -143,95 +141,6 @@ ultrasonic_class_name (ultrasonic_class_t result)
     }
 
     return (p_name);
-}
-
-/*!
- * @brief Distance from one ping (unchanged behaviour: anything but a
- *        VALID reading from US_MIN_MM to US_MAX_MM is "no echo").
- *
- * @return Distance in mm, or ULTRASONIC_NO_ECHO.
- */
-int32_t
-ultrasonic_measure_mm (void)
-{
-    ultrasonic_ping_t ping;
-    int32_t           dist_mm = ULTRASONIC_NO_ECHO;
-
-    ultrasonic_ping(&ping);
-
-    if ((ULTRASONIC_VALID == ping.result) && (ping.dist_mm >= US_MIN_MM))
-    {
-        dist_mm = ping.dist_mm;
-    }
-
-    return (dist_mm);
-}
-
-/*!
- * @brief Median of several readings (rejects single-ping outliers).
- *
- * @param[in] samples Pings to take, at most MAX_SAMPLES.
- *
- * @return Median distance in mm, or ULTRASONIC_NO_ECHO if no ping had an
- *         echo.
- */
-int32_t
-ultrasonic_median_mm (uint32_t samples)
-{
-    int32_t  readings[MAX_SAMPLES];
-    uint32_t pings   = (samples > MAX_SAMPLES) ? MAX_SAMPLES : samples;
-    uint32_t count   = 0u;
-    uint32_t idx     = 0u;
-    int32_t  dist_mm = ULTRASONIC_NO_ECHO;
-
-    for (idx = 0u; idx < pings; idx++)
-    {
-        dist_mm = ultrasonic_measure_mm();
-
-        if (ULTRASONIC_NO_ECHO != dist_mm)
-        {
-            readings[count] = dist_mm;
-            count++;
-        }
-    }
-
-    dist_mm = ULTRASONIC_NO_ECHO;
-
-    if (count > 0u)
-    {
-        sort_readings(readings, count);
-        dist_mm = readings[count / 2u];
-    }
-
-    return (dist_mm);
-}
-
-/*!
- * @brief Sort readings in ascending order (insertion sort, few values).
- *
- * @param[in,out] p_values Readings.
- * @param[in]     count    Number of readings.
- */
-static void
-sort_readings (int32_t * p_values, uint32_t count)
-{
-    uint32_t idx   = 0u;
-    uint32_t pos   = 0u;
-    int32_t  value = 0;
-
-    for (idx = 1u; idx < count; idx++)
-    {
-        value = p_values[idx];
-        pos   = idx;
-
-        while ((pos > 0u) && (p_values[pos - 1u] > value))
-        {
-            p_values[pos] = p_values[pos - 1u];
-            pos--;
-        }
-
-        p_values[pos] = value;
-    }
 }
 
 /*!

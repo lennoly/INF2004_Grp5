@@ -16,7 +16,7 @@
  * queued commands, so any manoeuvre can be aborted.  STOP presses are also
  * latched by an interrupt, so a short press is never missed, and STOP never
  * moves the car.  The same diagram is drawn in docs/img/states.png (Rule
- * 2.2.f) and explained in the report (docs/REPORT.md).
+ * 2.2.f) and explained in the report (docs/PicoCar_Project_Report.docx).
  */
 
 #include <stdint.h>

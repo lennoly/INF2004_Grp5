@@ -5,8 +5,8 @@ Pico. It runs µT-Kernel 3.0, decodes Code 39 barcodes into turns, measures
 humps with an IMU, scans and bypasses obstacles with a servo-mounted sonar,
 and reports telemetry over WiFi/MQTT.
 
-- Report: [`docs/PicoCar_Project_Report.docx`](docs/PicoCar_Project_Report.docx) (source text: `docs/REPORT.md`)
-- Who owns what: [`TEAM.md`](TEAM.md)
+- Report: [`docs/PicoCar_Project_Report.docx`](docs/PicoCar_Project_Report.docx)
+- Who owns what: [`TEAM.md`](TEAM.md); who did what: [`CONTRIBUTIONS.md`](CONTRIBUTIONS.md)
 - Tests and results: [`testing/`](testing/)
 - Videos: [`videos/README.md`](videos/README.md)
 
@@ -76,6 +76,14 @@ The output is `template/build_make/*.uf2`.
 Hold BOOTSEL, plug in USB and copy the `.uf2` to the RPI-RP2 drive.
 **GP20 (START)**: a short press starts a run; held 2 s while idle it runs the
 calibration spin. **GP21 (STOP)** stops the car.
+
+### Before a demo
+
+1. Build `MISSION` (the WiFi build to show the dashboard), flash, and power on with the car still: the IMU calibrates at start-up.
+2. Hold START 2 s over the line: calibration spin.
+3. Send the four barcode letters with `map=` (dashboard: Demo barcode letters, Set) while the car is IDLE or STOPPED. There are no default letters and a reset clears them: without this no barcode turns the car. Set `bypass=` only if the automatic pass does not suit the course.
+4. Short press START and watch the dashboard: state, barcode, hump peak, obstacle events.
+5. Lift the car to end the run: the motors stop with `STOPPED (lifted / overturned)`.
 
 ## Dashboard
 

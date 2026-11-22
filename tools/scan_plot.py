@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Plot TEST_ULTRASONIC scans and compare them with the real obstacle (Buddy 5
-evidence for REPORT.md section 4.5).
+evidence for the report, section 4.5).
 
 Flash the TEST_ULTRASONIC firmware, press START once per scan and save the
 serial console output to a text file (copy it from the terminal, or use the
