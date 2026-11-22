@@ -1,6 +1,6 @@
 # Subsystem 3 review
 
-Reviewed on 21 October 2026 against checkout `c6793d4`, including the additional documents in `max/`.
+Reviewed on 21 October 2026 against checkout `3e954cc`, including the additional documents in `max/`.
 
 Subsystem 3 is not yet ready to be called fully correct or integration-ready. Its existing software tests pass, but an additional test reproduces missed barcode recovery, the representation changes are incomplete, and the shared vehicle controller violates parts of the barcode contract. No production source was changed during this review.
 

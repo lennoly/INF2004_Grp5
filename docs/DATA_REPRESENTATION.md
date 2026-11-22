@@ -6,7 +6,7 @@ range needs, faults are bits of one shared mask, MQTT carries compact binary
 frames, and packed data shared between tasks or with an ISR is accessed
 safely.
 
-Baseline ("before") is commit `d5f5199` on `main`; "after" is the commit that
+Baseline ("before") is commit `15dfb8d` on `main`; "after" is the commit that
 adds this file. Both were built with the same toolchain
 (`arm-none-eabi-gcc` 13.3.0, MSYS2) as `APP_MODE=MISSION CONSOLE=usb_cdc`.
 
@@ -160,7 +160,7 @@ the imu task.
 
 | | text | data | bss | data + bss |
 |---|---|---|---|---|
-| Before (`d5f5199`) | 79 485 | 92 | 21 624 | 21 716 |
+| Before (`15dfb8d`) | 79 485 | 92 | 21 624 | 21 716 |
 | After | 87 989 | 92 | 17 508 | 17 600 |
 | Change | +8 504 | 0 | −4 116 | **−4 116 B (−19 %)** |
 
@@ -212,7 +212,7 @@ took back some of the saving:
 
 | | text | data | bss | data + bss |
 |---|---|---|---|---|
-| Before (`d5f5199`) | 81 817 | 92 | 21 624 | 21 716 |
+| Before (`15dfb8d`) | 81 817 | 92 | 21 624 | 21 716 |
 | Now | 95 753 | 96 | 17 880 | 17 976 |
 | Change | +13 936 | +4 | −3 744 | **−3 740 B (−17 %)** |
 

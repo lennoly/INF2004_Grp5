@@ -1,5 +1,5 @@
 Buddy 3 final source review, 2026-10-25 (Asia/Singapore)
-Source commit: 022387b488c03d40f3593e12190194d4241a3d72
+Source commit: fca47a51981d7d910f7a4bf2b1702838e52b153a
 Submission documents excluded. No production changes or hardware testing.
 
 

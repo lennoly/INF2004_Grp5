@@ -1,6 +1,6 @@
 Pull integration verification - 2026-10-25 (Asia/Singapore)
-Base before pull: c6793d4
-Fetched origin/max integrated: eb13a84 (fast-forward, two commits)
+Base before pull: 3e954cc
+Fetched origin/max integrated: daac54f (fast-forward, two commits)
 Local barcode work preserved: stash 80285462c6c8cdb942021baad2645a73635deaa7
 Independent ZIP backup: before-pull-complete-backup.zip in this chat's visualization workspace.
 

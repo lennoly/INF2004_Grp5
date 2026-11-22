@@ -1,6 +1,6 @@
 Subsystem 3 host verification: 2026-10-20 (Asia/Singapore)
 Status: UNCOMMITTED working-tree verification, not hardware evidence.
-Base commit: d5f5199d7035f529dd78db65eeda378f689a01e9
+Base commit: 15dfb8dab1f3a7cf548b41ff2d4a784f335cdca1
 
 COMMAND: gcc --version
 gcc (Rev2, Built by MSYS2 project) 14.2.0

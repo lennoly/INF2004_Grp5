@@ -1,7 +1,7 @@
 # Buddy 3 source and firmware review
 
 Reviewed on 25 October 2026 against source at commit
-`022387b488c03d40f3593e12190194d4241a3d72`, with the user's document deletions.
+`fca47a51981d7d910f7a4bf2b1702838e52b153a`, with the user's document deletions.
 The submission folder and deleted documents are excluded from this assessment.
 The original review was followed by the fixes described below. The deleted
 submission documents were not used to implement the fixes.
