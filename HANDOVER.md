@@ -1,6 +1,6 @@
 # PicoCar handover: what is left against the Project Write-up
 
-Checked on 22 Oct 2026 against `main` at `9213b98` (Change Requirement 1),
+Checked on 22 Oct 2026 against `main` at `d03d9e4` (Change Requirement 1),
 plus the unmerged branches `origin/Raees` and `origin/max`.
 Brief: `Project Write-up.pdf` (10 mission requirements, expected behaviour,
 per-buddy tasks, assessment criteria).
@@ -102,7 +102,7 @@ hand-pick the `.uf2` conflicts: rebuild them after the merge.
 
 ## 4. Verified gaps in the code on `main`
 
-Each was checked in the source on `9213b98`. Items marked **Fixed
+Each was checked in the source on `d03d9e4`. Items marked **Fixed
 (uncommitted)** are changed in the working tree and not yet on `main`. They
 build with 0 warnings in all 9 modes and pass 187/187 host tests. None has
 run on the car.
@@ -160,7 +160,7 @@ the Raees merge, `app_main.c` stops an SMP build with `#error`.
 
 ### 4.8 BARR-C checker is not at 0
 `python3 tools/barr_check.py app_program/*.[ch] app_program/subsystem*/*.[ch] tests/host/*.[ch]`
-gave **TOTAL 149** on `9213b98`:
+gave **TOTAL 149** on `d03d9e4`:
 - 11 in firmware, from the TEST_WHEELS commit. **Fixed (uncommitted)**:
   firmware is now TOTAL 0.
 - 138 in `tests/host/test_data.c` and `fault_stub.c`, from the CR1 commit:
