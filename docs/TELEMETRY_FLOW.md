@@ -57,7 +57,9 @@ one word, written with a single store.
 
 Events are found by comparing counters with the last ones sent, e.g.
 `state_seq`, `decoded`, `humps`, scan count. A change that comes
-and goes between two checks is still reported once.
+and goes between two checks is still reported once. A counter is marked
+as sent only once its frame is queued: if the ring was full (25 Nov, a
+barcode event lost this way), the event is built again on the next check.
 
 **Links:**
 - **WiFi:** the frame is the MQTT payload on `picocar/car1/telemetry`,

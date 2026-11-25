@@ -196,19 +196,6 @@ packed_imu_unpack (packed_imu_t const * p_in, imu_status_t * p_out)
 }
 
 /*!
- * @brief The IMU's good-sample counter (freshness check, risk R1).
- *
- * @param[in] p_in Packed snapshot.
- *
- * @return 0..255; it changes on every good sample.
- */
-uint32_t
-packed_imu_seq (packed_imu_t const * p_in)
-{
-    return (p_in->seq);
-}
-
-/*!
  * @brief Pack the vehicle status (vehicle task).
  *
  * @param[in]  p_in  Full-width status.

@@ -39,12 +39,6 @@ fault_clear (fault_id_t fault)
     g_mask &= ~(1u << (uint32_t) fault);
 }
 
-void
-fault_alive (fault_id_t fault)
-{
-    (void) fault;
-}
-
 uint32_t
 fault_mask (void)
 {
@@ -55,14 +49,6 @@ uint8_t
 fault_count (fault_id_t fault)
 {
     return (g_count[(uint32_t) fault]);
-}
-
-uint32_t
-fault_age_ms (fault_id_t fault)
-{
-    (void) fault;
-
-    return (0u);
 }
 
 /*** end of file ***/

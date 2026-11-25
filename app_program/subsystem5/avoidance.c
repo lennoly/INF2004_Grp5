@@ -529,7 +529,9 @@ choose_side (avoidance_profile_t const * p_prof, uint32_t attempts)
     b_unsure   = b_near || (p_prof->width_mm < OBST_PARTIAL_SCAN_MM);
     b_prefer_l = b_near     ? (0 != OBST_BLIND_LEFT)
                  : b_unsure ? (p_prof->centre_mm > 0.0f)
-                            : (off_left <= off_right);
+                            : ((off_left < off_right)
+                               || ((!(off_left > off_right))
+                                   && (0 != OBST_BLIND_LEFT)));
 
     /* Side vote: most of the echoes on one side put the box there, so pass
        on the other.  An edge not seen there (clearance 0) is where the

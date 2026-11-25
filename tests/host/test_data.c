@@ -192,7 +192,7 @@ test_imu (void)
     packed_imu_unpack(&packed, &out);
     gp_check(out.b_ok && (EVT_CLIMBING == out.event) && (HUMP_CLIMBING == out.hump.state)
                  && (255u == out.hump.humps)
-                 && (9u == out.i2c_errors) && (1u == packed_imu_seq(&packed)),
+                 && (9u == out.i2c_errors) && (1u == packed.seq),
              "imu: flags, enumerations, saturating counters, 8-bit sequence");
     gp_check(near(out.pitch_deg, 12.3f, TOL_TENTH) && near(out.roll_deg, -90.0f, TOL_TENTH)
                  && near(out.heading_deg, 359.9f, TOL_TENTH)

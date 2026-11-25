@@ -53,7 +53,6 @@
    and the settling cap stay fixed.  Cast: 50..300 mm/s, exact. */
 #define CRUISE             ((float32_t) g_st.cruise_mm_s)
 #define REACQ_SPEED        (CRUISE)
-#define QUARTER_TURN       (90.0f)
 #define EIGHTH_TURN        (45.0f)
 #define DIAGONAL_PER_SIDE  (1.41421356f) /* 45 deg leg per mm sideways */
 #define COS_45             (0.70710678f)

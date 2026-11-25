@@ -169,7 +169,6 @@ void packed_motion_unpack(packed_motion_t const * p_in,
 void packed_imu_pack(imu_status_t const * p_in, uint32_t seq,
                      packed_imu_t * p_out);
 void packed_imu_unpack(packed_imu_t const * p_in, imu_status_t * p_out);
-uint32_t packed_imu_seq(packed_imu_t const * p_in);
 void packed_vehicle_pack(vehicle_status_t const * p_in,
                          packed_vehicle_t * p_out);
 void packed_vehicle_unpack(packed_vehicle_t const * p_in,

@@ -114,7 +114,6 @@
 /* way throughout (4 Nov: 75; were 160, 120 and 300 mm/s, then 50).       */
 #define SPEED_SLOW_MM_S             (75.0f)   /* settling cap              */
 #define SPEED_TURN_MM_S             (75.0f)   /* motion_turn_*()           */
-#define SPEED_BYPASS_MM_S           (75.0f)   /* [CALIBRATE] obstacle pass */
 /* Range of the speed= command.  NFR2: at most 300 mm/s, so the barcode
    sensor still gets >= 10 samples on a 3 mm bar (1 kHz sampler).          */
 #define SPEED_CMD_MIN_MM_S          (50)
@@ -187,20 +186,21 @@
 #define IMU_I2C_HZ                  (400000u)
 #define IMU_FORWARD_SIGN            (1.0f)    /* +1 if chip X points ahead  */
 #define IMU_CALIB_SAMPLES           (100u)
-#define HUMP_PITCH_ON_DEG           (6.0f)
-#define HUMP_PITCH_OFF_DEG          (3.0f)
-#define HUMP_MIN_HEIGHT_MM          (5.0f)
+#define HUMP_PITCH_ON_DEG           (5.0f)    /* 25 Nov: was 6, for 5 mm humps */
+#define HUMP_PITCH_OFF_DEG          (2.5f)    /* was 3 */
+#define HUMP_MIN_HEIGHT_MM          (3.0f)    /* 25 Nov: was 5 */
 /* DESCENDING once this far below the peak, CLIMBING again only at a new
    peak: roll noise moves the height about 1 mm either way.               */
 #define HUMP_STATE_HYST_MM          (2.0f)
 /* One-wheel humps (the barcode sensor leaves room for only one wheel):
-   the car rolls instead of pitching; 3 deg is about 5 mm under a wheel. */
-#define HUMP_ROLL_ON_DEG            (3.0f)
-#define HUMP_ROLL_OFF_DEG           (1.5f)
+   the car rolls instead of pitching; 3 deg is about 5 mm under a wheel,
+   2 deg about 3.5 mm (25 Nov: 3 and 1.5 missed 5 mm humps). */
+#define HUMP_ROLL_ON_DEG            (2.0f)
+#define HUMP_ROLL_OFF_DEG           (1.0f)
 /* [CALIBRATE] height = lever * tan(roll): 1 cm rolled 5.6 deg, 2 cm 11.5. */
 #define HUMP_ROLL_LEVER_MM          (100.0f)
 /* A 1 cm hump leans past the trigger for about 25 mm, a hand jolt 15. */
-#define HUMP_ROLL_MIN_MM            (20.0f)   /* rolled this far: not a jolt */
+#define HUMP_ROLL_MIN_MM            (18.0f)   /* not a jolt; 25 Nov: was 20  */
 /* Encoders and compass must both turn: straight pushes read up to 12 deg/s
    on the encoders and 9 on the compass, a hand turn 12-39 and 26-81.     */
 #define TURN_RATE_EVENT_DPS         (10.0f)
@@ -321,8 +321,8 @@
 /* (141912), 240 clears it on either side.                               */
 #define OBST_MIN_OFFSET_MM          (240.0f)
 /* Side of a blind pass and of any box within OBST_CENTRE_UNSURE_MM of the */
-/* line: 1 = left (4 Nov, Kent's choice; was right).                      */
-#define OBST_BLIND_LEFT             (1)       /* 0: pass on the right      */
+/* line: 1 = left (4 Nov, Kent's choice), 0 = right (25 Nov).             */
+#define OBST_BLIND_LEFT             (0)       /* 0: pass on the right      */
 /* Diagonal bypass: the car's inner side on the 45 deg legs keeps this    */
 /* clearance from the box's near and far corners (deepest box,            */
 /* OBST_DEPTH_MAX_MM); the car backs off first if the box is too close.   */

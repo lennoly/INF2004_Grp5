@@ -8,20 +8,17 @@
 #include <tk/tkernel.h>
 #include "fault.h"
 
-#define COUNT_MAX (0xFFu)   /* saturating 8-bit count       */
-#define TIME_MASK (0xFFFFu) /* last update: low 16 bits, ms */
+#define COUNT_MAX (0xFFu) /* saturating 8-bit count */
 
 /* Event flag handle: written once by fault_init() before any task runs. */
 static volatile ID gh_flag = 0;
 
-/* Per-fault counters and update times.  Each element has one writer (the
-   fault's owner) and is stored with one byte / half-word store, which is
-   atomic on the Cortex-M0+; readers never write them. */
-static volatile uint8_t  g_count[FAULT_COUNT];
-static volatile uint16_t g_alive_ms[FAULT_COUNT];
+/* Per-fault counters.  Each element has one writer (the fault's owner)
+   and is stored with one byte store, which is atomic on the Cortex-M0+;
+   readers never write them. */
+static volatile uint8_t g_count[FAULT_COUNT];
 
 static uint32_t bit_of(fault_id_t fault);
-static uint16_t now_ms16(void);
 
 /*!
  * @brief Create the fault event flag (all bits clear).  Call once, before
@@ -63,8 +60,6 @@ fault_raise (fault_id_t fault)
 
         (void) tk_set_flg(gh_flag, bit);
     }
-
-    fault_alive(fault);
 }
 
 /*!
@@ -81,24 +76,6 @@ fault_clear (fault_id_t fault)
     {
         /* tk_clr_flg() keeps the bits that are 1 in the pattern. */
         (void) tk_clr_flg(gh_flag, ~bit);
-    }
-
-    fault_alive(fault);
-}
-
-/*!
- * @brief Record that the owner of a fault ran its check just now, so a
- *        stalled owner can be told from a healthy one.
- *
- * @param[in] fault Fault whose owner is alive.
- */
-void
-fault_alive (fault_id_t fault)
-{
-    if (0u != bit_of(fault))
-    {
-        /* Cast: fault is a valid index, checked by bit_of(). */
-        g_alive_ms[(uint32_t) fault] = now_ms16();
     }
 }
 
@@ -143,28 +120,6 @@ fault_count (fault_id_t fault)
 }
 
 /*!
- * @brief Time since the fault's owner last updated it.
- *
- * @param[in] fault Fault.
- *
- * @return Age in ms, 0..65535 (wrap-safe 16-bit difference).
- */
-uint32_t
-fault_age_ms (fault_id_t fault)
-{
-    uint32_t age = 0u;
-
-    if (0u != bit_of(fault))
-    {
-        /* Cast: fault is a valid index, checked by bit_of(). */
-        age = ((uint32_t) now_ms16() - g_alive_ms[(uint32_t) fault])
-              & TIME_MASK;
-    }
-
-    return (age);
-}
-
-/*!
  * @brief The mask bit of a fault.
  *
  * @param[in] fault Fault.
@@ -179,22 +134,6 @@ bit_of (fault_id_t fault)
     uint32_t index = (uint32_t) fault;
 
     return ((index < (uint32_t) FAULT_COUNT) ? (1u << index) : 0u);
-}
-
-/*!
- * @brief Low 16 bits of the kernel's millisecond clock.
- *
- * @return Time in ms, modulo 65536.
- */
-static uint16_t
-now_ms16 (void)
-{
-    SYSTIM tim = {0, 0u};
-
-    (void) tk_get_tim(&tim);
-
-    /* Cast: the mask keeps the low 16 bits. */
-    return ((uint16_t) (tim.lo & TIME_MASK));
 }
 
 /*** end of file ***/

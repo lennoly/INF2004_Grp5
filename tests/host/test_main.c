@@ -104,7 +104,7 @@
 #define PI_F            (3.14159f)
 #define ROLL_NOISE_DEG  (0.5f)   /* roll is low-pass filtered           */
 #define CASTER_MM       (100.0f) /* drive axle to caster (one-wheel sim) */
-#define WHEEL_COUNT     (2u)     /* one-wheel hump heights tested       */
+#define WHEEL_COUNT     (3u)     /* one-wheel hump heights tested       */
 #define JOLT_FIRST      (20u)    /* roll step starts at sample 20       */
 #define JOLT_SAMPLES    (5u)     /* 15 mm: a hand-push jolt             */
 #define JUNK_MM         (70647)  /* what an empty scan printed (cl=)    */
@@ -1158,7 +1158,7 @@ static void
 test_terrain (void)
 {
     float32_t const heights[HEIGHT_COUNT] = {20.0f, 30.0f, 40.0f, 60.0f};
-    float32_t const wheel_heights[WHEEL_COUNT] = {10.0f, 20.0f};
+    float32_t const wheel_heights[WHEEL_COUNT] = {5.0f, 10.0f, 20.0f};
     uint32_t        humps                 = 0u;
     uint32_t        changes               = 0u;
     uint32_t        idx                   = 0u;

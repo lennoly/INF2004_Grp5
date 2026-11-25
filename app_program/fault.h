@@ -44,10 +44,8 @@ typedef enum
 int32_t  fault_init(void);
 void     fault_raise(fault_id_t fault);
 void     fault_clear(fault_id_t fault);
-void     fault_alive(fault_id_t fault);
 uint32_t fault_mask(void);
 uint8_t  fault_count(fault_id_t fault);
-uint32_t fault_age_ms(fault_id_t fault);
 
 #endif /* FAULT_H */
 

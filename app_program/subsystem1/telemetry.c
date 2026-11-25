@@ -87,7 +87,7 @@ static void           execute_setting(command_t const * p_cmd);
 static char const *   error_text(frames_error_t error);
 static bool           stationary(void);
 static void           emit_timing(void);
-static void           emit(mqtt_bridge_topic_t topic, bool b_console);
+static bool           emit(mqtt_bridge_topic_t topic, bool b_console);
 static void           build_telemetry(void);
 static void           send_heartbeat(void);
 static void           check_events(void);
@@ -185,7 +185,7 @@ telemetry_task (INT stacd, void * p_exinf)
         {
             last_tel = now;
             build_telemetry();
-            emit(TOPIC_TELEMETRY, false);
+            (void) emit(TOPIC_TELEMETRY, false);
         }
 
         /* A WiFi chip restart stalls the cyw43 task (above motion), so it
@@ -271,7 +271,7 @@ reply (command_t const * p_cmd, frames_error_t error, char const * p_text)
                      (FRAMES_OK == error) ? "" : error_text(error));
     g_frame_len = frames_reply(g_frame, sizeof(g_frame), p_cmd->req_id,
                                p_cmd->kind, error);
-    emit(TOPIC_EVENT, true);
+    (void) emit(TOPIC_EVENT, true);
 }
 
 /*!
@@ -453,18 +453,24 @@ error_text (frames_error_t error)
  *
  * @param[in] topic     Topic to publish on.
  * @param[in] b_console true to print it on the console as well.
+ *
+ * @return false only if the link is up but the send queue was full: the
+ *         caller of a one-off event tries again on the next pass (25 Nov:
+ *         a barcode event lost this way never reached the dashboard).
  */
-static void
+static bool
 emit (mqtt_bridge_topic_t topic, bool b_console)
 {
     mqtt_bridge_stats_t link_stats;
-    uint32_t            idx = 0u;
+    uint32_t            idx    = 0u;
+    bool                b_sent = true;
 
     mqtt_bridge_get_stats(&link_stats);
 
     if ((LINK_DISABLED != link_stats.link) && (g_frame_len > 0u))
     {
-        (void) mqtt_bridge_publish(topic, g_frame, g_frame_len);
+        b_sent = mqtt_bridge_publish(topic, g_frame, g_frame_len)
+                 || (LINK_CONNECTED != link_stats.link);
     }
 
     if ((b_console || (LINK_DISABLED == link_stats.link))
@@ -485,6 +491,8 @@ emit (mqtt_bridge_topic_t topic, bool b_console)
         /* Cast: tm_printf() takes the kernel's UB string type; ASCII. */
         (void) tm_printf((UB const *) "%s\n", g_hex);
     }
+
+    return (b_sent);
 }
 
 /*!
@@ -562,7 +570,7 @@ send_heartbeat (void)
     }
 
     g_frame_len = frames_heartbeat(g_frame, sizeof(g_frame), &beat);
-    emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
+    (void) emit(TOPIC_HEARTBEAT, HEARTBEAT_ON_CONSOLE);
 }
 
 /*!
@@ -579,29 +587,31 @@ check_events (void)
     barcode_get_stats(&bc_stats);
     imu_get_status(&imu);
 
+    /* Each event counts as sent only once queued; if the queue was full
+       it is built again from the current values on the next pass. */
     if (veh.state_seq != g_seen_state)
     {
-        g_seen_state = veh.state_seq;
         g_frame_len  = frames_state(g_frame, sizeof(g_frame), veh.state,
                                     packed_reason_code(veh.p_reason));
-        emit(TOPIC_EVENT, false);
+        g_seen_state = emit(TOPIC_EVENT, false) ? veh.state_seq
+                                                : g_seen_state;
     }
 
     if (bc_stats.decoded != g_seen_barcode)
     {
-        g_seen_barcode = bc_stats.decoded;
         g_frame_len    = frames_barcode(g_frame, sizeof(g_frame),
                                         bc_stats.last.symbol,
                                         bc_stats.last.cmd);
-        emit(TOPIC_EVENT, false);
+        g_seen_barcode = emit(TOPIC_EVENT, false) ? bc_stats.decoded
+                                                  : g_seen_barcode;
     }
 
     if (imu.hump.humps != g_seen_humps)
     {
-        g_seen_humps = imu.hump.humps;
         g_frame_len  = frames_hump(g_frame, sizeof(g_frame), imu.hump.humps,
                                    imu.hump.peak_mm, imu.hump.max_peak_mm);
-        emit(TOPIC_EVENT, true);
+        g_seen_humps = emit(TOPIC_EVENT, true) ? imu.hump.humps
+                                               : g_seen_humps;
     }
 
     emit_obstacle(&veh);
@@ -622,10 +632,9 @@ emit_obstacle (vehicle_status_t const * p_veh)
 
     if (scans != g_seen_scans)
     {
-        g_seen_scans = scans;
         g_frame_len  = frames_obstacle(g_frame, sizeof(g_frame), &prof,
                                        p_veh->last_action);
-        emit(TOPIC_EVENT, false);
+        g_seen_scans = emit(TOPIC_EVENT, false) ? scans : g_seen_scans;
     }
 }
 
@@ -667,7 +676,7 @@ emit_gains (void)
                      text[6], text[7], (INT) gains.speed_mm_s,
                      (UINT) gains.rate_ms);
     g_frame_len = frames_gains(g_frame, sizeof(g_frame), &gains);
-    emit(TOPIC_EVENT, true);
+    (void) emit(TOPIC_EVENT, true);
 }
 
 /*!
@@ -753,7 +762,7 @@ emit_timing (void)
     }
 
     g_frame_len = frames_timing(g_frame, sizeof(g_frame), &frame);
-    emit(TOPIC_EVENT, true);
+    (void) emit(TOPIC_EVENT, true);
 }
 
 /*!
